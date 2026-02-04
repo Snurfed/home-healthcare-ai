@@ -5,6 +5,13 @@ import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 
+// Route imports
+import authRoutes from './routes/auth';
+import patientRoutes from './routes/patients';
+import voiceRoutes from './routes/voice';
+import documentRoutes from './routes/documents';
+import oasisRoutes from './routes/oasis';
+
 // Load environment variables
 dotenv.config();
 
@@ -113,35 +120,19 @@ app.get('/health', (_req: Request, res: Response) => {
 // ===========================================
 
 // Auth routes - with stricter rate limiting
-app.use('/api/auth', authLimiter);
-app.use('/api/auth', (_req: Request, res: Response) => {
-  // TODO: Import and use auth routes
-  res.status(501).json({ message: 'Auth routes not implemented' });
-});
+app.use('/api/auth', authLimiter, authRoutes);
 
 // Patient management routes
-app.use('/api/patients', (_req: Request, res: Response) => {
-  // TODO: Import and use patient routes
-  res.status(501).json({ message: 'Patient routes not implemented' });
-});
+app.use('/api/patients', patientRoutes);
 
 // Voice-to-text routes
-app.use('/api/voice', (_req: Request, res: Response) => {
-  // TODO: Import and use voice routes
-  res.status(501).json({ message: 'Voice routes not implemented' });
-});
+app.use('/api/voice', voiceRoutes);
 
 // Document management routes
-app.use('/api/documents', (_req: Request, res: Response) => {
-  // TODO: Import and use document routes
-  res.status(501).json({ message: 'Document routes not implemented' });
-});
+app.use('/api/documents', documentRoutes);
 
 // OASIS assessment routes
-app.use('/api/oasis', (_req: Request, res: Response) => {
-  // TODO: Import and use OASIS routes
-  res.status(501).json({ message: 'OASIS routes not implemented' });
-});
+app.use('/api/oasis', oasisRoutes);
 
 // ===========================================
 // 404 HANDLER
