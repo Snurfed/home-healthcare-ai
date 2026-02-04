@@ -1,0 +1,361 @@
+# ============================================
+# HIPAA-Compliant Healthcare Application
+# .gitignore
+# ============================================
+
+# ============================================
+# PROTECTED HEALTH INFORMATION (PHI) & SENSITIVE DATA
+# CRITICAL: Never commit PHI or patient data
+# ============================================
+
+# Environment variables (API keys, secrets, PHI config)
+.env
+.env.*
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+*.env
+env.js
+env.json
+config/secrets.js
+config/secrets.json
+secrets/
+.secrets/
+
+# API keys and credentials
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.cer
+credentials.json
+service-account*.json
+api-keys.json
+firebase-adminsdk*.json
+google-services.json
+GoogleService-Info.plist
+
+# ============================================
+# UPLOADED FILES & DOCUMENTS (Potential PHI)
+# ============================================
+
+# Patient uploads directory
+uploads/
+uploaded/
+patient-files/
+patient-data/
+patient-documents/
+patient-photos/
+medical-records/
+health-records/
+documents/
+attachments/
+
+# Image uploads
+*.dcm
+*.dicom
+user-uploads/
+profile-photos/
+photo-uploads/
+
+# Temporary upload directories
+tmp/
+temp/
+.tmp/
+.temp/
+
+# ============================================
+# DATABASE FILES
+# ============================================
+
+# SQLite
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+*.s3db
+*.sl3
+
+# MongoDB
+*.mongodb
+data/db/
+mongodb-data/
+
+# PostgreSQL
+*.pgsql
+pgdata/
+
+# Redis
+*.rdb
+dump.rdb
+*.aof
+
+# Database dumps and backups
+*.sql
+*.dump
+*.bak
+backups/
+db-backups/
+database-backups/
+
+# Prisma
+prisma/migrations/**/migration_lock.toml
+
+# ============================================
+# NODE.JS BACKEND
+# ============================================
+
+# Dependencies
+node_modules/
+jspm_packages/
+bower_components/
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+out/
+.output/
+lib/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+*.lcov
+.nyc_output/
+lib-cov/
+
+# TypeScript
+*.tsbuildinfo
+.tscache/
+
+# ============================================
+# REACT FRONTEND
+# ============================================
+
+# Build directories
+/build
+/.next/
+/out/
+.nuxt/
+.cache/
+.parcel-cache/
+
+# Storybook
+storybook-static/
+
+# Testing
+/coverage
+.jest/
+
+# Bundle analysis
+bundle-stats.json
+webpack-stats.json
+
+# ============================================
+# REACT NATIVE MOBILE APP
+# ============================================
+
+# iOS
+ios/Pods/
+ios/build/
+ios/*.xcworkspace
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/
+ios/DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+Podfile.lock
+
+# Android
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/*.iml
+android/.idea/
+*.apk
+*.aab
+*.keystore
+*.jks
+!debug.keystore
+
+# React Native
+.expo/
+.expo-shared/
+*.hbc
+.metro-health-check*
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+
+# ============================================
+# OS GENERATED FILES
+# ============================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon?
+.fseventsd
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.nfs*
+.directory
+
+# ============================================
+# IDE & EDITOR FILES
+# ============================================
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# JetBrains (WebStorm, IntelliJ)
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.idea_modules/
+
+# Vim
+*.swp
+*.swo
+*.swn
+*~
+Session.vim
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ============================================
+# TESTING & QUALITY
+# ============================================
+
+# Jest
+jest-results/
+test-results/
+junit.xml
+
+# Cypress
+cypress/videos/
+cypress/screenshots/
+cypress/downloads/
+
+# Playwright
+playwright-report/
+playwright/.cache/
+test-results/
+
+# E2E test artifacts
+e2e/reports/
+e2e/screenshots/
+
+# ============================================
+# MISCELLANEOUS
+# ============================================
+
+# Debug
+.debug/
+debug.log
+
+# Cache directories
+.cache/
+.sass-cache/
+.eslintcache
+.stylelintcache
+*.cache
+
+# Serverless
+.serverless/
+.netlify/
+.vercel/
+.amplify/
+
+# Terraform (if used for infrastructure)
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+
+# Docker (local overrides)
+docker-compose.override.yml
+.docker/
+
+# Audit logs (may contain PHI references)
+audit-logs/
+audit/
+
+# HIPAA compliance reports (keep in secure storage, not git)
+compliance-reports/
+hipaa-audits/
+security-scans/
+
+# Local development
+.local/
+local-data/
+dev-data/
