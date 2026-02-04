@@ -1,14 +1,1000 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// ===========================================
+// Home Health Care AI Assistant
+// Prisma Schema - HIPAA Compliant
+// ===========================================
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================
+// ENUMS
+// ===========================================
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  NURSE
+  THERAPIST_PT
+  THERAPIST_OT
+  THERAPIST_ST
+  HOME_HEALTH_AIDE
+  MEDICAL_SOCIAL_WORKER
+  BILLING
+  READONLY
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  SEPARATED
+  DOMESTIC_PARTNER
+}
+
+enum PatientStatus {
+  PENDING
+  ACTIVE
+  ON_HOLD
+  DISCHARGED
+  DECEASED
+  TRANSFERRED
+}
+
+enum ContactRelationship {
+  SPOUSE
+  CHILD
+  PARENT
+  SIBLING
+  GRANDCHILD
+  FRIEND
+  NEIGHBOR
+  CAREGIVER
+  LEGAL_GUARDIAN
+  OTHER
+}
+
+enum InsuranceType {
+  MEDICARE
+  MEDICAID
+  MEDICARE_ADVANTAGE
+  PRIVATE
+  TRICARE
+  VA
+  WORKERS_COMP
+  SELF_PAY
+  OTHER
+}
+
+enum CarePlanStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum VisitStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum VisitType {
+  SKILLED_NURSING
+  PHYSICAL_THERAPY
+  OCCUPATIONAL_THERAPY
+  SPEECH_THERAPY
+  HOME_HEALTH_AIDE
+  MEDICAL_SOCIAL_WORK
+  SUPERVISORY
+  EVALUATION
+  DISCHARGE
+}
+
+enum AssessmentType {
+  START_OF_CARE
+  RESUMPTION_OF_CARE
+  RECERTIFICATION
+  FOLLOW_UP
+  TRANSFER_TO_INPATIENT
+  DISCHARGE_FROM_AGENCY
+  DEATH_AT_HOME
+}
+
+enum AssessmentStatus {
+  DRAFT
+  IN_PROGRESS
+  PENDING_REVIEW
+  NEEDS_CORRECTION
+  APPROVED
+  SUBMITTED
+  LOCKED
+}
+
+enum DocumentCategory {
+  REFERRAL
+  PHYSICIAN_ORDER
+  FACE_TO_FACE
+  PLAN_OF_CARE
+  PROGRESS_NOTE
+  ASSESSMENT
+  CONSENT_FORM
+  INSURANCE_CARD
+  IDENTIFICATION
+  MEDICATION_LIST
+  LAB_RESULT
+  IMAGING
+  WOUND_PHOTO
+  HOME_ENVIRONMENT
+  DISCHARGE_SUMMARY
+  TRANSFER_SUMMARY
+  ADVANCE_DIRECTIVE
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  ACTIVE
+  ARCHIVED
+  DELETED
+  EXPIRED
+}
+
+enum ReviewStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  NEEDS_REVISION
+}
+
+enum TranscriptionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum TranscriptionProvider {
+  GOOGLE
+  AWS
+  OPENAI
+  AZURE
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  PRINT
+  SHARE
+  UPLOAD
+  DOWNLOAD
+  SIGN
+  APPROVE
+  REJECT
+  SUBMIT
+}
+
+enum PHILevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// ===========================================
+// USER & AUTHENTICATION
+// ===========================================
+
+model User {
+  id                    String       @id @default(uuid())
+  email                 String       @unique
+  passwordHash          String
+  firstName             String
+  lastName              String
+  middleName            String?
+  phone                 String?
+  role                  UserRole     @default(NURSE)
+  status                UserStatus   @default(PENDING_VERIFICATION)
+  licenseNumber         String?
+  licenseState          String?
+  licenseExpiration     DateTime?
+  npiNumber             String?
+  profileImageUrl       String?
+
+  // Security
+  failedLoginAttempts   Int          @default(0)
+  lockedUntil           DateTime?
+  lastLoginAt           DateTime?
+  lastLoginIp           String?
+  passwordChangedAt     DateTime     @default(now())
+  mustChangePassword    Boolean      @default(false)
+  twoFactorEnabled      Boolean      @default(false)
+  twoFactorSecret       String?
+
+  // Audit fields
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  updatedBy             String?
+
+  // Relationships
+  refreshTokens         RefreshToken[]
+  assignedPatients      PatientAssignment[]
+  createdPatients       Patient[]            @relation("PatientCreatedBy")
+  updatedPatients       Patient[]            @relation("PatientUpdatedBy")
+  visits                Visit[]              @relation("VisitClinician")
+  supervisedVisits      Visit[]              @relation("VisitSupervisor")
+  assessments           OasisAssessment[]    @relation("AssessmentClinician")
+  reviewedAssessments   OasisAssessment[]    @relation("AssessmentReviewer")
+  approvedAssessments   OasisAssessment[]    @relation("AssessmentApprover")
+  uploadedDocuments     Document[]           @relation("DocumentUploader")
+  transcriptions        VoiceTranscription[]
+  auditLogs             AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  isRevoked   Boolean   @default(false)
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  userAgent   String?
+  ipAddress   String?
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ===========================================
+// PATIENT & DEMOGRAPHICS
+// ===========================================
+
+model Patient {
+  id                    String        @id @default(uuid())
+  mrn                   String        @unique  // Medical Record Number
+
+  // Demographics
+  firstName             String
+  lastName              String
+  middleName            String?
+  preferredName         String?
+  dateOfBirth           DateTime
+  gender                Gender
+  ssnEncrypted          String?       // Last 4 digits, encrypted
+  maritalStatus         MaritalStatus?
+  preferredLanguage     String        @default("English")
+  ethnicity             String?
+  race                  String?
+  religion              String?
+
+  // Contact Information
+  addressStreet1        String
+  addressStreet2        String?
+  addressCity           String
+  addressState          String
+  addressZipCode        String
+  addressCounty         String?
+  phoneHome             String?
+  phoneMobile           String
+  phoneWork             String?
+  email                 String?
+  preferredContactMethod String       @default("phone")
+
+  // Status
+  status                PatientStatus @default(PENDING)
+  admissionDate         DateTime?
+  dischargeDate         DateTime?
+  dischargeReason       String?
+
+  // Medical Info
+  primaryPhysicianName  String?
+  primaryPhysicianNpi   String?
+  primaryPhysicianPhone String?
+  primaryPhysicianFax   String?
+  allergies             String[]
+  dnrStatus             Boolean       @default(false)
+  advanceDirectives     String?
+
+  // Audit fields
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+  createdById           String?
+  updatedById           String?
+  createdBy             User?         @relation("PatientCreatedBy", fields: [createdById], references: [id])
+  updatedBy             User?         @relation("PatientUpdatedBy", fields: [updatedById], references: [id])
+
+  // Relationships
+  emergencyContacts     EmergencyContact[]
+  insurances            Insurance[]
+  carePlans             CarePlan[]
+  episodes              Episode[]
+  visits                Visit[]
+  assessments           OasisAssessment[]
+  documents             Document[]
+  transcriptions        VoiceTranscription[]
+  assignments           PatientAssignment[]
+
+  @@index([mrn])
+  @@index([lastName, firstName])
+  @@index([dateOfBirth])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([admissionDate])
+  @@map("patients")
+}
+
+model EmergencyContact {
+  id                    String              @id @default(uuid())
+  patientId             String
+  patient               Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  firstName             String
+  lastName              String
+  relationship          ContactRelationship
+  relationshipOther     String?
+  phoneHome             String?
+  phoneMobile           String
+  phoneWork             String?
+  email                 String?
+
+  isPrimaryContact      Boolean             @default(false)
+  hasPowerOfAttorney    Boolean             @default(false)
+  isHealthcareProxy     Boolean             @default(false)
+  canReceivePhiInfo     Boolean             @default(true)
+  notes                 String?
+
+  // Audit fields
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  deletedAt             DateTime?
+
+  @@index([patientId])
+  @@index([isPrimaryContact])
+  @@map("emergency_contacts")
+}
+
+model Insurance {
+  id                      String        @id @default(uuid())
+  patientId               String
+  patient                 Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  insuranceType           InsuranceType
+  isPrimary               Boolean       @default(false)
+  priority                Int           @default(1)  // 1=Primary, 2=Secondary, etc.
+
+  companyName             String
+  planName                String?
+  policyNumber            String
+  groupNumber             String?
+  subscriberId            String
+  subscriberName          String
+  subscriberRelationship  String        @default("self")
+  subscriberDob           DateTime?
+
+  effectiveDate           DateTime
+  terminationDate         DateTime?
+
+  copay                   Decimal?      @db.Decimal(10, 2)
+  deductible              Decimal?      @db.Decimal(10, 2)
+  coinsurancePercent      Int?
+
+  preAuthRequired         Boolean       @default(false)
+  preAuthNumber           String?
+  preAuthStartDate        DateTime?
+  preAuthEndDate          DateTime?
+  authorizedVisits        Int?
+  usedVisits              Int           @default(0)
+
+  contactPhone            String?
+  contactFax              String?
+  claimsAddress           String?
+
+  // Audit fields
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  deletedAt               DateTime?
+  verifiedAt              DateTime?
+  verifiedBy              String?
+
+  @@index([patientId])
+  @@index([insuranceType])
+  @@index([isPrimary])
+  @@index([policyNumber])
+  @@map("insurances")
+}
+
+model PatientAssignment {
+  id          String    @id @default(uuid())
+  patientId   String
+  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  isPrimary   Boolean   @default(false)
+  discipline  VisitType
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  notes       String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([patientId, userId, discipline])
+  @@index([patientId])
+  @@index([userId])
+  @@map("patient_assignments")
+}
+
+// ===========================================
+// EPISODES & CARE PLANS
+// ===========================================
+
+model Episode {
+  id                    String        @id @default(uuid())
+  patientId             String
+  patient               Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  episodeNumber         Int
+  startDate             DateTime
+  endDate               DateTime?
+
+  referralDate          DateTime?
+  referralSource        String?
+  referralDiagnosis     String?
+
+  // Certification periods
+  certPeriodStart       DateTime?
+  certPeriodEnd         DateTime?
+
+  status                CarePlanStatus @default(DRAFT)
+
+  // Audit fields
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  deletedAt             DateTime?
+
+  // Relationships
+  carePlans             CarePlan[]
+  visits                Visit[]
+  assessments           OasisAssessment[]
+
+  @@unique([patientId, episodeNumber])
+  @@index([patientId])
+  @@index([startDate])
+  @@index([status])
+  @@map("episodes")
+}
+
+model CarePlan {
+  id                    String         @id @default(uuid())
+  patientId             String
+  patient               Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  episodeId             String
+  episode               Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  status                CarePlanStatus @default(DRAFT)
+  startDate             DateTime
+  endDate               DateTime?
+
+  // Primary Diagnosis
+  primaryDiagnosisCode  String         // ICD-10
+  primaryDiagnosisDesc  String
+  primaryDiagnosisOnset DateTime?
+
+  // Secondary Diagnoses (stored as JSON)
+  secondaryDiagnoses    Json?
+
+  // Physician Info
+  attendingPhysicianName    String?
+  attendingPhysicianNpi     String?
+  attendingPhysicianPhone   String?
+  referringPhysicianName    String?
+  referringPhysicianNpi     String?
+
+  // Authorized Services (stored as JSON)
+  authorizedServices    Json?
+
+  // Goals (stored as JSON)
+  goals                 Json?
+
+  // Frequencies
+  snFrequency           String?
+  ptFrequency           String?
+  otFrequency           String?
+  stFrequency           String?
+  hhaFrequency          String?
+  mswFrequency          String?
+
+  specialInstructions   String?
+
+  // Approvals
+  physicianSignedAt     DateTime?
+  physicianSignedBy     String?
+
+  // Audit fields
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  deletedAt             DateTime?
+  createdBy             String?
+  updatedBy             String?
+
+  @@index([patientId])
+  @@index([episodeId])
+  @@index([status])
+  @@map("care_plans")
+}
+
+// ===========================================
+// VISITS
+// ===========================================
+
+model Visit {
+  id                    String       @id @default(uuid())
+  patientId             String
+  patient               Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  episodeId             String
+  episode               Episode      @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  clinicianId           String
+  clinician             User         @relation("VisitClinician", fields: [clinicianId], references: [id])
+  supervisorId          String?
+  supervisor            User?        @relation("VisitSupervisor", fields: [supervisorId], references: [id])
+
+  visitType             VisitType
+  status                VisitStatus  @default(SCHEDULED)
+
+  scheduledDate         DateTime
+  scheduledStartTime    DateTime?
+  scheduledEndTime      DateTime?
+
+  actualStartTime       DateTime?
+  actualEndTime         DateTime?
+  checkInTime           DateTime?
+  checkOutTime          DateTime?
+
+  // Location
+  checkInLatitude       Decimal?     @db.Decimal(10, 8)
+  checkInLongitude      Decimal?     @db.Decimal(11, 8)
+  checkOutLatitude      Decimal?     @db.Decimal(10, 8)
+  checkOutLongitude     Decimal?     @db.Decimal(11, 8)
+  mileage               Decimal?     @db.Decimal(6, 2)
+
+  // Visit Notes
+  visitNotes            String?
+  patientCondition      String?
+  interventions         String?
+  patientResponse       String?
+  planForNextVisit      String?
+
+  // Vitals (stored as JSON)
+  vitalSigns            Json?
+
+  // Signature
+  clinicianSignedAt     DateTime?
+  patientSignedAt       DateTime?
+  patientSignature      String?      // Base64 or URL
+
+  missedReason          String?
+  cancelledReason       String?
+
+  // Audit fields
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  deletedAt             DateTime?
+
+  // Relationships
+  assessments           OasisAssessment[]
+  documents             Document[]
+  transcriptions        VoiceTranscription[]
+
+  @@index([patientId])
+  @@index([episodeId])
+  @@index([clinicianId])
+  @@index([scheduledDate])
+  @@index([status])
+  @@index([visitType])
+  @@map("visits")
+}
+
+// ===========================================
+// OASIS ASSESSMENTS
+// ===========================================
+
+model OasisAssessment {
+  id                    String           @id @default(uuid())
+  patientId             String
+  patient               Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  episodeId             String
+  episode               Episode          @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  visitId               String?
+  visit                 Visit?           @relation(fields: [visitId], references: [id])
+  clinicianId           String
+  clinician             User             @relation("AssessmentClinician", fields: [clinicianId], references: [id])
+  reviewerId            String?
+  reviewer              User?            @relation("AssessmentReviewer", fields: [reviewerId], references: [id])
+  approverId            String?
+  approver              User?            @relation("AssessmentApprover", fields: [approverId], references: [id])
+
+  assessmentType        AssessmentType
+  status                AssessmentStatus @default(DRAFT)
+
+  // Key Dates
+  m0030_startOfCareDate     DateTime?
+  m0032_resumptionOfCareDate DateTime?
+  m0090_completionDate      DateTime?
+  m0906_dischargeDate       DateTime?
+
+  // Scoring
+  hippsCode             String?
+  clinicalGrouping      String?
+  functionalLevel       String?
+  comorbidityAdjustment String?
+  caseMixWeight         Decimal?     @db.Decimal(6, 4)
+
+  // Completion tracking
+  completionPercentage  Int          @default(0)
+
+  // Voice auto-population
+  voicePopulatedFields  Json?
+  voiceTranscriptionId  String?
+
+  // Review workflow
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  reviewNotes           String?
+  approvedAt            DateTime?
+  lockedAt              DateTime?
+
+  correctionReason      String?
+  previousVersionId     String?
+  version               Int          @default(1)
+
+  // Audit fields
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  deletedAt             DateTime?
+
+  // Relationships
+  responses             OasisResponse[]
+
+  @@index([patientId])
+  @@index([episodeId])
+  @@index([clinicianId])
+  @@index([assessmentType])
+  @@index([status])
+  @@index([m0090_completionDate])
+  @@map("oasis_assessments")
+}
+
+model OasisResponse {
+  id                    String          @id @default(uuid())
+  assessmentId          String
+  assessment            OasisAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  // OASIS Item
+  itemCode              String          // e.g., "M1021", "GG0130A"
+  section               String          // e.g., "patient_history", "functional_abilities"
+
+  // Response
+  responseValue         String?         // The selected/entered value
+  responseCode          String?         // The coded response (e.g., "01", "02")
+  responseText          String?         // Free text response if applicable
+  responseNumeric       Decimal?        @db.Decimal(10, 2)
+  responseDate          DateTime?
+  responseJson          Json?           // Complex responses (e.g., wound measurements)
+
+  // Confidence & Source (for voice auto-population)
+  confidence            Decimal?        @db.Decimal(3, 2)  // 0.00-1.00
+  sourceType            String?         // "manual", "voice", "ocr", "emr"
+  sourceTranscriptionId String?
+  sourceText            String?
+
+  // Validation
+  isValid               Boolean         @default(true)
+  validationErrors      Json?
+  requiresReview        Boolean         @default(false)
+  reviewReason          String?
+
+  // Audit fields
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@unique([assessmentId, itemCode])
+  @@index([assessmentId])
+  @@index([itemCode])
+  @@index([section])
+  @@map("oasis_responses")
+}
+
+// ===========================================
+// DOCUMENTS
+// ===========================================
+
+model Document {
+  id                    String           @id @default(uuid())
+  patientId             String
+  patient               Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visitId               String?
+  visit                 Visit?           @relation(fields: [visitId], references: [id])
+  uploadedById          String
+  uploadedBy            User             @relation("DocumentUploader", fields: [uploadedById], references: [id])
+
+  category              DocumentCategory
+  title                 String
+  description           String?
+
+  // File Info
+  originalFileName      String
+  storedFileName        String
+  mimeType              String
+  fileSize              Int              // bytes
+  fileExtension         String
+  checksum              String           // SHA-256
+
+  // Storage
+  storageProvider       String           // "s3", "azure", "gcs", "local"
+  storagePath           String
+  storageUrl            String?
+
+  // Image dimensions (if applicable)
+  imageWidth            Int?
+  imageHeight           Int?
+
+  // PHI & Encryption
+  phiLevel              PHILevel         @default(MEDIUM)
+  isEncrypted           Boolean          @default(true)
+  encryptionKeyId       String?
+
+  // Status
+  status                DocumentStatus   @default(ACTIVE)
+  reviewStatus          ReviewStatus     @default(PENDING_REVIEW)
+  reviewedById          String?
+  reviewedAt            DateTime?
+  reviewNotes           String?
+
+  // Dates
+  effectiveDate         DateTime?
+  expirationDate        DateTime?
+
+  // Signatures
+  signatureRequired     Boolean          @default(false)
+  signatures            Json?            // Array of signature info
+
+  // OCR
+  ocrProcessed          Boolean          @default(false)
+  ocrProcessedAt        DateTime?
+  ocrText               String?
+  ocrConfidence         Decimal?         @db.Decimal(3, 2)
+  ocrExtractedData      Json?
+
+  // Versioning
+  version               Int              @default(1)
+  previousVersionId     String?
+
+  // Tags
+  tags                  String[]
+
+  // Audit fields
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  deletedAt             DateTime?
+  deletedBy             String?
+  deletionReason        String?
+
+  @@index([patientId])
+  @@index([visitId])
+  @@index([category])
+  @@index([status])
+  @@index([reviewStatus])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("documents")
+}
+
+// ===========================================
+// VOICE TRANSCRIPTIONS
+// ===========================================
+
+model VoiceTranscription {
+  id                    String              @id @default(uuid())
+  patientId             String?
+  patient               Patient?            @relation(fields: [patientId], references: [id])
+  visitId               String?
+  visit                 Visit?              @relation(fields: [visitId], references: [id])
+  clinicianId           String
+  clinician             User                @relation(fields: [clinicianId], references: [id])
+
+  // Audio File
+  audioFileName         String
+  audioStoragePath      String
+  audioMimeType         String
+  audioDurationSeconds  Int
+  audioFileSize         Int
+
+  // Transcription
+  status                TranscriptionStatus @default(PENDING)
+  provider              TranscriptionProvider
+
+  fullText              String?
+  segments              Json?               // Array of time-coded segments
+  wordCount             Int?
+
+  // Confidence
+  overallConfidence     Decimal?            @db.Decimal(3, 2)
+  lowConfidenceFlags    Json?
+
+  // Medical Term Extraction
+  medicalTerms          Json?
+
+  // Speaker Diarization
+  speakerSegments       Json?
+
+  // Audio Quality
+  audioQuality          String?             // "excellent", "good", "fair", "poor"
+  hasBackgroundNoise    Boolean?
+
+  // Processing
+  processingStartedAt   DateTime?
+  processingCompletedAt DateTime?
+  processingTimeMs      Int?
+  errorMessage          String?
+
+  // Context
+  transcriptionContext  String?             // "general_notes", "oasis_assessment", etc.
+  language              String              @default("en-US")
+
+  // OASIS Mapping (if processed for OASIS)
+  oasisMappingResult    Json?
+
+  // Audit fields
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  deletedAt             DateTime?
+
+  @@index([patientId])
+  @@index([visitId])
+  @@index([clinicianId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("voice_transcriptions")
+}
+
+// ===========================================
+// AUDIT LOG (HIPAA COMPLIANCE)
+// ===========================================
+
+model AuditLog {
+  id                    String      @id @default(uuid())
+
+  // Who
+  userId                String?
+  user                  User?       @relation(fields: [userId], references: [id])
+  userEmail             String?
+  userRole              String?
+
+  // What
+  action                AuditAction
+  resourceType          String      // "patient", "document", "assessment", etc.
+  resourceId            String?
+  resourceName          String?
+
+  // Details
+  description           String?
+  previousValues        Json?       // For UPDATE actions
+  newValues             Json?       // For CREATE/UPDATE actions
+
+  // PHI Access
+  phiAccessed           Boolean     @default(false)
+  phiFields             String[]    // List of PHI fields accessed
+
+  // Context
+  ipAddress             String?
+  userAgent             String?
+  requestId             String?
+  sessionId             String?
+
+  // Result
+  success               Boolean     @default(true)
+  errorMessage          String?
+
+  // Timestamp
+  timestamp             DateTime    @default(now())
+
+  // Retention (HIPAA requires 6 years minimum)
+  retentionExpiresAt    DateTime?
+
+  @@index([userId])
+  @@index([action])
+  @@index([resourceType])
+  @@index([resourceId])
+  @@index([timestamp])
+  @@index([phiAccessed])
+  @@map("audit_logs")
+}
+
+// ===========================================
+// SYSTEM CONFIGURATION
+// ===========================================
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  isSecret    Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+
+  @@map("system_configs")
+}
+
+model OasisQuestion {
+  id                String   @id @default(uuid())
+  itemCode          String   @unique
+  itemName          String
+  section           String
+  questionText      String
+  helpText          String?
+  responseType      String   // "single_select", "multi_select", "numeric", "date", "text"
+  responses         Json?    // Array of response options
+  skipLogic         Json?
+  validationRules   Json?
+  scoringRules      Json?
+  assessmentTypes   String[] // Which assessment types this applies to
+  effectiveDate     DateTime
+  retiredDate       DateTime?
+  cmsGuidance       String?
+  sortOrder         Int      @default(0)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([section])
+  @@index([effectiveDate])
+  @@map("oasis_questions")
 }
