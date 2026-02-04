@@ -2,13 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-import { PrismaClient, UserRole, UserStatus, Prisma } from '../generated/prisma';
-
-// ===========================================
-// INITIALIZATION
-// ===========================================
-
-const prisma = new PrismaClient();
+import { UserRole, UserStatus, Prisma } from '../generated/prisma';
+import prisma from '../config/prisma';
 
 // ===========================================
 // CONFIGURATION

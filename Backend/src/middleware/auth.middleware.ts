@@ -1,12 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { PrismaClient, UserRole, UserStatus } from '../generated/prisma';
-
-// ===========================================
-// INITIALIZATION
-// ===========================================
-
-const prisma = new PrismaClient();
+import { UserRole, UserStatus } from '../generated/prisma';
+import prisma from '../config/prisma';
 
 // ===========================================
 // CONFIGURATION
