@@ -1,17 +1,10 @@
-import { Router, Request, Response, NextFunction } from 'express';
-
-// TODO: Import controllers when implemented
-// import * as patientController from '@controllers/patient.controller';
-
-// TODO: Import middleware when implemented
-// import { authenticate, authorize } from '@middleware/auth.middleware';
-// import { validateRequest } from '@middleware/validation.middleware';
-
-// TODO: Import validators when implemented
-// import { createPatientSchema, updatePatientSchema } from '@validators/patient.validator';
+import { Router } from 'express';
+import * as patientController from '../controllers/patient.controller';
+import { authenticate, authorize } from '../middleware/auth.middleware';
+import { UserRole } from '../generated/prisma';
 
 // ===========================================
-// TYPE DEFINITIONS
+// TYPE DEFINITIONS (kept for API documentation)
 // ===========================================
 
 // Demographics
@@ -218,14 +211,6 @@ export interface PaginatedResponse<T> {
   };
 }
 
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-  };
-}
-
 // ===========================================
 // ROUTER INITIALIZATION
 // ===========================================
@@ -239,243 +224,98 @@ const router = Router();
 /**
  * @route   GET /api/patients
  * @desc    Get all patients with pagination and filtering
- * @access  Private
+ * @access  Private - All authenticated clinical staff
  */
 router.get(
   '/',
-  // authenticate,
-  // authorize(['nurse', 'therapist', 'admin']),
-  async (req: Request<object, object, object, PatientListQuery>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement list patients logic
-      // const result = await patientController.listPatients(req.query, req.user);
-
-      const page = parseInt(req.query.page || '1', 10);
-      const limit = parseInt(req.query.limit || '20', 10);
-
-      // Placeholder response
-      const response: PaginatedResponse<Partial<Patient>> = {
-        data: [
-          {
-            id: 'patient-uuid-1',
-            mrn: 'MRN-001234',
-            demographics: {
-              firstName: 'Jane',
-              lastName: 'Doe',
-              dateOfBirth: '1945-03-15',
-              gender: 'female',
-              preferredLanguage: 'English',
-            },
-            status: 'active',
-            admissionDate: '2024-01-15',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-        pagination: {
-          page,
-          limit,
-          totalItems: 1,
-          totalPages: 1,
-          hasNextPage: false,
-          hasPrevPage: false,
-        },
-      };
-
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  }
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.HOME_HEALTH_AIDE,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+    UserRole.BILLING,
+    UserRole.READONLY,
+  ]),
+  patientController.listPatients
 );
 
 /**
  * @route   GET /api/patients/:id
- * @desc    Get a single patient by ID
- * @access  Private
+ * @desc    Get a single patient by ID with full details
+ * @access  Private - Must be assigned to patient or have admin/supervisor role
  */
 router.get(
   '/:id',
-  // authenticate,
-  // authorize(['nurse', 'therapist', 'admin']),
-  async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement get patient logic
-      // const patient = await patientController.getPatient(req.params.id, req.user);
-
-      const { id } = req.params;
-
-      // Placeholder response
-      const patient: Patient = {
-        id,
-        mrn: 'MRN-001234',
-        demographics: {
-          firstName: 'Jane',
-          lastName: 'Doe',
-          dateOfBirth: '1945-03-15',
-          gender: 'female',
-          preferredLanguage: 'English',
-          maritalStatus: 'widowed',
-        },
-        contact: {
-          address: {
-            street1: '123 Main Street',
-            city: 'Springfield',
-            state: 'IL',
-            zipCode: '62701',
-          },
-          phoneMobile: '555-123-4567',
-          preferredContactMethod: 'phone',
-        },
-        emergencyContacts: [
-          {
-            id: 'ec-uuid-1',
-            firstName: 'John',
-            lastName: 'Doe',
-            relationship: 'child',
-            phoneMobile: '555-987-6543',
-            isPrimaryContact: true,
-            hasPowerOfAttorney: true,
-            isHealthcareProxy: true,
-          },
-        ],
-        insurance: [
-          {
-            id: 'ins-uuid-1',
-            insuranceType: 'medicare',
-            isPrimary: true,
-            companyName: 'Medicare',
-            policyNumber: '1EG4-TE5-MK72',
-            subscriberId: '1EG4-TE5-MK72',
-            subscriberName: 'Jane Doe',
-            subscriberRelationship: 'self',
-            effectiveDate: '2010-03-15',
-            preAuthorizationRequired: false,
-          },
-        ],
-        status: 'active',
-        admissionDate: '2024-01-15',
-        assignedClinicians: ['clinician-uuid-1'],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        createdBy: 'admin-uuid',
-        updatedBy: 'admin-uuid',
-      };
-
-      res.status(200).json(patient);
-    } catch (error) {
-      next(error);
-    }
-  }
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.HOME_HEALTH_AIDE,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+    UserRole.BILLING,
+    UserRole.READONLY,
+  ]),
+  patientController.getPatient
 );
 
 /**
  * @route   POST /api/patients
  * @desc    Create a new patient
- * @access  Private
+ * @access  Private - Admin, Supervisor, Nurse only
  */
 router.post(
   '/',
-  // authenticate,
-  // authorize(['nurse', 'admin']),
-  // validateRequest(createPatientSchema),
-  async (req: AuthenticatedRequest & { body: CreatePatientRequest }, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement create patient logic
-      // const patient = await patientController.createPatient(req.body, req.user);
-
-      const { demographics, contact, emergencyContacts, insurance } = req.body;
-
-      // Placeholder response
-      const newPatient: Patient = {
-        id: 'new-patient-uuid',
-        mrn: `MRN-${Date.now()}`,
-        demographics,
-        contact,
-        emergencyContacts,
-        insurance,
-        status: 'pending',
-        admissionDate: new Date().toISOString().split('T')[0],
-        assignedClinicians: req.body.assignedClinicians || [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        createdBy: req.user?.id || 'system',
-        updatedBy: req.user?.id || 'system',
-      };
-
-      res.status(201).json({
-        message: 'Patient created successfully',
-        patient: newPatient,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+  ]),
+  patientController.createPatient
 );
 
 /**
  * @route   PUT /api/patients/:id
  * @desc    Update an existing patient
- * @access  Private
+ * @access  Private - Must be assigned to patient or have admin/supervisor role
  */
 router.put(
   '/:id',
-  // authenticate,
-  // authorize(['nurse', 'admin']),
-  // validateRequest(updatePatientSchema),
-  async (req: AuthenticatedRequest & Request<{ id: string }, object, UpdatePatientRequest>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement update patient logic
-      // const patient = await patientController.updatePatient(req.params.id, req.body, req.user);
-
-      const { id } = req.params;
-
-      // Placeholder response
-      res.status(200).json({
-        message: 'Patient updated successfully',
-        patient: {
-          id,
-          ...req.body,
-          updatedAt: new Date().toISOString(),
-          updatedBy: req.user?.id || 'system',
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  patientController.updatePatient
 );
 
 /**
  * @route   DELETE /api/patients/:id
  * @desc    Soft delete a patient (sets deletedAt timestamp)
- * @access  Private (Admin only)
+ * @access  Private - Admin and Supervisor only
  */
 router.delete(
   '/:id',
-  // authenticate,
-  // authorize(['admin']),
-  async (req: AuthenticatedRequest & Request<{ id: string }>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement soft delete logic
-      // await patientController.deletePatient(req.params.id, req.user);
-
-      const { id } = req.params;
-
-      // Placeholder response - soft delete sets deletedAt, doesn't remove record
-      res.status(200).json({
-        message: 'Patient record deleted successfully',
-        patient: {
-          id,
-          status: 'inactive',
-          deletedAt: new Date().toISOString(),
-          deletedBy: req.user?.id || 'system',
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+  ]),
+  patientController.deletePatient
 );
 
 export default router;
