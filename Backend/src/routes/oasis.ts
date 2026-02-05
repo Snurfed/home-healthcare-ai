@@ -1,18 +1,10 @@
-import { Router, Request, Response, NextFunction } from 'express';
-
-// TODO: Import controllers when implemented
-// import * as oasisController from '@controllers/oasis.controller';
-
-// TODO: Import middleware when implemented
-// import { authenticate, authorize } from '@middleware/auth.middleware';
-// import { validateRequest } from '@middleware/validation.middleware';
-
-// TODO: Import services when implemented
-// import { oasisScoringService } from '@services/oasis-scoring.service';
-// import { voiceAutoPopulateService } from '@services/voice-auto-populate.service';
+import { Router } from 'express';
+import * as oasisController from '../controllers/oasis.controller';
+import { authenticate, authorize } from '../middleware/auth.middleware';
+import { UserRole } from '../generated/prisma';
 
 // ===========================================
-// TYPE DEFINITIONS
+// TYPE DEFINITIONS (kept for API documentation)
 // ===========================================
 
 // Assessment Types
@@ -652,15 +644,6 @@ export interface PaginatedResponse<T> {
   };
 }
 
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-    name?: string;
-  };
-}
-
 // ===========================================
 // ROUTER INITIALIZATION
 // ===========================================
@@ -672,357 +655,184 @@ const router = Router();
 // ===========================================
 
 /**
- * @route   GET /api/oasis/assessments
- * @desc    List all OASIS assessments with filtering
- * @access  Private
+ * @route   GET /api/oasis/questions
+ * @desc    Get OASIS question library
+ * @access  Private - All authenticated users
  */
 router.get(
-  '/assessments',
-  // authenticate,
-  // authorize(['nurse', 'therapist', 'admin']),
-  async (req: Request<object, object, object, AssessmentListQuery>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement list assessments logic
-      // const result = await oasisController.listAssessments(req.query, req.user);
-
-      const page = parseInt(req.query.page || '1', 10);
-      const limit = parseInt(req.query.limit || '20', 10);
-
-      // Placeholder response
-      const response: PaginatedResponse<Partial<OasisAssessment>> = {
-        data: [
-          {
-            id: 'oasis-uuid-1',
-            patientId: 'patient-uuid-1',
-            episodeId: 'episode-uuid-1',
-            assessmentType: 'start_of_care',
-            status: 'in_progress',
-            completionPercentage: 65,
-            dates: {
-              m0030_startOfCareDate: '2024-01-15',
-              m0090_assessmentCompletionDate: '2024-01-15',
-              m0100_assessmentReason: '01',
-            },
-            clinicianId: 'clinician-uuid-1',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-        pagination: {
-          page,
-          limit,
-          totalItems: 1,
-          totalPages: 1,
-          hasNextPage: false,
-          hasPrevPage: false,
-        },
-      };
-
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  }
+  '/questions',
+  authenticate,
+  oasisController.getQuestionLibrary
 );
 
 /**
- * @route   GET /api/oasis/assessments/:id
- * @desc    Get single OASIS assessment by ID
- * @access  Private
+ * @route   GET /api/oasis/assessments
+ * @desc    List all OASIS assessments with filtering
+ * @access  Private - Clinical staff only
  */
 router.get(
-  '/assessments/:id',
-  // authenticate,
-  async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement get assessment logic
-      // const assessment = await oasisController.getAssessment(req.params.id, req.user);
-
-      const { id } = req.params;
-
-      // Placeholder response with sample data
-      const assessment: Partial<OasisAssessment> = {
-        id,
-        patientId: 'patient-uuid-1',
-        episodeId: 'episode-uuid-1',
-        assessmentType: 'start_of_care',
-        status: 'in_progress',
-        dates: {
-          m0030_startOfCareDate: '2024-01-15',
-          m0090_assessmentCompletionDate: '2024-01-15',
-          m0100_assessmentReason: '01',
-        },
-        clinicalRecord: {
-          m0020_patientId: 'patient-uuid-1',
-          m0040_patientLastName: 'Doe',
-          m0050_patientState: 'IL',
-          m0060_patientZip: '62701',
-          m0066_birthDate: '1945-03-15',
-          m0069_gender: '2',
-          m0080_disciplineOfPerson: '1',
-        },
-        functionalAbilities: {
-          gg0130_selfCare: {
-            gg0130A_eating: '05',
-            gg0130B_oralHygiene: '05',
-            gg0130C_toiletingHygiene: '04',
-            gg0130E_showerBathe: '03',
-            gg0130F_upperBodyDressing: '04',
-            gg0130G_lowerBodyDressing: '03',
-          },
-          gg0170_mobility: {
-            gg0170D_sitToStand: '04',
-            gg0170I_walk10Feet: '04',
-            gg0170J_walk50FeetTwoTurns: '03',
-          },
-        },
-        scoring: {
-          clinicalGrouping: 'B',
-          functionalLevel: 'M',
-          functionalScore: 45,
-          clinicalScore: 62,
-        },
-        completionPercentage: 65,
-        validationErrors: [
-          {
-            itemCode: 'M1300',
-            itemName: 'Skin Integrity',
-            errorType: 'required',
-            message: 'Skin integrity assessment is required',
-            severity: 'error',
-          },
-        ],
-        clinicianId: 'clinician-uuid-1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      res.status(200).json(assessment);
-    } catch (error) {
-      next(error);
-    }
-  }
+  '/assessments',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+    UserRole.BILLING,
+    UserRole.READONLY,
+  ]),
+  oasisController.listAssessments
 );
 
 /**
  * @route   POST /api/oasis/assessments
  * @desc    Create new OASIS assessment
- * @access  Private
+ * @access  Private - Licensed clinicians only (nurses and therapists can complete OASIS)
  */
 router.post(
   '/assessments',
-  // authenticate,
-  // authorize(['nurse', 'therapist']),
-  // validateRequest(createAssessmentSchema),
-  async (req: AuthenticatedRequest & { body: CreateAssessmentRequest }, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement create assessment logic
-      // const assessment = await oasisController.createAssessment(req.body, req.user);
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  oasisController.createAssessment
+);
 
-      const { patientId, episodeId, assessmentType, startOfCareDate } = req.body;
-
-      // Placeholder response
-      const assessment: Partial<OasisAssessment> = {
-        id: `oasis-${Date.now()}`,
-        patientId,
-        episodeId,
-        assessmentType,
-        status: 'draft',
-        dates: {
-          m0030_startOfCareDate: startOfCareDate,
-          m0090_assessmentCompletionDate: new Date().toISOString().split('T')[0],
-          m0100_assessmentReason: assessmentType === 'start_of_care' ? '01' : '03',
-        },
-        completionPercentage: 0,
-        validationErrors: [],
-        clinicianId: req.user?.id || 'system',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      res.status(201).json({
-        message: 'OASIS assessment created successfully',
-        assessment,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+/**
+ * @route   GET /api/oasis/assessments/:id
+ * @desc    Get single OASIS assessment by ID
+ * @access  Private - Clinical staff only
+ */
+router.get(
+  '/assessments/:id',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+    UserRole.BILLING,
+    UserRole.READONLY,
+  ]),
+  oasisController.getAssessment
 );
 
 /**
  * @route   PUT /api/oasis/assessments/:id
  * @desc    Update OASIS assessment
- * @access  Private
+ * @access  Private - Assessment owner or admin/supervisor
  */
 router.put(
   '/assessments/:id',
-  // authenticate,
-  // authorize(['nurse', 'therapist']),
-  async (req: AuthenticatedRequest & Request<{ id: string }, object, UpdateAssessmentRequest>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement update assessment logic
-      // const assessment = await oasisController.updateAssessment(req.params.id, req.body, req.user);
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  oasisController.updateAssessment
+);
 
-      const { id } = req.params;
-      const { section, items, status } = req.body;
-
-      // Placeholder response
-      res.status(200).json({
-        message: 'OASIS assessment updated successfully',
-        assessment: {
-          id,
-          section,
-          updatedItems: items,
-          status: status || 'in_progress',
-          completionPercentage: 75, // Recalculated
-          updatedAt: new Date().toISOString(),
-          updatedBy: req.user?.id || 'system',
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+/**
+ * @route   DELETE /api/oasis/assessments/:id
+ * @desc    Soft delete OASIS assessment
+ * @access  Private - Admin/Supervisor only
+ */
+router.delete(
+  '/assessments/:id',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+  ]),
+  oasisController.deleteAssessment
 );
 
 /**
  * @route   POST /api/oasis/assessments/:id/submit
  * @desc    Submit OASIS assessment for review
- * @access  Private
+ * @access  Private - Assessment owner only
  */
 router.post(
   '/assessments/:id/submit',
-  // authenticate,
-  // authorize(['nurse', 'therapist']),
-  async (req: AuthenticatedRequest & Request<{ id: string }, object, SubmitAssessmentRequest>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement submit for review logic
-      // const result = await oasisController.submitForReview(req.params.id, req.body, req.user);
-
-      const { id } = req.params;
-      const { supervisorId, notes, attestation } = req.body;
-
-      if (!attestation) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Clinician attestation is required to submit assessment',
-        });
-      }
-
-      // Placeholder response
-      return res.status(200).json({
-        message: 'OASIS assessment submitted for review',
-        assessment: {
-          id,
-          status: 'pending_review',
-          supervisorId,
-          submittedAt: new Date().toISOString(),
-          submittedBy: req.user?.id || 'system',
-          notes,
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  oasisController.submitForReview
 );
 
 /**
- * @route   GET /api/oasis/questions
- * @desc    Get OASIS question library
- * @access  Private
+ * @route   POST /api/oasis/assessments/:id/review
+ * @desc    Review (approve/reject) OASIS assessment
+ * @access  Private - Supervisors and admins only
  */
-router.get(
-  '/questions',
-  // authenticate,
-  async (req: Request<object, object, object, QuestionLibraryQuery>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement question library retrieval
-      // const questions = await oasisController.getQuestionLibrary(req.query);
+router.post(
+  '/assessments/:id/review',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+  ]),
+  oasisController.reviewAssessment
+);
 
-      const { section, assessmentType } = req.query;
+/**
+ * @route   POST /api/oasis/assessments/:id/lock
+ * @desc    Lock OASIS assessment (final submission to CMS)
+ * @access  Private - Supervisors and admins only
+ */
+router.post(
+  '/assessments/:id/lock',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+  ]),
+  oasisController.lockAssessment
+);
 
-      // Placeholder response with sample questions
-      const questions: OasisQuestion[] = [
-        {
-          itemCode: 'M1240',
-          itemName: 'Pain Assessment',
-          section: 'pain_assessment',
-          questionText: 'Has the patient had any pain or discomfort during the past 2 days?',
-          helpText: 'Consider all types of pain, including chronic and acute.',
-          responseType: 'single_select',
-          responses: [
-            { code: '0', label: 'No', description: 'Patient has had no pain or discomfort' },
-            { code: '1', label: 'Yes', description: 'Patient has experienced pain or discomfort', triggersSkip: false },
-          ],
-          validationRules: [
-            { ruleId: 'M1240-REQ', ruleType: 'required', errorMessage: 'Pain assessment is required', severity: 'error' },
-          ],
-          assessmentTypes: ['start_of_care', 'resumption_of_care', 'recertification', 'follow_up', 'discharge_from_agency'],
-          effectiveDate: '2023-01-01',
-        },
-        {
-          itemCode: 'GG0170I',
-          itemName: 'Walk 10 feet',
-          section: 'functional_abilities',
-          questionText: 'Walk 10 feet: Once standing, the ability to walk at least 10 feet in a room, corridor, or similar space.',
-          helpText: 'If patient uses a wheelchair, skip to wheelchair mobility questions.',
-          responseType: 'single_select',
-          responses: [
-            { code: '06', label: 'Independent', description: 'Patient completes activity by themself' },
-            { code: '05', label: 'Setup or clean-up assistance', description: 'Helper sets up or cleans up' },
-            { code: '04', label: 'Supervision or touching assistance', description: 'Helper provides verbal cues or minimal physical contact' },
-            { code: '03', label: 'Partial/moderate assistance', description: 'Helper does less than half the effort' },
-            { code: '02', label: 'Substantial/maximal assistance', description: 'Helper does more than half the effort' },
-            { code: '01', label: 'Dependent', description: 'Helper does all of the effort' },
-            { code: '07', label: 'Patient refused', description: 'Patient refused to participate' },
-            { code: '09', label: 'Not applicable', description: 'Not applicable to this patient' },
-            { code: '88', label: 'Not attempted due to medical condition', description: 'Medical condition prevents attempt' },
-          ],
-          validationRules: [
-            { ruleId: 'GG0170I-REQ', ruleType: 'required', errorMessage: 'Walk 10 feet assessment is required', severity: 'error' },
-          ],
-          assessmentTypes: ['start_of_care', 'resumption_of_care', 'recertification', 'discharge_from_agency'],
-          effectiveDate: '2023-01-01',
-          cmsGuidance: 'Assess the patient\'s ability to walk 10 feet on a level surface.',
-        },
-      ];
-
-      // Filter by section if provided
-      let filteredQuestions = questions;
-      if (section) {
-        filteredQuestions = questions.filter(q => q.section === section);
-      }
-      if (assessmentType) {
-        filteredQuestions = filteredQuestions.filter(q => q.assessmentTypes.includes(assessmentType));
-      }
-
-      res.status(200).json({
-        questions: filteredQuestions,
-        totalCount: filteredQuestions.length,
-        sections: [
-          { code: 'clinical_record', name: 'Clinical Record Items', itemCount: 12 },
-          { code: 'patient_tracking', name: 'Patient Tracking', itemCount: 8 },
-          { code: 'patient_history', name: 'Patient History & Diagnoses', itemCount: 15 },
-          { code: 'living_situation', name: 'Living Situation', itemCount: 6 },
-          { code: 'sensory_status', name: 'Sensory Status', itemCount: 6 },
-          { code: 'pain_assessment', name: 'Pain Assessment', itemCount: 4 },
-          { code: 'integumentary', name: 'Integumentary Status', itemCount: 14 },
-          { code: 'respiratory', name: 'Respiratory Status', itemCount: 3 },
-          { code: 'cardiac', name: 'Cardiac Status', itemCount: 2 },
-          { code: 'elimination', name: 'Elimination Status', itemCount: 5 },
-          { code: 'neuro_emotional', name: 'Neuro/Emotional/Behavioral', itemCount: 8 },
-          { code: 'functional_abilities', name: 'Functional Abilities (GG)', itemCount: 24 },
-          { code: 'medication_management', name: 'Medication Management', itemCount: 8 },
-          { code: 'care_management', name: 'Care Management', itemCount: 4 },
-          { code: 'therapy_need', name: 'Therapy Need', itemCount: 3 },
-        ],
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+/**
+ * @route   POST /api/oasis/assessments/:id/calculate-score
+ * @desc    Calculate HIPPS code and scoring for assessment
+ * @access  Private - Clinical staff only
+ */
+router.post(
+  '/assessments/:id/calculate-score',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+    UserRole.BILLING,
+  ]),
+  oasisController.calculateScore
 );
 
 export default router;
