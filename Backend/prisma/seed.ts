@@ -9,11 +9,18 @@
  * Run with: npx prisma db seed
  */
 
-import { PrismaClient, UserRole } from '../src/generated/prisma';
+import 'dotenv/config';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient, Prisma, UserRole, UserStatus } from '../src/generated/prisma';
 import { allOasisQuestions } from './seed/oasis-questions';
 import * as bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+// Create PostgreSQL connection pool
+const connectionString = process.env['DATABASE_URL'] || 'postgresql://postgres@localhost:5432/homehealthai';
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function seedOasisQuestions() {
   console.log('Seeding OASIS questions...');
@@ -28,42 +35,32 @@ async function seedOasisQuestions() {
         where: { itemCode: question.itemCode },
       });
 
+      const questionData = {
+        itemName: question.itemName,
+        section: question.section,
+        questionText: question.questionText,
+        helpText: question.helpText,
+        responseType: question.responseType,
+        responses: question.responses ? question.responses : Prisma.JsonNull,
+        skipLogic: question.skipLogic ? question.skipLogic : Prisma.JsonNull,
+        validationRules: question.validationRules ? question.validationRules : Prisma.JsonNull,
+        assessmentTypes: question.assessmentTypes,
+        effectiveDate: question.effectiveDate,
+        cmsGuidance: question.cmsGuidance,
+        sortOrder: question.sortOrder,
+      };
+
       if (existing) {
-        // Update if question text or responses changed
         await prisma.oasisQuestion.update({
           where: { itemCode: question.itemCode },
-          data: {
-            itemName: question.itemName,
-            section: question.section,
-            questionText: question.questionText,
-            helpText: question.helpText,
-            responseType: question.responseType,
-            responses: question.responses || null,
-            skipLogic: question.skipLogic || null,
-            validationRules: question.validationRules || null,
-            assessmentTypes: question.assessmentTypes,
-            effectiveDate: question.effectiveDate,
-            cmsGuidance: question.cmsGuidance,
-            sortOrder: question.sortOrder,
-          },
+          data: questionData,
         });
         updated++;
       } else {
         await prisma.oasisQuestion.create({
           data: {
             itemCode: question.itemCode,
-            itemName: question.itemName,
-            section: question.section,
-            questionText: question.questionText,
-            helpText: question.helpText,
-            responseType: question.responseType,
-            responses: question.responses || null,
-            skipLogic: question.skipLogic || null,
-            validationRules: question.validationRules || null,
-            assessmentTypes: question.assessmentTypes,
-            effectiveDate: question.effectiveDate,
-            cmsGuidance: question.cmsGuidance,
-            sortOrder: question.sortOrder,
+            ...questionData,
           },
         });
         created++;
@@ -79,14 +76,14 @@ async function seedOasisQuestions() {
 
 async function seedDefaultUsers() {
   // Only seed in development
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env['NODE_ENV'] === 'production') {
     console.log('Skipping default user seeding in production');
     return;
   }
 
   console.log('Seeding default users...');
 
-  const defaultPassword = await bcrypt.hash('password123', 12);
+  const defaultPasswordHash = await bcrypt.hash('password123', 12);
 
   const users = [
     {
@@ -94,70 +91,60 @@ async function seedDefaultUsers() {
       firstName: 'System',
       lastName: 'Administrator',
       role: UserRole.ADMIN,
-      password: defaultPassword,
     },
     {
       email: 'supervisor@homehealthai.test',
       firstName: 'Sarah',
       lastName: 'Supervisor',
       role: UserRole.SUPERVISOR,
-      password: defaultPassword,
     },
     {
       email: 'nurse@homehealthai.test',
       firstName: 'Nancy',
       lastName: 'Nurse',
       role: UserRole.NURSE,
-      password: defaultPassword,
     },
     {
       email: 'pt@homehealthai.test',
       firstName: 'Peter',
-      lastName: 'Physical Therapist',
+      lastName: 'Therapist',
       role: UserRole.THERAPIST_PT,
-      password: defaultPassword,
     },
     {
       email: 'ot@homehealthai.test',
       firstName: 'Olivia',
-      lastName: 'Occupational Therapist',
+      lastName: 'Therapist',
       role: UserRole.THERAPIST_OT,
-      password: defaultPassword,
     },
     {
       email: 'st@homehealthai.test',
       firstName: 'Steve',
-      lastName: 'Speech Therapist',
+      lastName: 'Therapist',
       role: UserRole.THERAPIST_ST,
-      password: defaultPassword,
     },
     {
       email: 'hha@homehealthai.test',
       firstName: 'Hannah',
-      lastName: 'Home Health Aide',
+      lastName: 'Aide',
       role: UserRole.HOME_HEALTH_AIDE,
-      password: defaultPassword,
     },
     {
       email: 'msw@homehealthai.test',
       firstName: 'Mary',
-      lastName: 'Medical Social Worker',
+      lastName: 'Worker',
       role: UserRole.MEDICAL_SOCIAL_WORKER,
-      password: defaultPassword,
     },
     {
       email: 'billing@homehealthai.test',
       firstName: 'Bill',
-      lastName: 'Billing Specialist',
+      lastName: 'Specialist',
       role: UserRole.BILLING,
-      password: defaultPassword,
     },
     {
       email: 'readonly@homehealthai.test',
       firstName: 'Robert',
       lastName: 'Reader',
       role: UserRole.READONLY,
-      password: defaultPassword,
     },
   ];
 
@@ -175,9 +162,8 @@ async function seedDefaultUsers() {
           firstName: user.firstName,
           lastName: user.lastName,
           role: user.role,
-          password: user.password,
-          isActive: true,
-          emailVerified: true,
+          passwordHash: defaultPasswordHash,
+          status: UserStatus.ACTIVE,
         },
       });
       created++;
@@ -208,4 +194,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await pool.end();
   });

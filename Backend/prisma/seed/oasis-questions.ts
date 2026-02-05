@@ -7,8 +7,6 @@
  * skip logic, and CMS guidance.
  */
 
-import { Prisma } from '../../src/generated/prisma';
-
 // Assessment types that each question applies to
 const ALL_ASSESSMENT_TYPES = [
   'START_OF_CARE',
