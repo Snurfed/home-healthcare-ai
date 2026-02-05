@@ -1,18 +1,10 @@
-import { Router, Request, Response, NextFunction } from 'express';
-
-// TODO: Import controllers when implemented
-// import * as voiceController from '@controllers/voice.controller';
-
-// TODO: Import middleware when implemented
-// import { authenticate, authorize } from '@middleware/auth.middleware';
-// import { uploadAudio } from '@middleware/upload.middleware';
-
-// TODO: Import services when implemented
-// import { transcriptionService } from '@services/transcription.service';
-// import { oasisMappingService } from '@services/oasis-mapping.service';
+import { Router } from 'express';
+import * as voiceController from '../controllers/voice.controller';
+import { authenticate, authorize } from '../middleware/auth.middleware';
+import { UserRole } from '../generated/prisma';
 
 // ===========================================
-// TYPE DEFINITIONS
+// TYPE DEFINITIONS (kept for API documentation)
 // ===========================================
 
 // Audio Upload Types
@@ -62,7 +54,7 @@ export interface TranscriptionResult {
   id: string;
   status: TranscriptionStatus;
   audioFileUrl?: string;
-  duration: number; // in seconds
+  duration: number;
   language: string;
   transcript: TranscriptSegment[];
   fullText: string;
@@ -87,10 +79,10 @@ export type TranscriptionStatus =
 
 export interface TranscriptSegment {
   id: string;
-  startTime: number; // in seconds
+  startTime: number;
   endTime: number;
   text: string;
-  confidence: number; // 0-1
+  confidence: number;
   speaker?: string;
   words?: WordDetail[];
 }
@@ -105,7 +97,7 @@ export interface WordDetail {
 
 export interface SpeakerSegment {
   speakerId: string;
-  speakerLabel: string; // e.g., "Clinician", "Patient", "Caregiver"
+  speakerLabel: string;
   segments: {
     startTime: number;
     endTime: number;
@@ -116,7 +108,7 @@ export interface SpeakerSegment {
 
 // Confidence Score Types
 export interface ConfidenceMetrics {
-  overall: number; // 0-1, weighted average
+  overall: number;
   segments: SegmentConfidence[];
   lowConfidenceFlags: LowConfidenceFlag[];
   qualityIndicators: AudioQualityIndicators;
@@ -205,13 +197,13 @@ export interface OasisFieldMapping {
 }
 
 export interface MappedOasisField {
-  fieldCode: string; // e.g., "M1021", "M1033", "GG0130"
+  fieldCode: string;
   fieldName: string;
   section: OasisSection;
   extractedValue: string | number | boolean | string[];
   mappedResponse?: string | number;
   confidence: number;
-  sourceSegments: string[]; // segment IDs from transcription
+  sourceSegments: string[];
   sourceText: string;
   requiresReview: boolean;
   reviewReason?: string;
@@ -239,27 +231,20 @@ export type OasisSection =
   | 'functional_abilities';
 
 export interface ExtractedOasisData {
-  // Patient History & Diagnoses
   diagnoses?: {
     primary?: { code: string; description: string };
     secondary?: { code: string; description: string }[];
   };
-
-  // Functional Status (GG Items)
   functionalStatus?: {
     selfCare?: FunctionalAssessment;
     mobility?: FunctionalAssessment;
     cognitiveFunction?: CognitiveAssessment;
   };
-
-  // Integumentary Status
   skinCondition?: {
     hasWounds: boolean;
     wounds?: WoundAssessment[];
     skinIntegrity?: string;
   };
-
-  // Vital Signs (if mentioned)
   vitalSigns?: {
     bloodPressure?: { systolic: number; diastolic: number };
     heartRate?: number;
@@ -269,14 +254,10 @@ export interface ExtractedOasisData {
     weight?: number;
     painLevel?: number;
   };
-
-  // Medications
   medications?: {
     current?: MedicationMention[];
     changes?: MedicationChange[];
   };
-
-  // Living Situation
   livingSituation?: {
     homeEnvironment?: string;
     safetyRisks?: string[];
@@ -365,16 +346,6 @@ export interface TranscriptionMetadata {
 
 export type TranscriptionProvider = 'google' | 'aws' | 'openai' | 'azure';
 
-// Request with file upload
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-  };
-  file?: AudioFileMetadata;
-}
-
 // ===========================================
 // ROUTER INITIALIZATION
 // ===========================================
@@ -388,317 +359,129 @@ const router = Router();
 /**
  * @route   POST /api/voice/transcribe
  * @desc    Transcribe audio file to text
- * @access  Private
+ * @access  Private - Clinical staff only
  */
 router.post(
   '/transcribe',
-  // authenticate,
-  // authorize(['nurse', 'therapist', 'admin']),
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.HOME_HEALTH_AIDE,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  // TODO: Add multer middleware for file upload
   // uploadAudio.single('audio'),
-  async (req: AuthenticatedRequest & { body: TranscribeRequestBody }, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement transcription logic
-      // const result = await voiceController.transcribe(req.file, req.body, req.user);
-
-      // Validate file upload
-      if (!req.file) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'No audio file provided',
-        });
-      }
-
-      // Placeholder response
-      const transcription: TranscriptionResult = {
-        id: `trans-${Date.now()}`,
-        status: 'completed',
-        duration: 125.5,
-        language: req.body.language || 'en-US',
-        transcript: [
-          {
-            id: 'seg-1',
-            startTime: 0,
-            endTime: 15.5,
-            text: 'Patient reports feeling better today. Pain level is down to 3 out of 10.',
-            confidence: 0.95,
-            speaker: 'clinician',
-          },
-          {
-            id: 'seg-2',
-            startTime: 15.5,
-            endTime: 28.0,
-            text: 'Wound is healing well, no signs of infection. Changed dressing per protocol.',
-            confidence: 0.92,
-            speaker: 'clinician',
-          },
-        ],
-        fullText: 'Patient reports feeling better today. Pain level is down to 3 out of 10. Wound is healing well, no signs of infection. Changed dressing per protocol.',
-        wordCount: 28,
-        confidence: {
-          overall: 0.935,
-          segments: [
-            { segmentId: 'seg-1', confidence: 0.95, uncertainWords: [] },
-            { segmentId: 'seg-2', confidence: 0.92, uncertainWords: ['protocol'] },
-          ],
-          lowConfidenceFlags: [],
-          qualityIndicators: {
-            overallQuality: 'good',
-            hasBackgroundNoise: false,
-            hasSpeechOverlap: false,
-            volumeConsistency: 'consistent',
-          },
-        },
-        medicalTerms: [
-          {
-            term: 'pain level',
-            category: 'symptom',
-            startPosition: 42,
-            endPosition: 52,
-            confidence: 0.98,
-          },
-          {
-            term: 'wound',
-            category: 'body_part',
-            startPosition: 72,
-            endPosition: 77,
-            confidence: 0.99,
-          },
-        ],
-        timestamps: {
-          createdAt: new Date().toISOString(),
-          startedAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-        },
-        metadata: {
-          patientId: req.body.patientId,
-          visitId: req.body.visitId,
-          clinicianId: req.user?.id || 'unknown',
-          context: req.body.context || 'general_notes',
-          provider: 'google',
-          audioFormat: req.file.mimetype,
-          processingTimeMs: 3250,
-        },
-      };
-
-      return res.status(200).json({
-        message: 'Transcription completed successfully',
-        transcription,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  voiceController.transcribe
 );
 
 /**
  * @route   POST /api/voice/process-oasis
  * @desc    Transcribe audio and auto-populate OASIS assessment fields
- * @access  Private
+ * @access  Private - Clinical staff who can complete OASIS
  */
 router.post(
   '/process-oasis',
-  // authenticate,
-  // authorize(['nurse', 'therapist']),
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+  ]),
+  // TODO: Add multer middleware for file upload
   // uploadAudio.single('audio'),
-  async (req: AuthenticatedRequest & { body: OasisProcessRequest }, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement OASIS processing logic
-      // const result = await voiceController.processOasis(req.file, req.body, req.user);
+  voiceController.processOasis
+);
 
-      // Validate file upload
-      if (!req.file) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'No audio file provided',
-        });
-      }
-
-      // Validate required fields
-      if (!req.body.patientId) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Patient ID is required for OASIS processing',
-        });
-      }
-
-      // Placeholder response
-      const result: OasisProcessingResult = {
-        transcriptionId: `trans-${Date.now()}`,
-        transcription: {
-          id: `trans-${Date.now()}`,
-          status: 'completed',
-          duration: 245.0,
-          language: 'en-US',
-          transcript: [],
-          fullText: 'Patient assessment completed. Ambulation status: patient requires minimal assistance...',
-          wordCount: 156,
-          confidence: {
-            overall: 0.91,
-            segments: [],
-            lowConfidenceFlags: [],
-            qualityIndicators: {
-              overallQuality: 'good',
-              hasBackgroundNoise: false,
-              hasSpeechOverlap: false,
-              volumeConsistency: 'consistent',
-            },
-          },
-          timestamps: {
-            createdAt: new Date().toISOString(),
-            completedAt: new Date().toISOString(),
-          },
-          metadata: {
-            patientId: req.body.patientId,
-            clinicianId: req.user?.id || 'unknown',
-            context: 'oasis_assessment',
-            provider: 'google',
-            audioFormat: req.file.mimetype,
-            processingTimeMs: 5420,
-          },
-        },
-        oasisMapping: {
-          assessmentId: `oasis-${Date.now()}`,
-          assessmentType: req.body.assessmentType || 'follow_up',
-          patientId: req.body.patientId,
-          mappedFields: [
-            {
-              fieldCode: 'GG0170C',
-              fieldName: 'Mobility - Walking',
-              section: 'functional_abilities',
-              extractedValue: 'minimal assistance',
-              mappedResponse: 4,
-              confidence: 0.89,
-              sourceSegments: ['seg-3'],
-              sourceText: 'patient requires minimal assistance for ambulation',
-              requiresReview: false,
-            },
-            {
-              fieldCode: 'M1242',
-              fieldName: 'Pain Frequency',
-              section: 'patient_history',
-              extractedValue: 'daily but not constant',
-              mappedResponse: 2,
-              confidence: 0.78,
-              sourceSegments: ['seg-5'],
-              sourceText: 'patient reports pain most days but not all the time',
-              requiresReview: true,
-              reviewReason: 'Clinical validation needed for pain frequency mapping',
-            },
-          ],
-          unmappedContent: [
-            'Discussion about family support',
-            'Patient preferences for visit times',
-          ],
-          completionPercentage: 35,
-          lastUpdated: new Date().toISOString(),
-        },
-        extractedData: {
-          functionalStatus: {
-            mobility: {
-              ambulation: 4,
-              transfers: 3,
-            },
-          },
-          vitalSigns: {
-            bloodPressure: { systolic: 128, diastolic: 82 },
-            painLevel: 3,
-          },
-          skinCondition: {
-            hasWounds: true,
-            wounds: [
-              {
-                location: 'left lower leg',
-                type: 'surgical',
-                characteristics: ['healing', 'no drainage'],
-                treatment: 'dry sterile dressing',
-              },
-            ],
-          },
-        },
-        reviewRequired: [
-          {
-            fieldCode: 'M1242',
-            fieldName: 'Pain Frequency',
-            reason: 'ambiguous_statement',
-            extractedValue: 'daily but not constant',
-            suggestedValue: 2,
-            sourceText: 'patient reports pain most days but not all the time',
-            priority: 'medium',
-          },
-        ],
-      };
-
-      return res.status(200).json({
-        message: 'OASIS processing completed',
-        result,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+/**
+ * @route   GET /api/voice/transcriptions
+ * @desc    List transcriptions with filtering and pagination
+ * @access  Private - Users see own transcriptions or assigned patients
+ */
+router.get(
+  '/transcriptions',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.HOME_HEALTH_AIDE,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  voiceController.listTranscriptions
 );
 
 /**
  * @route   GET /api/voice/transcriptions/:id
  * @desc    Get transcription by ID
- * @access  Private
+ * @access  Private - Creator, assigned clinicians, or admin/supervisor
  */
 router.get(
   '/transcriptions/:id',
-  // authenticate,
-  async (req: AuthenticatedRequest & Request<{ id: string }>, res: Response, next: NextFunction) => {
-    try {
-      // TODO: Implement get transcription logic
-      // const transcription = await voiceController.getTranscription(req.params.id, req.user);
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.HOME_HEALTH_AIDE,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  voiceController.getTranscription
+);
 
-      const { id } = req.params;
+/**
+ * @route   DELETE /api/voice/transcriptions/:id
+ * @desc    Soft delete a transcription
+ * @access  Private - Creator or admin/supervisor
+ */
+router.delete(
+  '/transcriptions/:id',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.HOME_HEALTH_AIDE,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  voiceController.deleteTranscription
+);
 
-      // Placeholder response
-      const transcription: TranscriptionResult = {
-        id,
-        status: 'completed',
-        duration: 125.5,
-        language: 'en-US',
-        transcript: [
-          {
-            id: 'seg-1',
-            startTime: 0,
-            endTime: 15.5,
-            text: 'Patient reports feeling better today.',
-            confidence: 0.95,
-          },
-        ],
-        fullText: 'Patient reports feeling better today.',
-        wordCount: 6,
-        confidence: {
-          overall: 0.95,
-          segments: [],
-          lowConfidenceFlags: [],
-          qualityIndicators: {
-            overallQuality: 'good',
-            hasBackgroundNoise: false,
-            hasSpeechOverlap: false,
-            volumeConsistency: 'consistent',
-          },
-        },
-        timestamps: {
-          createdAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-        },
-        metadata: {
-          clinicianId: req.user?.id || 'unknown',
-          context: 'general_notes',
-          provider: 'google',
-          audioFormat: 'audio/wav',
-          processingTimeMs: 2100,
-        },
-      };
-
-      return res.status(200).json(transcription);
-    } catch (error) {
-      next(error);
-    }
-  }
+/**
+ * @route   POST /api/voice/transcriptions/:id/cancel
+ * @desc    Cancel a pending or processing transcription
+ * @access  Private - Creator or admin/supervisor
+ */
+router.post(
+  '/transcriptions/:id/cancel',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.HOME_HEALTH_AIDE,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  voiceController.cancelTranscription
 );
 
 export default router;
