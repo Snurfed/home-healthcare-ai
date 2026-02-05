@@ -1,9 +1,11 @@
+// Load environment variables FIRST (before any other imports)
+import 'dotenv/config';
+
 import express, { Application, Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
 
 // Route imports
 import authRoutes from './routes/auth';
@@ -11,9 +13,6 @@ import patientRoutes from './routes/patients';
 import voiceRoutes from './routes/voice';
 import documentRoutes from './routes/documents';
 import oasisRoutes from './routes/oasis';
-
-// Load environment variables
-dotenv.config();
 
 // Initialize Express app
 const app: Application = express();
