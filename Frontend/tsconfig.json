@@ -37,7 +37,7 @@
       "@services/*": ["src/services/*"],
       "@utils/*": ["src/utils/*"],
       "@context/*": ["src/context/*"],
-      "@types/*": ["src/types/*"],
+      "@typedefs/*": ["src/types/*"],
       "@assets/*": ["src/assets/*"]
     },
     "resolveJsonModule": true,
@@ -52,7 +52,7 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
