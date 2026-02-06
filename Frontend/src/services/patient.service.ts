@@ -42,6 +42,32 @@ export interface PatientSearchParams {
   assignedToMe?: boolean;
 }
 
+// Create patient request
+export interface CreatePatientRequest {
+  // Required fields
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY';
+  phoneMobile: string;
+  addressStreet1: string;
+  addressCity: string;
+  addressState: string;
+  addressZipCode: string;
+  // Optional fields
+  middleName?: string;
+  email?: string;
+  primaryPhysicianName?: string;
+  primaryPhysicianPhone?: string;
+  // Emergency contact (optional)
+  emergencyContacts?: Array<{
+    firstName: string;
+    lastName: string;
+    relationship: string;
+    phoneMobile: string;
+  }>;
+}
+
 /**
  * Search patients
  */
@@ -65,7 +91,16 @@ export async function getPatient(id: string): Promise<PatientListItem> {
   return response.data;
 }
 
+/**
+ * Create a new patient
+ */
+export async function createPatient(data: CreatePatientRequest): Promise<PatientListItem> {
+  const response = await apiClient.post<{ patient: PatientListItem }>('/patients', data);
+  return response.data.patient;
+}
+
 export default {
   searchPatients,
   getPatient,
+  createPatient,
 };

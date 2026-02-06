@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { usePatientSearch, usePatientEpisodes, useCreateEpisode, useCreateAssessment, useAssessments } from '@hooks/index';
 import { Button, Input, Select, Spinner, Alert } from '@components/common';
+import { CreatePatientForm } from '@components/patients';
 import { ASSESSMENT_TYPE_LABELS } from '@typedefs/oasis.types';
 import type { PatientListItem } from '@services/patient.service';
 import type { Episode } from '@services/episode.service';
@@ -73,6 +74,7 @@ function PatientSearchStep({
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -101,6 +103,11 @@ function PatientSearchStep({
       age--;
     }
     return age;
+  };
+
+  const handlePatientCreated = (patient: PatientListItem) => {
+    setShowCreateForm(false);
+    onSelect(patient);
   };
 
   if (selectedPatient) {
@@ -134,9 +141,40 @@ function PatientSearchStep({
     );
   }
 
+  // Show create patient form
+  if (showCreateForm) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium text-gray-900">Create New Patient</h3>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowCreateForm(false)}
+          >
+            Back to Search
+          </Button>
+        </div>
+        <CreatePatientForm
+          onSuccess={handlePatientCreated}
+          onCancel={() => setShowCreateForm(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-medium text-gray-900">Search for Patient</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-medium text-gray-900">Search for Patient</h3>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setShowCreateForm(true)}
+        >
+          Create New Patient
+        </Button>
+      </div>
       <Input
         type="search"
         placeholder="Search by name, MRN, or phone number..."
@@ -183,9 +221,14 @@ function PatientSearchStep({
       )}
 
       {!isLoading && debouncedQuery && data?.data?.length === 0 && (
-        <p className="text-center text-gray-500 py-4">
-          No patients found matching "{debouncedQuery}"
-        </p>
+        <div className="text-center py-6">
+          <p className="text-gray-500 mb-4">
+            No patients found matching "{debouncedQuery}"
+          </p>
+          <Button onClick={() => setShowCreateForm(true)}>
+            Create New Patient
+          </Button>
+        </div>
       )}
 
       {!debouncedQuery && (

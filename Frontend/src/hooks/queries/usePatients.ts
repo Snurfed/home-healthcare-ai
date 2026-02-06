@@ -4,10 +4,10 @@
  * React Query hooks for patient operations
  */
 
-import { useQuery } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { queryKeys } from '@context/QueryProvider';
 import { patientService } from '@services/index';
-import type { PatientSearchParams, PatientListItem } from '@services/patient.service';
+import type { PatientSearchParams, PatientListItem, CreatePatientRequest } from '@services/patient.service';
 import type { PaginatedResponse } from '@typedefs/api.types';
 
 /**
@@ -33,6 +33,22 @@ export function usePatient(id: string | undefined) {
     () => patientService.getPatient(id!),
     {
       enabled: !!id,
+    }
+  );
+}
+
+/**
+ * Hook to create a new patient
+ */
+export function useCreatePatient() {
+  const queryClient = useQueryClient();
+
+  return useMutation<PatientListItem, Error, CreatePatientRequest>(
+    (data) => patientService.createPatient(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(queryKeys.patients.all);
+      },
     }
   );
 }

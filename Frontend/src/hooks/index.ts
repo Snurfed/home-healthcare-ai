@@ -30,6 +30,7 @@ export {
 export {
   usePatientSearch,
   usePatient,
+  useCreatePatient,
 } from './queries/usePatients';
 
 // Episode hooks
