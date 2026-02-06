@@ -7,7 +7,7 @@
 import { useMemo } from 'react';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
 import { useUpdateAssessment } from '@hooks/index';
-import { Button, Alert } from '@components/common';
+import { Button } from '@components/common';
 import QuestionRenderer from './QuestionRenderer';
 import type { OASISSection, OASISAssessment, OASISQuestion } from '@typedefs/index';
 import { OASIS_SECTIONS } from '@typedefs/oasis.types';
@@ -90,10 +90,19 @@ export default function SectionContent({
       {/* Questions */}
       <div className="p-6 space-y-8">
         {sectionQuestions.length === 0 ? (
-          <Alert variant="info">
-            No questions loaded for this section. Questions will be populated from the
-            question library.
-          </Alert>
+          <div className="text-center py-8">
+            <div className="text-gray-400 mb-4">
+              <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <p className="text-gray-500">
+              No questions available for this section with the current assessment type.
+            </p>
+            <p className="text-sm text-gray-400 mt-2">
+              Section: {section.id}
+            </p>
+          </div>
         ) : (
           sectionQuestions.map((question) => (
             <QuestionRenderer

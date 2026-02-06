@@ -15,13 +15,16 @@ import SectionContent from '@components/oasis/SectionContent';
 export default function AssessmentWizardPage() {
   const { id } = useParams<{ id: string }>();
   const { data: assessment, isLoading, error } = useAssessment(id);
-  const { data: questions } = useQuestions();
+  // Fetch questions filtered by assessment type for better performance
+  const { data: questions, isLoading: questionsLoading, error: questionsError } = useQuestions(
+    assessment?.assessmentType ? { assessmentType: assessment.assessmentType } : undefined
+  );
   const { currentSectionIndex, isDirty, isSaving, lastSavedAt } = useAssessmentStore();
 
-  if (isLoading) {
+  if (isLoading || questionsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Spinner size="lg" label="Loading assessment..." />
+        <Spinner size="lg" label={isLoading ? "Loading assessment..." : "Loading questions..."} />
       </div>
     );
   }
@@ -31,6 +34,19 @@ export default function AssessmentWizardPage() {
       <div className="max-w-2xl mx-auto">
         <Alert variant="error" title="Error loading assessment">
           {error?.message || 'Assessment not found'}
+        </Alert>
+        <Link to="/assessments" className="mt-4 inline-block">
+          <Button variant="secondary">Back to Assessments</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  if (questionsError) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Alert variant="error" title="Error loading questions">
+          {questionsError.message || 'Failed to load OASIS questions'}
         </Alert>
         <Link to="/assessments" className="mt-4 inline-block">
           <Button variant="secondary">Back to Assessments</Button>
@@ -102,6 +118,7 @@ export default function AssessmentWizardPage() {
             sections={OASIS_SECTIONS}
             currentIndex={currentSectionIndex}
             assessment={assessment}
+            questions={questions || []}
           />
         </div>
 

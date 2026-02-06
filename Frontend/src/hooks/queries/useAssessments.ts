@@ -166,14 +166,17 @@ export function useDeleteAssessment() {
 /**
  * Hook to get OASIS questions
  */
-export function useQuestions(params?: { section?: string }) {
+export function useQuestions(params?: { section?: string; assessmentType?: string }) {
   return useQuery<OASISQuestion[], Error>(
     params?.section
       ? queryKeys.questions.bySection(params.section)
+      : params?.assessmentType
+      ? ['questions', 'byType', params.assessmentType]
       : queryKeys.questions.lists(),
     () => oasisService.getQuestions(params as never),
     {
       staleTime: 60 * 60 * 1000, // Questions rarely change, cache for 1 hour
+      enabled: params === undefined || params.assessmentType !== undefined || params.section !== undefined,
     }
   );
 }

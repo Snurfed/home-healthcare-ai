@@ -4,28 +4,62 @@
  * Navigation sidebar for OASIS assessment sections
  */
 
+import { useMemo } from 'react';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
-import type { OASISSection, OASISAssessment } from '@typedefs/index';
+import type { OASISSection, OASISAssessment, OASISQuestion } from '@typedefs/index';
 
 interface SectionStepperProps {
   sections: OASISSection[];
   currentIndex: number;
   assessment: OASISAssessment;
+  questions?: OASISQuestion[];
 }
 
 export default function SectionStepper({
   sections,
   currentIndex,
+  assessment,
+  questions = [],
 }: SectionStepperProps) {
   const { navigateToSection } = useAssessmentStore();
 
-  // Calculate section completion (simplified - would use actual response data)
-  const getSectionStatus = (_section: OASISSection, index: number) => {
-    if (index < currentIndex) {
+  // Calculate question counts per section
+  const sectionQuestionCounts = useMemo(() => {
+    const counts: Record<string, { total: number; answered: number }> = {};
+
+    sections.forEach(section => {
+      const sectionQuestions = questions.filter(q => q.section === section.id);
+      const answeredCount = sectionQuestions.filter(q => {
+        const response = assessment.responses?.[q.itemCode];
+        return response?.responseValue || response?.responseCode || response?.responseText;
+      }).length;
+
+      counts[section.id] = {
+        total: sectionQuestions.length,
+        answered: answeredCount,
+      };
+    });
+
+    return counts;
+  }, [sections, questions, assessment.responses]);
+
+  // Calculate section completion based on actual responses
+  const getSectionStatus = (section: OASISSection, index: number) => {
+    const counts = sectionQuestionCounts[section.id];
+    if (!counts || counts.total === 0) {
+      // No questions in this section
+      if (index === currentIndex) return 'current';
+      return index < currentIndex ? 'completed' : 'upcoming';
+    }
+
+    if (counts.answered === counts.total && counts.total > 0) {
       return 'completed';
     }
     if (index === currentIndex) {
       return 'current';
+    }
+    if (counts.answered > 0) {
+      return 'in_progress';
     }
     return 'upcoming';
   };
@@ -40,6 +74,7 @@ export default function SectionStepper({
         <ol className="space-y-1">
           {sections.map((section, index) => {
             const status = getSectionStatus(section, index);
+            const counts = sectionQuestionCounts[section.id] || { total: 0, answered: 0 };
 
             return (
               <li key={section.id}>
@@ -53,6 +88,8 @@ export default function SectionStepper({
                         ? 'bg-primary-50 text-primary-700 font-medium'
                         : status === 'completed'
                         ? 'text-gray-700 hover:bg-gray-50'
+                        : status === 'in_progress'
+                        ? 'text-blue-700 hover:bg-blue-50'
                         : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                     }
                   `}
@@ -68,6 +105,8 @@ export default function SectionStepper({
                           ? 'bg-primary-600 text-white'
                           : status === 'completed'
                           ? 'bg-green-100 text-green-600'
+                          : status === 'in_progress'
+                          ? 'bg-blue-100 text-blue-600'
                           : 'bg-gray-200 text-gray-500'
                       }
                     `}
@@ -85,8 +124,15 @@ export default function SectionStepper({
                     )}
                   </span>
 
-                  {/* Section name */}
-                  <span className="truncate">{section.name}</span>
+                  {/* Section name and count */}
+                  <div className="flex-1 min-w-0">
+                    <span className="truncate block">{section.name}</span>
+                    {counts.total > 0 && (
+                      <span className="text-xs text-gray-400">
+                        {counts.answered}/{counts.total} answered
+                      </span>
+                    )}
+                  </div>
                 </button>
               </li>
             );
