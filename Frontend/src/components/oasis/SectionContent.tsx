@@ -2,11 +2,11 @@
  * Section Content Component
  *
  * Displays questions for the current OASIS section
+ * Works with auto-save - no manual save on navigation
  */
 
 import { useMemo } from 'react';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
-import { useUpdateAssessment } from '@hooks/index';
 import { Button } from '@components/common';
 import QuestionRenderer from './QuestionRenderer';
 import type { OASISSection, OASISAssessment, OASISQuestion } from '@typedefs/index';
@@ -29,10 +29,7 @@ export default function SectionContent({
     currentSectionIndex,
     nextSection,
     previousSection,
-    isDirty,
   } = useAssessmentStore();
-
-  const updateMutation = useUpdateAssessment(assessment.id);
 
   // Filter questions for this section
   const sectionQuestions = useMemo(() => {
@@ -46,32 +43,6 @@ export default function SectionContent({
     const draft = draftResponses[itemCode];
     const saved = assessment.responses?.[itemCode];
     return draft || saved;
-  };
-
-  // Handle save
-  const handleSave = async () => {
-    if (!isDirty || Object.keys(draftResponses).length === 0) return;
-
-    await updateMutation.mutateAsync({
-      section: section.id,
-      items: draftResponses,
-    });
-  };
-
-  // Handle next with save
-  const handleNext = async () => {
-    if (isDirty) {
-      await handleSave();
-    }
-    nextSection();
-  };
-
-  // Handle previous with save
-  const handlePrevious = async () => {
-    if (isDirty) {
-      await handleSave();
-    }
-    previousSection();
   };
 
   const isFirstSection = currentSectionIndex === 0;
@@ -121,44 +92,27 @@ export default function SectionContent({
         )}
       </div>
 
-      {/* Navigation */}
+      {/* Navigation - Auto-save handles saving automatically */}
       <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
         <Button
           variant="secondary"
-          onClick={handlePrevious}
-          disabled={isFirstSection || updateMutation.isLoading}
+          onClick={previousSection}
+          disabled={isFirstSection}
         >
           Previous Section
         </Button>
 
-        <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            onClick={handleSave}
-            disabled={!isDirty || updateMutation.isLoading}
-            isLoading={updateMutation.isLoading}
-          >
-            Save Progress
-          </Button>
-
-          {isLastSection ? (
-            <Button
-              variant="primary"
-              onClick={handleSave}
-              disabled={updateMutation.isLoading}
-            >
-              Complete Section
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              onClick={handleNext}
-              disabled={updateMutation.isLoading}
-            >
-              Next Section
-            </Button>
-          )}
+        <div className="text-sm text-gray-500">
+          Section {currentSectionIndex + 1} of {OASIS_SECTIONS.length}
         </div>
+
+        <Button
+          variant="primary"
+          onClick={nextSection}
+          disabled={isLastSection}
+        >
+          {isLastSection ? 'Last Section' : 'Next Section'}
+        </Button>
       </div>
     </div>
   );

@@ -1,12 +1,15 @@
 /**
  * Assessment Wizard Page
  *
- * Multi-step OASIS assessment form
+ * Multi-step OASIS assessment form with auto-save
  */
 
+import { useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useAssessment, useQuestions } from '@hooks/index';
+import { useQueryClient } from 'react-query';
+import { useAssessment, useQuestions, useAutoSave } from '@hooks/index';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
+import { queryKeys } from '@context/QueryProvider';
 import { Button, Spinner, Alert, Badge } from '@components/common';
 import { OASIS_SECTIONS, STATUS_CONFIG } from '@typedefs/oasis.types';
 import SectionStepper from '@components/oasis/SectionStepper';
@@ -14,12 +17,34 @@ import SectionContent from '@components/oasis/SectionContent';
 
 export default function AssessmentWizardPage() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
   const { data: assessment, isLoading, error } = useAssessment(id);
   // Fetch questions filtered by assessment type for better performance
   const { data: questions, isLoading: questionsLoading, error: questionsError } = useQuestions(
     assessment?.assessmentType ? { assessmentType: assessment.assessmentType } : undefined
   );
-  const { currentSectionIndex, isDirty, isSaving, lastSavedAt } = useAssessmentStore();
+  const { currentSectionIndex } = useAssessmentStore();
+
+  // Auto-save with 2 second debounce
+  const handleSaveSuccess = useCallback(() => {
+    // Invalidate assessment query to refresh completion percentage
+    if (id) {
+      queryClient.invalidateQueries(queryKeys.assessments.detail(id));
+    }
+  }, [id, queryClient]);
+
+  const {
+    isSaving,
+    lastSavedAt,
+    saveError,
+    saveNow,
+    pendingChanges,
+  } = useAutoSave({
+    assessmentId: id || '',
+    enabled: !!id && !!assessment,
+    debounceMs: 2000,
+    onSaveSuccess: handleSaveSuccess,
+  });
 
   if (isLoading || questionsLoading) {
     return (
@@ -77,19 +102,41 @@ export default function AssessmentWizardPage() {
           </div>
 
           <div className="text-right">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+            <div className="flex items-center justify-end gap-2 text-sm">
               {isSaving ? (
-                <>
+                <span className="flex items-center gap-2 text-blue-600">
                   <Spinner size="sm" />
                   <span>Saving...</span>
-                </>
-              ) : isDirty ? (
-                <span className="text-yellow-600">Unsaved changes</span>
-              ) : lastSavedAt ? (
-                <span className="text-green-600">
-                  Saved {lastSavedAt.toLocaleTimeString()}
                 </span>
-              ) : null}
+              ) : saveError ? (
+                <button
+                  onClick={() => saveNow()}
+                  className="flex items-center gap-1 text-red-600 hover:text-red-700"
+                  title={saveError}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span>Save failed - Click to retry</span>
+                </button>
+              ) : pendingChanges > 0 ? (
+                <span className="flex items-center gap-2 text-yellow-600">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                  </span>
+                  <span>Saving in 2s... ({pendingChanges} changes)</span>
+                </span>
+              ) : lastSavedAt ? (
+                <span className="flex items-center gap-1 text-green-600">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Saved {lastSavedAt.toLocaleTimeString()}</span>
+                </span>
+              ) : (
+                <span className="text-gray-400">Auto-save enabled</span>
+              )}
             </div>
             <div className="mt-1">
               <span className="text-sm font-medium">
