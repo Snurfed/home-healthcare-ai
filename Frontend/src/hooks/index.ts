@@ -25,3 +25,16 @@ export {
   useQuestions,
   useCalculateScore,
 } from './queries/useAssessments';
+
+// Patient hooks
+export {
+  usePatientSearch,
+  usePatient,
+} from './queries/usePatients';
+
+// Episode hooks
+export {
+  usePatientEpisodes,
+  useCreateEpisode,
+  useEpisode,
+} from './queries/useEpisodes';

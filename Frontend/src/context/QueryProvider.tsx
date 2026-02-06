@@ -63,8 +63,19 @@ export const queryKeys = {
     lists: () => [...queryKeys.patients.all, 'list'] as const,
     list: (params: Record<string, unknown>) =>
       [...queryKeys.patients.lists(), params] as const,
+    search: (query: string, params: Record<string, unknown>) =>
+      [...queryKeys.patients.all, 'search', query, params] as const,
     details: () => [...queryKeys.patients.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.patients.details(), id] as const,
+  },
+
+  // Episodes
+  episodes: {
+    all: ['episodes'] as const,
+    byPatient: (patientId: string) =>
+      [...queryKeys.episodes.all, 'patient', patientId] as const,
+    details: () => [...queryKeys.episodes.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.episodes.details(), id] as const,
   },
 };
 

@@ -10,6 +10,7 @@ import morgan from 'morgan';
 // Route imports
 import authRoutes from './routes/auth';
 import patientRoutes from './routes/patients';
+import episodeRoutes from './routes/episodes';
 import voiceRoutes from './routes/voice';
 import documentRoutes from './routes/documents';
 import oasisRoutes from './routes/oasis';
@@ -123,6 +124,9 @@ app.use('/api/auth', authLimiter, authRoutes);
 
 // Patient management routes
 app.use('/api/patients', patientRoutes);
+
+// Episode routes (nested under /api)
+app.use('/api', episodeRoutes);
 
 // Voice-to-text routes
 app.use('/api/voice', voiceRoutes);
