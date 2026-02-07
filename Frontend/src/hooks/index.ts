@@ -44,3 +44,4 @@ export {
 export { useAutoSave } from './useAutoSave';
 export { useSkipLogic } from './useSkipLogic';
 export { useSectionValidation } from './useSectionValidation';
+export { useAssessmentValidation } from './useAssessmentValidation';

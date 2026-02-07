@@ -6,14 +6,14 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import { validateSection, getMissingRequiredQuestions } from '@utils/validation';
-import type { OASISQuestion, OASISResponse } from '@typedefs/index';
+import type { OASISQuestion, OASISResponse, AssessmentType } from '@typedefs/index';
 import type { QuestionValidationError, ValidationResult } from '@utils/validation';
 
 interface UseSectionValidationOptions {
   questions: OASISQuestion[];
   savedResponses: Record<string, OASISResponse> | undefined;
   draftResponses: Record<string, Partial<OASISResponse>>;
-  assessmentType?: string;
+  assessmentType?: AssessmentType;
 }
 
 interface UseSectionValidationReturn {
