@@ -1,29 +1,59 @@
 /**
  * Assessment Wizard Page
  *
- * Multi-step OASIS assessment form with auto-save
+ * Multi-step OASIS assessment form with auto-save and validation
  */
 
-import { useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useCallback, useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from 'react-query';
-import { useAssessment, useQuestions, useAutoSave } from '@hooks/index';
+import {
+  useAssessment,
+  useQuestions,
+  useAutoSave,
+  useAssessmentValidation,
+  useSubmitForReview,
+} from '@hooks/index';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
 import { queryKeys } from '@context/QueryProvider';
 import { Button, Spinner, Alert, Badge } from '@components/common';
 import { OASIS_SECTIONS, STATUS_CONFIG } from '@typedefs/oasis.types';
 import SectionStepper from '@components/oasis/SectionStepper';
 import SectionContent from '@components/oasis/SectionContent';
+import SubmissionValidation from '@components/oasis/SubmissionValidation';
 
 export default function AssessmentWizardPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [showReview, setShowReview] = useState(false);
+
   const { data: assessment, isLoading, error } = useAssessment(id);
   // Fetch questions filtered by assessment type for better performance
   const { data: questions, isLoading: questionsLoading, error: questionsError } = useQuestions(
     assessment?.assessmentType ? { assessmentType: assessment.assessmentType } : undefined
   );
-  const { currentSectionIndex } = useAssessmentStore();
+  const { currentSectionIndex, draftResponses, navigateToSection } = useAssessmentStore();
+
+  // Submit for review mutation
+  const submitForReview = useSubmitForReview(id || '');
+
+  // Assessment validation
+  const {
+    validationResult,
+    isReadyForSubmission,
+    submissionBlockers,
+    submissionWarnings,
+    completionPercentage,
+    crossValidationErrors,
+    validate,
+  } = useAssessmentValidation({
+    questions: questions || [],
+    savedResponses: assessment?.responses,
+    draftResponses,
+    assessmentType: assessment?.assessmentType,
+    startOfCareDate: assessment?.dates?.m0030_startOfCareDate || undefined,
+  });
 
   // Auto-save with 2 second debounce
   const handleSaveSuccess = useCallback(() => {
@@ -32,6 +62,39 @@ export default function AssessmentWizardPage() {
       queryClient.invalidateQueries(queryKeys.assessments.detail(id));
     }
   }, [id, queryClient]);
+
+  // Handle submission
+  const handleSubmit = useCallback(async () => {
+    try {
+      await submitForReview.mutateAsync({
+        attestation: true,
+        notes: 'Submitted via assessment wizard',
+      });
+      navigate(`/assessments/${id}`);
+    } catch (err) {
+      // Error handled by mutation
+    }
+  }, [submitForReview, navigate, id]);
+
+  // Handle fix error - navigate to the section containing the error
+  const handleFixError = useCallback((itemCode: string) => {
+    // Find the question and its section
+    const question = questions?.find(q => q.itemCode === itemCode);
+    if (question) {
+      const sectionIndex = OASIS_SECTIONS.findIndex(s => s.id === question.section);
+      if (sectionIndex >= 0) {
+        navigateToSection(sectionIndex);
+        setShowReview(false);
+        // Scroll to the question after a brief delay
+        setTimeout(() => {
+          const element = document.getElementById(`question-${itemCode}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+      }
+    }
+  }, [questions, navigateToSection]);
 
   const {
     isSaving,
@@ -161,22 +224,113 @@ export default function AssessmentWizardPage() {
       <div className="flex gap-6">
         {/* Section Stepper */}
         <div className="hidden lg:block w-72 flex-shrink-0">
-          <SectionStepper
-            sections={OASIS_SECTIONS}
-            currentIndex={currentSectionIndex}
-            assessment={assessment}
-            questions={questions || []}
-          />
+          <div className="sticky top-24 space-y-4">
+            <SectionStepper
+              sections={OASIS_SECTIONS}
+              currentIndex={showReview ? -1 : currentSectionIndex}
+              assessment={assessment}
+              questions={questions || []}
+              onSectionClick={() => {
+                setShowReview(false);
+              }}
+            />
+
+            {/* Review & Submit Button */}
+            <button
+              onClick={() => setShowReview(true)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border-2 transition-colors ${
+                showReview
+                  ? 'border-primary-600 bg-primary-50 text-primary-700'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300 hover:bg-primary-50'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <span className="font-medium">Review & Submit</span>
+              {isReadyForSubmission && (
+                <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Ready
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Section Content */}
+        {/* Section Content or Review */}
         <div className="flex-1 min-w-0">
-          <SectionContent
-            section={currentSection}
-            assessment={assessment}
-            questions={questions || []}
-          />
+          {showReview ? (
+            <div className="space-y-4">
+              {/* Review Header */}
+              <div className="bg-white rounded-lg shadow-card p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Review & Submit</h2>
+                    <p className="text-gray-500">
+                      Validate your assessment and submit for supervisor review
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowReview(false)}
+                  >
+                    Back to Editing
+                  </Button>
+                </div>
+              </div>
+
+              {/* Submission Validation */}
+              <SubmissionValidation
+                validationResult={validationResult}
+                completionPercentage={completionPercentage}
+                isReadyForSubmission={isReadyForSubmission}
+                blockers={submissionBlockers}
+                warnings={submissionWarnings}
+                crossValidationErrors={crossValidationErrors}
+                onValidate={validate}
+                onSubmit={handleSubmit}
+                onFixError={handleFixError}
+                isSubmitting={submitForReview.isLoading}
+              />
+
+              {/* Submission Error */}
+              {submitForReview.isError && (
+                <Alert variant="error">
+                  Failed to submit assessment: {(submitForReview.error as Error)?.message || 'Unknown error'}
+                </Alert>
+              )}
+            </div>
+          ) : (
+            <SectionContent
+              section={currentSection}
+              assessment={assessment}
+              questions={questions || []}
+            />
+          )}
         </div>
+      </div>
+
+      {/* Mobile Review Button */}
+      <div className="lg:hidden fixed bottom-4 right-4">
+        <button
+          onClick={() => setShowReview(true)}
+          className="flex items-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <span>Review</span>
+        </button>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ interface SectionStepperProps {
   currentIndex: number;
   assessment: OASISAssessment;
   questions?: OASISQuestion[];
+  onSectionClick?: (index: number) => void;
 }
 
 export default function SectionStepper({
@@ -20,8 +21,14 @@ export default function SectionStepper({
   currentIndex,
   assessment,
   questions = [],
+  onSectionClick,
 }: SectionStepperProps) {
   const { navigateToSection } = useAssessmentStore();
+
+  const handleSectionClick = (index: number) => {
+    navigateToSection(index);
+    onSectionClick?.(index);
+  };
 
   // Calculate question counts per section
   const sectionQuestionCounts = useMemo(() => {
@@ -65,7 +72,7 @@ export default function SectionStepper({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-card p-4 sticky top-24">
+    <div className="bg-white rounded-lg shadow-card p-4">
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
         Sections
       </h2>
@@ -79,7 +86,7 @@ export default function SectionStepper({
             return (
               <li key={section.id}>
                 <button
-                  onClick={() => navigateToSection(index)}
+                  onClick={() => handleSectionClick(index)}
                   className={`
                     w-full flex items-center gap-3 px-3 py-2 rounded-md text-left
                     transition-colors text-sm
