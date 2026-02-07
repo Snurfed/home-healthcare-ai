@@ -4,8 +4,16 @@
  * Renders appropriate input based on question type
  */
 
-import { Input, RadioGroup, Badge } from '@components/common';
-import type { OASISQuestion, OASISResponse, QuestionOption } from '@typedefs/index';
+import { useMemo } from 'react';
+import {
+  Input,
+  RadioGroup,
+  CheckboxGroup,
+  NumericInput,
+  ICD10Autocomplete,
+  Badge,
+} from '@components/common';
+import type { OASISQuestion, OASISResponse, QuestionOption, ValidationRule } from '@typedefs/index';
 
 interface QuestionRendererProps {
   question: OASISQuestion;
@@ -30,13 +38,49 @@ export default function QuestionRenderer({
       ? 'low'
       : null;
 
-  const handleValueChange = (newValue: string | string[] | number | null) => {
-    onChange({
-      responseValue: typeof newValue === 'string' ? newValue : undefined,
-      responseCode: typeof newValue === 'string' ? newValue : undefined,
-      responseNumeric: typeof newValue === 'number' ? newValue : undefined,
+  // Extract min/max from validation rules for numeric inputs
+  const numericValidation = useMemo(() => {
+    if (question.responseType !== 'numeric' || !question.validationRules) {
+      return { min: undefined, max: undefined };
+    }
+
+    let min: number | undefined;
+    let max: number | undefined;
+
+    question.validationRules.forEach((rule: ValidationRule) => {
+      if (rule.ruleType === 'min' && typeof rule.value === 'number') {
+        min = rule.value;
+      }
+      if (rule.ruleType === 'max' && typeof rule.value === 'number') {
+        max = rule.value;
+      }
     });
+
+    return { min, max };
+  }, [question.responseType, question.validationRules]);
+
+  const handleValueChange = (newValue: string | string[] | number | null) => {
+    if (Array.isArray(newValue)) {
+      // Multi-select: store as comma-separated string
+      onChange({
+        responseValue: newValue.join(','),
+        responseCode: newValue.join(','),
+      });
+    } else {
+      onChange({
+        responseValue: typeof newValue === 'string' ? newValue : undefined,
+        responseCode: typeof newValue === 'string' ? newValue : undefined,
+        responseNumeric: typeof newValue === 'number' ? newValue : undefined,
+      });
+    }
   };
+
+  // Parse multi-select value from comma-separated string
+  const multiSelectValue = useMemo(() => {
+    if (!value?.responseValue && !value?.responseCode) return [];
+    const val = value.responseCode || value.responseValue || '';
+    return val.split(',').filter(Boolean);
+  }, [value?.responseValue, value?.responseCode]);
 
   // Render based on response type
   const renderInput = () => {
@@ -60,36 +104,31 @@ export default function QuestionRenderer({
         );
 
       case 'multi_select':
-        // For multi-select, we'd use a checkbox group
-        // Simplified here - using radio for now
         return (
-          <RadioGroup
+          <CheckboxGroup
             name={question.itemCode}
             options={
               question.responses?.map((r: QuestionOption) => ({
                 value: r.code,
                 label: `${r.code} - ${r.label}`,
+                description: r.description,
               })) || []
             }
-            value={value?.responseCode || value?.responseValue || ''}
-            onChange={(val) => handleValueChange(val)}
+            value={multiSelectValue}
+            onChange={(values) => handleValueChange(values)}
             disabled={disabled}
-            orientation="vertical"
           />
         );
 
       case 'numeric':
         return (
-          <Input
-            type="number"
+          <NumericInput
             name={question.itemCode}
-            value={value?.responseNumeric?.toString() || value?.responseValue || ''}
-            onChange={(e) => {
-              const num = parseFloat(e.target.value);
-              handleValueChange(isNaN(num) ? null : num);
-            }}
+            value={value?.responseNumeric ?? null}
+            onChange={(num) => handleValueChange(num)}
+            min={numericValidation.min}
+            max={numericValidation.max}
             disabled={disabled}
-            className="max-w-xs"
           />
         );
 
@@ -125,14 +164,18 @@ export default function QuestionRenderer({
 
       case 'icd10':
         return (
-          <Input
-            type="text"
+          <ICD10Autocomplete
             name={question.itemCode}
             value={value?.responseValue || ''}
-            onChange={(e) => handleValueChange(e.target.value.toUpperCase())}
+            onChange={(code, description) => {
+              onChange({
+                responseValue: code,
+                responseCode: code,
+                responseText: description,
+              });
+            }}
             disabled={disabled}
-            placeholder="Enter ICD-10 code (e.g., J44.1)"
-            className="max-w-xs font-mono"
+            placeholder="Search or enter ICD-10 code..."
           />
         );
 
