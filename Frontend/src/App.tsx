@@ -9,6 +9,9 @@ const CreateAssessmentPage = lazy(() => import('@pages/oasis/CreateAssessmentPag
 const AssessmentWizardPage = lazy(() => import('@pages/oasis/AssessmentWizardPage'));
 const AssessmentViewPage = lazy(() => import('@pages/oasis/AssessmentViewPage'));
 const AssessmentReviewPage = lazy(() => import('@pages/oasis/AssessmentReviewPage'));
+const PatientsListPage = lazy(() => import('@pages/patients/PatientsListPage'));
+const NewPatientPage = lazy(() => import('@pages/patients/NewPatientPage'));
+const PatientDetailPage = lazy(() => import('@pages/patients/PatientDetailPage'));
 const NotFoundPage = lazy(() => import('@pages/NotFoundPage'));
 
 // Layout and auth components
@@ -59,6 +62,14 @@ function App() {
                 </RoleGuard>
               }
             />
+          </Route>
+
+          {/* Patient routes */}
+          <Route path="patients">
+            <Route index element={<PatientsListPage />} />
+            <Route path="new" element={<NewPatientPage />} />
+            <Route path=":id" element={<PatientDetailPage />} />
+            <Route path=":id/edit" element={<NewPatientPage />} />
           </Route>
         </Route>
 
