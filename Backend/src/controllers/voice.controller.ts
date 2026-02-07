@@ -12,6 +12,8 @@ import {
 } from '../generated/prisma';
 import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
+import { whisperService } from '../services/whisper.service';
+import { oasisExtractionService, OasisFieldMapping as ExtractedOasisField } from '../services/oasis-extraction.service';
 
 // ===========================================
 // CONFIGURATION
@@ -254,8 +256,7 @@ function estimateAudioDuration(fileSize: number, mimeType: string): number {
 }
 
 /**
- * Placeholder transcription service call
- * In production, this would call Google Speech-to-Text, AWS Transcribe, etc.
+ * Transcription service using OpenAI Whisper
  */
 async function callTranscriptionService(
   audioPath: string,
@@ -274,51 +275,53 @@ async function callTranscriptionService(
   processingTimeMs: number;
   audioQuality: string;
 }> {
-  const startTime = Date.now();
+  // Use Whisper service for transcription
+  const result = await whisperService.transcribeAudio(audioPath, {
+    language: options.language.split('-')[0], // Convert en-US to en
+    medicalVocabulary: options.medicalVocabulary,
+  });
 
-  // TODO: Implement actual transcription service integration
-  // This is a placeholder that simulates a transcription response
+  // Extract medical terms from transcription
+  const medicalTerms = whisperService.extractMedicalTerms(result.text);
 
-  // Simulate processing delay
-  await new Promise(resolve => setTimeout(resolve, 100));
-
-  const processingTimeMs = Date.now() - startTime;
+  // Assess audio quality
+  const audioQuality = whisperService.assessAudioQuality(result);
 
   return {
-    fullText: '[Transcription pending - service integration required]',
-    segments: [
-      {
-        id: uuidv4(),
-        startTime: 0,
-        endTime: 5,
-        text: '[Transcription pending - service integration required]',
-        confidence: 0,
-      },
-    ],
-    confidence: 0,
-    medicalTerms: [],
-    processingTimeMs,
-    audioQuality: 'unknown',
+    fullText: result.text,
+    segments: result.segments,
+    confidence: result.confidence,
+    medicalTerms: medicalTerms as MedicalTermExtraction[],
+    processingTimeMs: result.processingTimeMs,
+    audioQuality,
   };
 }
 
 /**
- * Extract OASIS field mappings from transcription (placeholder)
- * In production, this would use NLP/ML to map spoken content to OASIS fields
+ * Extract OASIS field mappings from transcription using Claude AI
  */
 async function extractOasisMappings(
   transcriptionText: string,
-  assessmentType: AssessmentType
+  assessmentType: AssessmentType,
+  _existingResponses?: Record<string, { responseCode?: string; responseValue?: string }>
 ): Promise<{
-  mappedFields: OasisFieldMapping[];
+  mappedFields: ExtractedOasisField[];
   completionPercentage: number;
+  confidenceMetrics: {
+    overall: number;
+    highConfidence: number;
+    needsReview: number;
+  };
 }> {
-  // TODO: Implement NLP-based OASIS field extraction
-  // This would analyze the transcription text and map it to OASIS items
+  const result = await oasisExtractionService.extractOasisFields(
+    transcriptionText,
+    assessmentType
+  );
 
   return {
-    mappedFields: [],
-    completionPercentage: 0,
+    mappedFields: result.mappedFields,
+    completionPercentage: result.completionPercentage,
+    confidenceMetrics: result.confidenceMetrics,
   };
 }
 

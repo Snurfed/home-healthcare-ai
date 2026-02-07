@@ -5,15 +5,18 @@
  * Works with auto-save - no manual save on navigation
  * Applies skip logic to conditionally show/hide questions
  * Validates required questions before section navigation
+ * Supports voice input with AI-powered field extraction
  */
 
-import { useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
 import { useSkipLogic, useSectionValidation } from '@hooks/index';
-import { Button, Alert } from '@components/common';
+import { Button, Alert, Modal } from '@components/common';
 import QuestionRenderer from './QuestionRenderer';
+import { VoiceRecorder, VoiceSuggestionReview } from '@components/voice';
 import type { OASISSection, OASISAssessment, OASISQuestion } from '@typedefs/index';
 import { OASIS_SECTIONS } from '@typedefs/oasis.types';
+import type { VoiceProcessingResult, OasisFieldMapping } from '@services/voice.service';
 
 interface SectionContentProps {
   section: OASISSection;
@@ -33,6 +36,10 @@ export default function SectionContent({
     nextSection,
     previousSection,
   } = useAssessmentStore();
+
+  // Voice recording state
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [voiceResults, setVoiceResults] = useState<VoiceProcessingResult['result'] | null>(null);
 
   // Filter questions for this section
   const sectionQuestions = useMemo(() => {
@@ -102,23 +109,82 @@ export default function SectionContent({
   const isFirstSection = currentSectionIndex === 0;
   const isLastSection = currentSectionIndex === OASIS_SECTIONS.length - 1;
 
+  // Handle voice extraction complete
+  const handleVoiceExtractionComplete = useCallback((results: VoiceProcessingResult['result']) => {
+    setShowVoiceRecorder(false);
+    setVoiceResults(results);
+  }, []);
+
+  // Handle accepting a single voice suggestion
+  const handleAcceptVoiceSuggestion = useCallback((itemCode: string, field: OasisFieldMapping) => {
+    updateResponse(itemCode, {
+      responseCode: field.mappedResponseCode,
+      responseValue: String(field.extractedValue),
+      confidence: field.confidence,
+      sourceType: 'voice',
+      sourceTranscriptionId: voiceResults?.transcriptionId,
+      sourceText: field.sourceText,
+    });
+  }, [updateResponse, voiceResults?.transcriptionId]);
+
+  // Handle rejecting a voice suggestion (just close, don't update)
+  const handleRejectVoiceSuggestion = useCallback((_itemCode: string) => {
+    // No action needed - just don't update the field
+  }, []);
+
+  // Handle accepting all high-confidence suggestions
+  const handleAcceptAllVoiceSuggestions = useCallback((fields: OasisFieldMapping[]) => {
+    fields.forEach((field) => {
+      updateResponse(field.itemCode, {
+        responseCode: field.mappedResponseCode,
+        responseValue: String(field.extractedValue),
+        confidence: field.confidence,
+        sourceType: 'voice',
+        sourceTranscriptionId: voiceResults?.transcriptionId,
+        sourceText: field.sourceText,
+      });
+    });
+  }, [updateResponse, voiceResults?.transcriptionId]);
+
   return (
     <div className="bg-white rounded-lg shadow-card">
       {/* Section Header */}
       <div className="px-6 py-4 border-b border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-900">{section.name}</h2>
-        <div className="flex items-center gap-3 mt-1">
-          <p className="text-sm text-gray-500">
-            {visibleQuestions.length} of {totalQuestions} questions
-          </p>
-          {hiddenCount > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-              </svg>
-              {hiddenCount} skipped
-            </span>
-          )}
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">{section.name}</h2>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-sm text-gray-500">
+                {visibleQuestions.length} of {totalQuestions} questions
+              </p>
+              {hiddenCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                  </svg>
+                  {hiddenCount} skipped
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Voice Input Button */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowVoiceRecorder(true)}
+            className="flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+              />
+            </svg>
+            Voice Input
+          </Button>
         </div>
       </div>
 
@@ -230,6 +296,38 @@ export default function SectionContent({
           {isLastSection ? 'Last Section' : 'Next Section'}
         </Button>
       </div>
+
+      {/* Voice Recorder Modal */}
+      <Modal
+        isOpen={showVoiceRecorder}
+        size="lg"
+        onClose={() => setShowVoiceRecorder(false)}
+        title="Voice Input"
+        showCloseButton={false}
+      >
+        <VoiceRecorder
+          assessmentId={assessment.id}
+          assessmentType={assessment.assessmentType}
+          patientId={assessment.patientId}
+          onExtractionComplete={handleVoiceExtractionComplete}
+          onClose={() => setShowVoiceRecorder(false)}
+        />
+      </Modal>
+
+      {/* Voice Suggestion Review Modal */}
+      {voiceResults && (
+        <VoiceSuggestionReview
+          transcriptionText={voiceResults.transcription.fullText}
+          transcriptionId={voiceResults.transcriptionId}
+          extractedFields={voiceResults.oasisMapping.mappedFields}
+          questions={questions}
+          existingResponses={assessment.responses}
+          onAccept={handleAcceptVoiceSuggestion}
+          onReject={handleRejectVoiceSuggestion}
+          onAcceptAll={handleAcceptAllVoiceSuggestions}
+          onClose={() => setVoiceResults(null)}
+        />
+      )}
     </div>
   );
 }

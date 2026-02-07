@@ -1,7 +1,42 @@
 import { Router } from 'express';
+import multer from 'multer';
 import * as voiceController from '../controllers/voice.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { UserRole } from '../generated/prisma';
+
+// ===========================================
+// MULTER CONFIGURATION
+// ===========================================
+
+const storage = multer.memoryStorage();
+
+const SUPPORTED_AUDIO_TYPES = [
+  'audio/wav',
+  'audio/wave',
+  'audio/x-wav',
+  'audio/mp3',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/m4a',
+  'audio/x-m4a',
+  'audio/ogg',
+  'audio/webm',
+  'audio/flac',
+];
+
+const uploadAudio = multer({
+  storage,
+  limits: {
+    fileSize: 52428800, // 50MB max
+  },
+  fileFilter: (_req, file, cb) => {
+    if (SUPPORTED_AUDIO_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unsupported audio format: ${file.mimetype}. Supported: WAV, MP3, M4A, OGG, WebM, FLAC`));
+    }
+  },
+});
 
 // ===========================================
 // TYPE DEFINITIONS (kept for API documentation)
@@ -374,8 +409,7 @@ router.post(
     UserRole.HOME_HEALTH_AIDE,
     UserRole.MEDICAL_SOCIAL_WORKER,
   ]),
-  // TODO: Add multer middleware for file upload
-  // uploadAudio.single('audio'),
+  uploadAudio.single('audio'),
   voiceController.transcribe
 );
 
@@ -395,8 +429,7 @@ router.post(
     UserRole.THERAPIST_OT,
     UserRole.THERAPIST_ST,
   ]),
-  // TODO: Add multer middleware for file upload
-  // uploadAudio.single('audio'),
+  uploadAudio.single('audio'),
   voiceController.processOasis
 );
 
