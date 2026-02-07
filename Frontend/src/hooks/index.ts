@@ -43,3 +43,4 @@ export {
 // Utility hooks
 export { useAutoSave } from './useAutoSave';
 export { useSkipLogic } from './useSkipLogic';
+export { useSectionValidation } from './useSectionValidation';

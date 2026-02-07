@@ -4,12 +4,13 @@
  * Displays questions for the current OASIS section
  * Works with auto-save - no manual save on navigation
  * Applies skip logic to conditionally show/hide questions
+ * Validates required questions before section navigation
  */
 
-import { useMemo } from 'react';
+import { useMemo, useCallback, useRef, useEffect } from 'react';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
-import { useSkipLogic } from '@hooks/index';
-import { Button } from '@components/common';
+import { useSkipLogic, useSectionValidation } from '@hooks/index';
+import { Button, Alert } from '@components/common';
 import QuestionRenderer from './QuestionRenderer';
 import type { OASISSection, OASISAssessment, OASISQuestion } from '@typedefs/index';
 import { OASIS_SECTIONS } from '@typedefs/oasis.types';
@@ -47,12 +48,56 @@ export default function SectionContent({
     draftResponses,
   });
 
+  // Section validation
+  const {
+    validationResult,
+    missingRequired,
+    hasValidated,
+    validate,
+    clearValidation,
+    getQuestionError,
+  } = useSectionValidation({
+    questions: visibleQuestions, // Only validate visible questions
+    savedResponses: assessment.responses,
+    draftResponses,
+    assessmentType: assessment.assessmentType,
+  });
+
+  // Track first error element for scrolling
+  const firstErrorRef = useRef<string | null>(null);
+
+  // Clear validation when section changes
+  useEffect(() => {
+    clearValidation();
+    firstErrorRef.current = null;
+  }, [section.id, clearValidation]);
+
   // Get response value (merged from assessment and draft)
   const getResponseValue = (itemCode: string) => {
     const draft = draftResponses[itemCode];
     const saved = assessment.responses?.[itemCode];
     return draft || saved;
   };
+
+  // Handle next section with validation
+  const handleNextSection = useCallback(() => {
+    const result = validate();
+
+    if (!result.isValid) {
+      // Scroll to first error
+      const firstError = result.errors[0];
+      if (firstError) {
+        firstErrorRef.current = firstError.itemCode;
+        const errorElement = document.getElementById(`question-${firstError.itemCode}`);
+        if (errorElement) {
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+      return;
+    }
+
+    nextSection();
+  }, [validate, nextSection]);
 
   const isFirstSection = currentSectionIndex === 0;
   const isLastSection = currentSectionIndex === OASIS_SECTIONS.length - 1;
@@ -76,6 +121,55 @@ export default function SectionContent({
           )}
         </div>
       </div>
+
+      {/* Validation Errors */}
+      {hasValidated && !validationResult.isValid && (
+        <div className="px-6 pt-4">
+          <Alert variant="error">
+            <div>
+              <p className="font-medium">
+                Please complete {validationResult.errorCount} required{' '}
+                {validationResult.errorCount === 1 ? 'question' : 'questions'} before
+                continuing:
+              </p>
+              <ul className="mt-2 text-sm list-disc list-inside">
+                {missingRequired.slice(0, 5).map((q) => (
+                  <li key={q.itemCode}>
+                    <button
+                      type="button"
+                      className="text-red-700 underline hover:text-red-800"
+                      onClick={() => {
+                        const el = document.getElementById(`question-${q.itemCode}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                    >
+                      {q.itemCode}: {q.itemName}
+                    </button>
+                  </li>
+                ))}
+                {missingRequired.length > 5 && (
+                  <li className="text-red-600">
+                    ...and {missingRequired.length - 5} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          </Alert>
+        </div>
+      )}
+
+      {/* Validation Warnings */}
+      {hasValidated && validationResult.warningCount > 0 && validationResult.isValid && (
+        <div className="px-6 pt-4">
+          <Alert variant="warning">
+            <p>
+              {validationResult.warningCount}{' '}
+              {validationResult.warningCount === 1 ? 'question has' : 'questions have'}{' '}
+              warnings. Review before continuing.
+            </p>
+          </Alert>
+        </div>
+      )}
 
       {/* Questions */}
       <div className="p-6 space-y-8">
@@ -108,6 +202,7 @@ export default function SectionContent({
                   sourceType: 'manual',
                 })
               }
+              error={getQuestionError(question.itemCode)}
             />
           ))
         )}
@@ -129,7 +224,7 @@ export default function SectionContent({
 
         <Button
           variant="primary"
-          onClick={nextSection}
+          onClick={handleNextSection}
           disabled={isLastSection}
         >
           {isLastSection ? 'Last Section' : 'Next Section'}

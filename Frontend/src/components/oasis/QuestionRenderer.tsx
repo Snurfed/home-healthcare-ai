@@ -14,12 +14,14 @@ import {
   Badge,
 } from '@components/common';
 import type { OASISQuestion, OASISResponse, QuestionOption, ValidationRule } from '@typedefs/index';
+import type { QuestionValidationError } from '@utils/validation';
 
 interface QuestionRendererProps {
   question: OASISQuestion;
   value?: Partial<OASISResponse>;
   onChange: (response: Partial<OASISResponse>) => void;
   disabled?: boolean;
+  error?: QuestionValidationError;
 }
 
 export default function QuestionRenderer({
@@ -27,6 +29,7 @@ export default function QuestionRenderer({
   value,
   onChange,
   disabled = false,
+  error,
 }: QuestionRendererProps) {
   const hasAIConfidence = value?.confidence !== undefined && value.confidence !== null;
   const confidenceLevel =
@@ -192,20 +195,34 @@ export default function QuestionRenderer({
     }
   };
 
+  const hasError = !!error;
+
   return (
-    <div className="space-y-3">
+    <div
+      id={`question-${question.itemCode}`}
+      className={`space-y-3 p-4 -m-4 rounded-lg transition-colors ${
+        hasError ? 'bg-red-50 border border-red-200' : ''
+      }`}
+    >
       {/* Question header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-primary-600">
+            <span className={`text-sm font-medium ${hasError ? 'text-red-600' : 'text-primary-600'}`}>
               {question.itemCode}
             </span>
-            <span className="text-sm font-semibold text-gray-900">
+            <span className={`text-sm font-semibold ${hasError ? 'text-red-900' : 'text-gray-900'}`}>
               {question.itemName}
             </span>
+            {hasError && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                Required
+              </span>
+            )}
           </div>
-          <p className="mt-1 text-gray-700">{question.questionText}</p>
+          <p className={`mt-1 ${hasError ? 'text-red-700' : 'text-gray-700'}`}>
+            {question.questionText}
+          </p>
         </div>
 
         {/* AI confidence badge */}
@@ -234,6 +251,20 @@ export default function QuestionRenderer({
 
       {/* Input */}
       <div className="mt-2">{renderInput()}</div>
+
+      {/* Validation error message */}
+      {hasError && (
+        <div className="flex items-center gap-2 text-sm text-red-600">
+          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <span>{error.message}</span>
+        </div>
+      )}
 
       {/* AI source text */}
       {value?.sourceText && value.sourceType === 'voice' && (
