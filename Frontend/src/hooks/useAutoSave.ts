@@ -43,7 +43,7 @@ export function useAutoSave({
     setSaving,
     markSaved,
     setSaveError,
-    clearDraftResponses,
+    setDraftResponses,
     currentAssessment,
   } = useAssessmentStore();
 
@@ -56,9 +56,11 @@ export function useAutoSave({
 
   // Save function
   const performSave = useCallback(async () => {
+    // Capture exactly what we're saving at this moment (snapshot)
     const responsesToSave = { ...pendingResponsesRef.current };
+    const savedItemCodes = Object.keys(responsesToSave);
 
-    if (Object.keys(responsesToSave).length === 0) {
+    if (savedItemCodes.length === 0) {
       return;
     }
 
@@ -71,10 +73,38 @@ export function useAutoSave({
       });
 
       if (isMountedRef.current) {
-        // Clear the saved responses from pending
-        pendingResponsesRef.current = {};
+        // CRITICAL FIX: Only clear drafts that haven't changed since we started saving
+        // This prevents losing changes typed during the save operation
+        const currentDrafts = useAssessmentStore.getState().draftResponses;
+        const remainingDrafts: Record<string, Partial<OASISResponse>> = {};
+
+        for (const [code, response] of Object.entries(currentDrafts)) {
+          const savedResponse = responsesToSave[code];
+
+          if (!savedResponse) {
+            // Item wasn't in our save batch - keep it
+            remainingDrafts[code] = response;
+          } else {
+            // Compare current value with what we saved
+            // If values differ, user changed it during save - keep the new value
+            const currentValue = response.responseValue || response.responseCode || '';
+            const savedValue = savedResponse.responseValue || savedResponse.responseCode || '';
+
+            if (currentValue !== savedValue) {
+              remainingDrafts[code] = response;
+            }
+            // If values match, don't keep it (it was saved successfully)
+          }
+        }
+
+        // Clear saved items from pending ref
+        for (const code of savedItemCodes) {
+          delete pendingResponsesRef.current[code];
+        }
+
+        // Update store with remaining drafts (preserves changes made during save)
+        setDraftResponses(remainingDrafts);
         markSaved();
-        clearDraftResponses();
         onSaveSuccess?.();
       }
     } catch (error) {
@@ -84,7 +114,7 @@ export function useAutoSave({
         onSaveError?.(error instanceof Error ? error : new Error(errorMessage));
       }
     }
-  }, [assessmentId, setSaving, markSaved, clearDraftResponses, setSaveError, onSaveStart, onSaveSuccess, onSaveError]);
+  }, [assessmentId, setSaving, markSaved, setDraftResponses, setSaveError, onSaveStart, onSaveSuccess, onSaveError]);
 
   // Debounced save effect
   useEffect(() => {
@@ -143,9 +173,11 @@ export function useAutoSave({
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
-    pendingResponsesRef.current = { ...pendingResponsesRef.current, ...draftResponses };
+    // Get latest draft responses from store for immediate save
+    const currentDrafts = useAssessmentStore.getState().draftResponses;
+    pendingResponsesRef.current = { ...pendingResponsesRef.current, ...currentDrafts };
     await performSave();
-  }, [draftResponses, performSave]);
+  }, [performSave]);
 
   return {
     isSaving,

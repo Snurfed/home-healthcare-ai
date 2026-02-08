@@ -64,15 +64,18 @@ export const useAssessmentStore = create<AssessmentState>()((set, get) => ({
   lastSavedAt: null,
   saveError: null,
 
-  // Set assessment
+  // Set assessment (preserves unsaved draft responses during refetch)
   setAssessment: (assessment: OASISAssessment) => {
-    set({
+    set((state) => ({
       currentAssessment: assessment,
-      draftResponses: {},
+      // CRITICAL: Preserve draft responses to prevent race condition
+      // where user types during save/refetch and loses changes
+      draftResponses: state.draftResponses,
       validationErrors: assessment.validationErrors || [],
-      isDirty: false,
-      lastSavedAt: new Date(),
-    });
+      // Only update isDirty/lastSavedAt if we're not in middle of editing
+      isDirty: Object.keys(state.draftResponses).length > 0,
+      lastSavedAt: Object.keys(state.draftResponses).length === 0 ? new Date() : state.lastSavedAt,
+    }));
   },
 
   // Clear assessment

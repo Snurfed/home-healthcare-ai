@@ -27,15 +27,6 @@ function formatDate(dateString: string): string {
   });
 }
 
-// Format time for display
-function formatTime(dateString: string): string {
-  return new Date(dateString).toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
 // Format relative time
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
