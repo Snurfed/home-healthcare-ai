@@ -38,7 +38,8 @@
       "@utils/*": ["src/utils/*"],
       "@context/*": ["src/context/*"],
       "@typedefs/*": ["src/types/*"],
-      "@assets/*": ["src/assets/*"]
+      "@assets/*": ["src/assets/*"],
+      "@constants/*": ["src/constants/*"]
     },
     "resolveJsonModule": true,
 
