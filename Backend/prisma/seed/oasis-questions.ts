@@ -1,10 +1,27 @@
 /**
- * OASIS-E Question Library Seed Data
- * Based on CMS OASIS-E Guidance Manual (effective January 1, 2023)
+ * OASIS-E1 Question Library Seed Data
+ * Based on CMS OASIS-E1 Guidance Manual (effective January 1, 2025)
  *
  * This file contains the actual OASIS questions used in home health care assessments.
  * Questions are organized by section and include response options, validation rules,
  * skip logic, and CMS guidance.
+ *
+ * Sections:
+ * - A: Administrative Information
+ * - B: Hearing, Speech, and Vision (renamed from Sensory in E1)
+ * - C: Cognitive Patterns
+ * - D: Mood
+ * - E: Behavior
+ * - F: Preferences for Customary Routine and Activities
+ * - GG: Functional Abilities and Goals
+ * - H: Bladder and Bowel
+ * - I: Active Diagnoses
+ * - J: Health Conditions
+ * - K: Swallowing/Nutritional Status
+ * - M: Skin Conditions
+ * - N: Medications
+ * - O: Special Treatments, Procedures, and Programs
+ * - Q: Participation in Assessment and Goal Setting
  */
 
 // Assessment types that each question applies to
@@ -23,6 +40,8 @@ const SOC_ROC_RECERT = ['START_OF_CARE', 'RESUMPTION_OF_CARE', 'RECERTIFICATION'
 const SOC_ROC_RECERT_FU = ['START_OF_CARE', 'RESUMPTION_OF_CARE', 'RECERTIFICATION', 'FOLLOW_UP'];
 const DISCHARGE_TYPES = ['TRANSFER_TO_INPATIENT', 'DISCHARGE_FROM_AGENCY', 'DEATH_AT_HOME'];
 const SOC_ROC_DC = ['START_OF_CARE', 'RESUMPTION_OF_CARE', 'DISCHARGE_FROM_AGENCY'];
+const SOC_ONLY = ['START_OF_CARE'];
+const EFFECTIVE_DATE_E1 = new Date('2025-01-01');
 
 export interface OasisQuestionSeed {
   itemCode: string;
@@ -1425,6 +1444,1692 @@ const functionalMobilityItems: OasisQuestionSeed[] = [
 ];
 
 // ===========================================
+// SECTION A: ADMINISTRATIVE INFORMATION (A0050-A2120)
+// ===========================================
+
+const administrativeItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'A0050',
+    itemName: 'Type of Record',
+    section: 'administrative',
+    questionText: 'Type of Record',
+    responseType: 'single_select',
+    responses: [
+      { code: '1', label: 'Add' },
+      { code: '2', label: 'Modify' },
+      { code: '3', label: 'Inactivate' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Type of record is required', severity: 'error' },
+    ],
+    assessmentTypes: ALL_ASSESSMENT_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1001,
+  },
+  {
+    itemCode: 'A0100',
+    itemName: 'Facility NPI',
+    section: 'administrative',
+    questionText: 'Facility National Provider Identifier (NPI)',
+    helpText: 'Enter the 10-digit NPI for the home health agency.',
+    responseType: 'text',
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Facility NPI is required', severity: 'error' },
+    ],
+    assessmentTypes: ALL_ASSESSMENT_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1002,
+  },
+  {
+    itemCode: 'A0200',
+    itemName: 'Type of Provider',
+    section: 'administrative',
+    questionText: 'Type of Provider',
+    responseType: 'single_select',
+    responses: [
+      { code: '01', label: 'Home Health Agency' },
+    ],
+    assessmentTypes: ALL_ASSESSMENT_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1003,
+  },
+  {
+    itemCode: 'A0250',
+    itemName: 'Reason for Assessment',
+    section: 'administrative',
+    questionText: 'Reason for Assessment',
+    responseType: 'single_select',
+    responses: [
+      { code: '01', label: 'Start of care—further visits planned' },
+      { code: '03', label: 'Resumption of care (after inpatient stay)' },
+      { code: '04', label: 'Recertification (follow-up) reassessment' },
+      { code: '05', label: 'Other follow-up' },
+      { code: '06', label: 'Transferred to an inpatient facility—patient not discharged from agency' },
+      { code: '07', label: 'Transferred to an inpatient facility—patient discharged from agency' },
+      { code: '08', label: 'Death at home' },
+      { code: '09', label: 'Discharge from agency—not to an inpatient facility' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Reason for assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: ALL_ASSESSMENT_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1004,
+  },
+  {
+    itemCode: 'A0270',
+    itemName: 'Discharge Date',
+    section: 'administrative',
+    questionText: 'Discharge Date',
+    helpText: 'Enter the date the patient was discharged from home health.',
+    responseType: 'date',
+    validationRules: [
+      { ruleType: 'conditional', errorMessage: 'Discharge date is required for discharge assessments', severity: 'error', condition: 'A0250 IN [06,07,08,09]' },
+    ],
+    assessmentTypes: DISCHARGE_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1005,
+  },
+  {
+    itemCode: 'A1005',
+    itemName: 'Ethnicity',
+    section: 'administrative',
+    questionText: 'Ethnicity: Is the patient of Hispanic, Latino/a, or Spanish origin?',
+    responseType: 'single_select',
+    responses: [
+      { code: 'A', label: 'No, not of Hispanic, Latino/a, or Spanish origin' },
+      { code: 'B', label: 'Yes, Mexican, Mexican American, Chicano/a' },
+      { code: 'C', label: 'Yes, Puerto Rican' },
+      { code: 'D', label: 'Yes, Cuban' },
+      { code: 'E', label: 'Yes, another Hispanic, Latino/a, or Spanish origin' },
+    ],
+    assessmentTypes: SOC_ONLY,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1006,
+  },
+  {
+    itemCode: 'A1010',
+    itemName: 'Race',
+    section: 'administrative',
+    questionText: 'Race: What is the patient\'s race?',
+    helpText: 'Check all that apply.',
+    responseType: 'multi_select',
+    responses: [
+      { code: 'A', label: 'White' },
+      { code: 'B', label: 'Black or African American' },
+      { code: 'C', label: 'American Indian or Alaska Native' },
+      { code: 'D', label: 'Asian' },
+      { code: 'E', label: 'Native Hawaiian or Other Pacific Islander' },
+    ],
+    assessmentTypes: SOC_ONLY,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1007,
+  },
+  {
+    itemCode: 'A1110A',
+    itemName: 'Language - Need Interpreter',
+    section: 'administrative',
+    questionText: 'Does the patient need or want an interpreter to communicate with a doctor or health care staff?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+      { code: '9', label: 'Unable to determine' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1008,
+  },
+  {
+    itemCode: 'A1110B',
+    itemName: 'Language - Preferred Language',
+    section: 'administrative',
+    questionText: 'What is the patient\'s preferred language?',
+    responseType: 'single_select',
+    responses: [
+      { code: '00', label: 'English' },
+      { code: '01', label: 'Spanish' },
+      { code: '02', label: 'French' },
+      { code: '03', label: 'Chinese' },
+      { code: '04', label: 'German' },
+      { code: '05', label: 'Tagalog' },
+      { code: '06', label: 'Vietnamese' },
+      { code: '07', label: 'Korean' },
+      { code: '08', label: 'Japanese' },
+      { code: '99', label: 'Other' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1009,
+  },
+  {
+    itemCode: 'A1250',
+    itemName: 'Transportation',
+    section: 'administrative',
+    questionText: 'Transportation: Has lack of transportation kept the patient from medical appointments or other healthcare services in the last 12 months?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+      { code: '7', label: 'Patient declined to respond' },
+      { code: '8', label: 'Unknown' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1010,
+  },
+  {
+    itemCode: 'A2120',
+    itemName: 'Marital Status',
+    section: 'administrative',
+    questionText: 'Marital Status',
+    responseType: 'single_select',
+    responses: [
+      { code: '1', label: 'Never Married' },
+      { code: '2', label: 'Married' },
+      { code: '3', label: 'Widowed' },
+      { code: '4', label: 'Separated' },
+      { code: '5', label: 'Divorced' },
+    ],
+    assessmentTypes: SOC_ONLY,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1011,
+  },
+];
+
+// ===========================================
+// SECTION B: HEARING, SPEECH, AND VISION (B0200-B1300)
+// ===========================================
+
+const hearingSpeechVisionItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'B0200',
+    itemName: 'Hearing',
+    section: 'hearing_speech_vision',
+    questionText: 'Hearing: Ability to hear (with hearing aid or hearing appliances if normally used)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Adequate—no difficulty in normal conversation, social interaction, listening to TV' },
+      { code: '1', label: 'Minimal difficulty—difficulty in some environments (e.g., when person speaks softly or setting is noisy)' },
+      { code: '2', label: 'Moderate difficulty—speaker has to increase volume and speak distinctly' },
+      { code: '3', label: 'Highly impaired—absence of useful hearing' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Hearing assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1100,
+  },
+  {
+    itemCode: 'B1000',
+    itemName: 'Vision',
+    section: 'hearing_speech_vision',
+    questionText: 'Vision: Ability to see in adequate light (with glasses or other visual appliances)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Adequate—sees fine detail, including regular print in newspapers/books' },
+      { code: '1', label: 'Impaired—sees large print, but not regular print in newspapers/books' },
+      { code: '2', label: 'Moderately impaired—limited vision; not able to see newspaper headlines but can identify objects' },
+      { code: '3', label: 'Highly impaired—object identification in question, but eyes appear to follow objects' },
+      { code: '4', label: 'Severely impaired—no vision or sees only light, colors or shapes; eyes do not appear to follow objects' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Vision assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1101,
+  },
+  {
+    itemCode: 'B1300',
+    itemName: 'Health Literacy',
+    section: 'hearing_speech_vision',
+    questionText: 'Health Literacy: How often does the patient need to have someone help when reading instructions, pamphlets, or other written material from a doctor or pharmacy?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Never' },
+      { code: '1', label: 'Rarely' },
+      { code: '2', label: 'Sometimes' },
+      { code: '3', label: 'Often' },
+      { code: '4', label: 'Always' },
+      { code: '7', label: 'Patient declined to respond' },
+      { code: '8', label: 'Unknown' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1102,
+  },
+];
+
+// ===========================================
+// SECTION C: COGNITIVE PATTERNS (C0100-C1310)
+// ===========================================
+
+const cognitiveItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'C0100',
+    itemName: 'Should Brief Interview for Mental Status (BIMS) Be Conducted?',
+    section: 'cognitive',
+    questionText: 'Should Brief Interview for Mental Status (BIMS) be conducted?',
+    helpText: 'Attempt to conduct interview with all patients.',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No (patient is rarely/never understood)—Skip to C0700, Staff Assessment of Mental Status' },
+      { code: '1', label: 'Yes' },
+    ],
+    skipLogic: {
+      condition: 'C0100 = 0',
+      skipToItem: 'C0700',
+      reason: 'Patient rarely/never understood verbal content',
+    },
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'BIMS screening decision is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1200,
+  },
+  {
+    itemCode: 'C0200',
+    itemName: 'Repetition of Three Words',
+    section: 'cognitive',
+    questionText: 'Repetition of Three Words: Ask patient to repeat the words after you: sock, blue, and bed. Number of words repeated correctly after first attempt.',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'None' },
+      { code: '1', label: 'One' },
+      { code: '2', label: 'Two' },
+      { code: '3', label: 'Three' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1201,
+  },
+  {
+    itemCode: 'C0300A',
+    itemName: 'Temporal Orientation - Year',
+    section: 'cognitive',
+    questionText: 'Temporal Orientation: Ask patient "What year is this?"',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Missed by > 5 years or no answer' },
+      { code: '1', label: 'Missed by 2-5 years' },
+      { code: '2', label: 'Missed by 1 year' },
+      { code: '3', label: 'Correct' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1202,
+  },
+  {
+    itemCode: 'C0300B',
+    itemName: 'Temporal Orientation - Month',
+    section: 'cognitive',
+    questionText: 'Temporal Orientation: Ask patient "What month are we in right now?"',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Missed by > 1 month or no answer' },
+      { code: '1', label: 'Missed by 6 days to 1 month' },
+      { code: '2', label: 'Accurate within 5 days' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1203,
+  },
+  {
+    itemCode: 'C0300C',
+    itemName: 'Temporal Orientation - Day',
+    section: 'cognitive',
+    questionText: 'Temporal Orientation: Ask patient "What day of the week is today?"',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Incorrect or no answer' },
+      { code: '1', label: 'Correct' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1204,
+  },
+  {
+    itemCode: 'C0400A',
+    itemName: 'Recall - Sock',
+    section: 'cognitive',
+    questionText: 'Recall: Ask patient "Let\'s go back to an earlier question. I asked you to remember three words. What were those words?" - Able to recall "sock"',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No—could not recall' },
+      { code: '1', label: 'Yes, after cueing ("something to wear")' },
+      { code: '2', label: 'Yes, no cue required' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1205,
+  },
+  {
+    itemCode: 'C0400B',
+    itemName: 'Recall - Blue',
+    section: 'cognitive',
+    questionText: 'Recall: Able to recall "blue"',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No—could not recall' },
+      { code: '1', label: 'Yes, after cueing ("a color")' },
+      { code: '2', label: 'Yes, no cue required' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1206,
+  },
+  {
+    itemCode: 'C0400C',
+    itemName: 'Recall - Bed',
+    section: 'cognitive',
+    questionText: 'Recall: Able to recall "bed"',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No—could not recall' },
+      { code: '1', label: 'Yes, after cueing ("a piece of furniture")' },
+      { code: '2', label: 'Yes, no cue required' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1207,
+  },
+  {
+    itemCode: 'C0500',
+    itemName: 'BIMS Summary Score',
+    section: 'cognitive',
+    questionText: 'BIMS Summary Score: Add scores for questions C0200-C0400C and fill in total.',
+    helpText: 'Score range: 0-15. 13-15: Cognitively intact, 8-12: Moderately impaired, 0-7: Severely impaired',
+    responseType: 'numeric',
+    validationRules: [
+      { ruleType: 'range', errorMessage: 'BIMS score must be between 0 and 15', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    cmsGuidance: 'BIMS Score: 13-15 = cognitively intact; 8-12 = moderately impaired; 0-7 = severely impaired',
+    sortOrder: 1208,
+  },
+  {
+    itemCode: 'C0700',
+    itemName: 'Short-term Memory OK',
+    section: 'cognitive',
+    questionText: 'Short-term Memory OK: Staff assessment of short-term memory OK—seems/appears to recall after 5 minutes',
+    helpText: 'Complete only if C0100 = 0 (BIMS not conducted).',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Memory OK' },
+      { code: '1', label: 'Memory problem' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1209,
+  },
+  {
+    itemCode: 'C0800',
+    itemName: 'Long-term Memory OK',
+    section: 'cognitive',
+    questionText: 'Long-term Memory OK: Staff assessment—seems/appears to recall long-past events',
+    helpText: 'Complete only if C0100 = 0 (BIMS not conducted).',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Memory OK' },
+      { code: '1', label: 'Memory problem' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1210,
+  },
+  {
+    itemCode: 'C0900',
+    itemName: 'Memory/Recall Ability',
+    section: 'cognitive',
+    questionText: 'Memory/Recall Ability: Staff assessment of memory/recall ability',
+    helpText: 'Complete only if C0100 = 0 (BIMS not conducted).',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Current season' },
+      { code: '1', label: 'Location of own room' },
+      { code: '2', label: 'Staff names and faces' },
+      { code: '3', label: 'That he/she is in a care facility' },
+      { code: '4', label: 'None of the above' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1211,
+  },
+  {
+    itemCode: 'C1310A',
+    itemName: 'Signs and Symptoms of Delirium - Inattention',
+    section: 'cognitive',
+    questionText: 'Signs and Symptoms of Delirium: Inattention—Did the patient have difficulty focusing attention?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Behavior not present' },
+      { code: '1', label: 'Behavior continuously present, does not fluctuate' },
+      { code: '2', label: 'Behavior present, fluctuates (comes and goes, changes in severity)' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1212,
+  },
+  {
+    itemCode: 'C1310B',
+    itemName: 'Signs and Symptoms of Delirium - Disorganized Thinking',
+    section: 'cognitive',
+    questionText: 'Signs and Symptoms of Delirium: Disorganized thinking—Was the patient\'s thinking disorganized or incoherent?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Behavior not present' },
+      { code: '1', label: 'Behavior continuously present, does not fluctuate' },
+      { code: '2', label: 'Behavior present, fluctuates' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1213,
+  },
+  {
+    itemCode: 'C1310C',
+    itemName: 'Signs and Symptoms of Delirium - Altered Level of Consciousness',
+    section: 'cognitive',
+    questionText: 'Signs and Symptoms of Delirium: Altered level of consciousness—Did the patient have altered level of consciousness?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Behavior not present' },
+      { code: '1', label: 'Behavior continuously present, does not fluctuate' },
+      { code: '2', label: 'Behavior present, fluctuates' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1214,
+  },
+  {
+    itemCode: 'C1310D',
+    itemName: 'Signs and Symptoms of Delirium - Psychomotor Retardation',
+    section: 'cognitive',
+    questionText: 'Signs and Symptoms of Delirium: Psychomotor retardation—Did the patient have unusually decreased level of activity?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Behavior not present' },
+      { code: '1', label: 'Behavior continuously present, does not fluctuate' },
+      { code: '2', label: 'Behavior present, fluctuates' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1215,
+  },
+];
+
+// ===========================================
+// SECTION D: MOOD (D0150-D0160)
+// ===========================================
+
+const moodItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'D0150A1',
+    itemName: 'PHQ-2 Little Interest - Frequency',
+    section: 'mood',
+    questionText: 'Patient Mood Interview (PHQ-2): Over the last 2 weeks, have you been bothered by little interest or pleasure in doing things?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not at all' },
+      { code: '1', label: 'Several days' },
+      { code: '2', label: 'More than half the days' },
+      { code: '3', label: 'Nearly every day' },
+      { code: '9', label: 'Unable to respond' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'PHQ-2 interest question is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1300,
+  },
+  {
+    itemCode: 'D0150B1',
+    itemName: 'PHQ-2 Feeling Down - Frequency',
+    section: 'mood',
+    questionText: 'Patient Mood Interview (PHQ-2): Over the last 2 weeks, have you been bothered by feeling down, depressed, or hopeless?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not at all' },
+      { code: '1', label: 'Several days' },
+      { code: '2', label: 'More than half the days' },
+      { code: '3', label: 'Nearly every day' },
+      { code: '9', label: 'Unable to respond' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'PHQ-2 hopelessness question is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1301,
+  },
+  {
+    itemCode: 'D0160',
+    itemName: 'Total Severity Score',
+    section: 'mood',
+    questionText: 'Total Severity Score: Enter the total severity score from PHQ-2 or PHQ-9',
+    helpText: 'Add the scores from D0150A1 and D0150B1. If PHQ-9 was completed, enter that total instead.',
+    responseType: 'numeric',
+    validationRules: [
+      { ruleType: 'range', errorMessage: 'Total severity score must be between 0 and 27', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    cmsGuidance: 'PHQ-2 score 0-6. If score >= 3, complete PHQ-9 (score 0-27).',
+    sortOrder: 1302,
+  },
+];
+
+// ===========================================
+// SECTION E: BEHAVIOR (E0100-E0200)
+// ===========================================
+
+const behaviorItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'E0100A',
+    itemName: 'Psychosis - Hallucinations',
+    section: 'behavior',
+    questionText: 'Psychosis: Hallucinations (perceptual experiences in the absence of real external sensory stimuli)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Behavior not exhibited in last 14 days' },
+      { code: '1', label: 'Behavior of this type occurred 1-3 days' },
+      { code: '2', label: 'Behavior of this type occurred 4-6 days' },
+      { code: '3', label: 'Behavior of this type occurred daily' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1400,
+  },
+  {
+    itemCode: 'E0100B',
+    itemName: 'Psychosis - Delusions',
+    section: 'behavior',
+    questionText: 'Psychosis: Delusions (false beliefs firmly held despite contradictory evidence or lack of evidence)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Behavior not exhibited in last 14 days' },
+      { code: '1', label: 'Behavior of this type occurred 1-3 days' },
+      { code: '2', label: 'Behavior of this type occurred 4-6 days' },
+      { code: '3', label: 'Behavior of this type occurred daily' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1401,
+  },
+  {
+    itemCode: 'E0200A',
+    itemName: 'Behavioral Symptoms - Physical',
+    section: 'behavior',
+    questionText: 'Behavioral Symptoms: Physical behavioral symptoms directed toward others (e.g., hitting, kicking, pushing, scratching, grabbing, sexually abusing)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Behavior not exhibited in last 14 days' },
+      { code: '1', label: 'Behavior of this type occurred 1-3 days' },
+      { code: '2', label: 'Behavior of this type occurred 4-6 days' },
+      { code: '3', label: 'Behavior of this type occurred daily' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1402,
+  },
+  {
+    itemCode: 'E0200B',
+    itemName: 'Behavioral Symptoms - Verbal',
+    section: 'behavior',
+    questionText: 'Behavioral Symptoms: Verbal behavioral symptoms directed toward others (e.g., threatening, screaming at, cursing at)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Behavior not exhibited in last 14 days' },
+      { code: '1', label: 'Behavior of this type occurred 1-3 days' },
+      { code: '2', label: 'Behavior of this type occurred 4-6 days' },
+      { code: '3', label: 'Behavior of this type occurred daily' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1403,
+  },
+  {
+    itemCode: 'E0200C',
+    itemName: 'Behavioral Symptoms - Other Disruptive',
+    section: 'behavior',
+    questionText: 'Behavioral Symptoms: Other behavioral symptoms not directed toward others (e.g., hoarding, self-abuse, disruptive sounds, pacing, inappropriate behavior)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Behavior not exhibited in last 14 days' },
+      { code: '1', label: 'Behavior of this type occurred 1-3 days' },
+      { code: '2', label: 'Behavior of this type occurred 4-6 days' },
+      { code: '3', label: 'Behavior of this type occurred daily' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1404,
+  },
+];
+
+// ===========================================
+// SECTION F: PREFERENCES (F2000-F2100)
+// ===========================================
+
+const preferenceItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'F2000',
+    itemName: 'Prior Functioning: Everyday Activities - Self Care',
+    section: 'preferences',
+    questionText: 'Prior Functioning: Everyday Activities - Self-Care: Indicate the patient\'s usual ability with everyday activities prior to this current illness, exacerbation, or injury.',
+    responseType: 'single_select',
+    responses: [
+      { code: '3', label: 'Independent—Patient completed all activities by self, with or without assistive device(s)' },
+      { code: '2', label: 'Needed some help—Patient needed partial assistance from another person' },
+      { code: '1', label: 'Dependent—Patient required maximum assistance from another person' },
+      { code: '8', label: 'Unknown' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1500,
+  },
+  {
+    itemCode: 'F2100',
+    itemName: 'Prior Functioning: Everyday Activities - Indoor Mobility',
+    section: 'preferences',
+    questionText: 'Prior Functioning: Everyday Activities - Indoor Mobility (Walking): Indicate the patient\'s usual ability with everyday activities prior to this current illness, exacerbation, or injury.',
+    responseType: 'single_select',
+    responses: [
+      { code: '3', label: 'Independent—Patient completed all activities by self, with or without assistive device(s)' },
+      { code: '2', label: 'Needed some help—Patient needed partial assistance from another person' },
+      { code: '1', label: 'Dependent—Patient required maximum assistance from another person' },
+      { code: '8', label: 'Unknown' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1501,
+  },
+  {
+    itemCode: 'F2200',
+    itemName: 'Prior Functioning: Everyday Activities - Stairs',
+    section: 'preferences',
+    questionText: 'Prior Functioning: Everyday Activities - Stairs: Indicate the patient\'s usual ability with everyday activities prior to this current illness, exacerbation, or injury.',
+    responseType: 'single_select',
+    responses: [
+      { code: '3', label: 'Independent—Patient completed all activities by self, with or without assistive device(s)' },
+      { code: '2', label: 'Needed some help—Patient needed partial assistance from another person' },
+      { code: '1', label: 'Dependent—Patient required maximum assistance from another person' },
+      { code: '8', label: 'Unknown' },
+      { code: '9', label: 'Not applicable—Patient did not do this activity prior to the current illness' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1502,
+  },
+  {
+    itemCode: 'F2300',
+    itemName: 'Prior Functioning: Everyday Activities - Functional Cognition',
+    section: 'preferences',
+    questionText: 'Prior Functioning: Everyday Activities - Functional Cognition: Indicate the patient\'s usual ability with everyday activities prior to this current illness, exacerbation, or injury.',
+    responseType: 'single_select',
+    responses: [
+      { code: '3', label: 'Independent—Patient completed all activities by self' },
+      { code: '2', label: 'Needed some help—Patient needed partial assistance from another person' },
+      { code: '1', label: 'Dependent—Patient required maximum assistance from another person' },
+      { code: '8', label: 'Unknown' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1503,
+  },
+];
+
+// ===========================================
+// SECTION J: HEALTH CONDITIONS (J0510-J1800)
+// ===========================================
+
+const healthConditionItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'J0510',
+    itemName: 'Pain Effect on Sleep',
+    section: 'health_conditions',
+    questionText: 'Pain Effect on Sleep: Ask patient "How often does pain make it hard for you to sleep at night?"',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Does not apply—I have not had any pain in the past 5 days' },
+      { code: '1', label: 'Rarely or never' },
+      { code: '2', label: 'Occasionally' },
+      { code: '3', label: 'Frequently' },
+      { code: '4', label: 'Almost constantly' },
+      { code: '8', label: 'Unable to answer' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1600,
+  },
+  {
+    itemCode: 'J0520',
+    itemName: 'Pain Effect on Therapy Activities',
+    section: 'health_conditions',
+    questionText: 'Pain Effect on Therapy Activities: Ask patient "How often over the past 5 days has pain limited your day-to-day activities?"',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Does not apply—I have not had any pain in the past 5 days' },
+      { code: '1', label: 'Rarely or never' },
+      { code: '2', label: 'Occasionally' },
+      { code: '3', label: 'Frequently' },
+      { code: '4', label: 'Almost constantly' },
+      { code: '8', label: 'Unable to answer' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1601,
+  },
+  {
+    itemCode: 'J0530',
+    itemName: 'Pain Interference with Day-to-Day Activities',
+    section: 'health_conditions',
+    questionText: 'Pain Interference with Day-to-Day Activities: Ask patient "On a scale of 0 to 10, with 0 meaning pain does not interfere and 10 meaning pain completely interferes, how much has pain interfered with your activities over the last 5 days?"',
+    responseType: 'numeric',
+    validationRules: [
+      { ruleType: 'range', errorMessage: 'Pain interference score must be between 0 and 10', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1602,
+  },
+  {
+    itemCode: 'J1100',
+    itemName: 'Shortness of Breath',
+    section: 'health_conditions',
+    questionText: 'Shortness of Breath: Was the patient short of breath at any time in the last 14 days?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1603,
+  },
+  {
+    itemCode: 'J1800',
+    itemName: 'Any Falls Since SOC/ROC',
+    section: 'health_conditions',
+    questionText: 'Any Falls Since SOC/ROC: Has the patient had any falls since Start of Care/Resumption of Care?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+    ],
+    skipLogic: {
+      condition: 'J1800 = 0',
+      skipToItem: 'J2000',
+      reason: 'No falls to classify',
+    },
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Falls assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: DISCHARGE_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1604,
+  },
+  {
+    itemCode: 'J1900A',
+    itemName: 'Number of Falls - No Injury',
+    section: 'health_conditions',
+    questionText: 'Number of Falls Since SOC/ROC: No injury—no signs or symptoms of injury',
+    helpText: 'Enter the number of falls with no injury.',
+    responseType: 'numeric',
+    validationRules: [
+      { ruleType: 'range', errorMessage: 'Number must be 0 or greater', severity: 'error' },
+    ],
+    assessmentTypes: DISCHARGE_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1605,
+  },
+  {
+    itemCode: 'J1900B',
+    itemName: 'Number of Falls - Minor Injury',
+    section: 'health_conditions',
+    questionText: 'Number of Falls Since SOC/ROC: Injury (except major)—skin tears, abrasions, lacerations, superficial bruises, hematomas, sprains',
+    helpText: 'Enter the number of falls with minor injury.',
+    responseType: 'numeric',
+    validationRules: [
+      { ruleType: 'range', errorMessage: 'Number must be 0 or greater', severity: 'error' },
+    ],
+    assessmentTypes: DISCHARGE_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1606,
+  },
+  {
+    itemCode: 'J1900C',
+    itemName: 'Number of Falls - Major Injury',
+    section: 'health_conditions',
+    questionText: 'Number of Falls Since SOC/ROC: Major injury—bone fractures, joint dislocations, closed head injuries with altered consciousness, subdural hematoma',
+    helpText: 'Enter the number of falls with major injury.',
+    responseType: 'numeric',
+    validationRules: [
+      { ruleType: 'range', errorMessage: 'Number must be 0 or greater', severity: 'error' },
+    ],
+    assessmentTypes: DISCHARGE_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1607,
+  },
+  {
+    itemCode: 'J2000',
+    itemName: 'Prior Falls',
+    section: 'health_conditions',
+    questionText: 'Prior Falls: Did the patient have any falls in the 12 months prior to SOC/ROC?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+      { code: '9', label: 'Unable to determine' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1608,
+  },
+  {
+    itemCode: 'J2030',
+    itemName: 'Fall Risk Assessment',
+    section: 'health_conditions',
+    questionText: 'Fall Risk Assessment: Was a fall risk assessment conducted using a standardized, validated tool?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes—patient not at risk for falls' },
+      { code: '2', label: 'Yes—patient is at risk for falls' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Fall risk assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    cmsGuidance: 'Use a standardized, validated fall risk assessment tool.',
+    sortOrder: 1609,
+  },
+];
+
+// ===========================================
+// SECTION K: SWALLOWING/NUTRITIONAL STATUS (K0100-K0520)
+// ===========================================
+
+const swallowingNutritionalItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'K0100',
+    itemName: 'Swallowing Disorder',
+    section: 'swallowing_nutritional',
+    questionText: 'Swallowing Disorder: Signs and symptoms of swallowing disorder',
+    responseType: 'multi_select',
+    responses: [
+      { code: 'A', label: 'Loss of liquids/solids from mouth when eating or drinking' },
+      { code: 'B', label: 'Holding food in mouth/cheeks or residual food in mouth after meals' },
+      { code: 'C', label: 'Coughing or choking during meals or when swallowing medications' },
+      { code: 'D', label: 'Complaints of difficulty or pain with swallowing' },
+      { code: 'Z', label: 'None of the above' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1700,
+  },
+  {
+    itemCode: 'K0200',
+    itemName: 'Height and Weight',
+    section: 'swallowing_nutritional',
+    questionText: 'Height and Weight: Height (in inches) and weight (in pounds)',
+    helpText: 'Base weight on most recent measurement.',
+    responseType: 'text',
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Height and weight are required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1701,
+  },
+  {
+    itemCode: 'K0300',
+    itemName: 'Weight Loss',
+    section: 'swallowing_nutritional',
+    questionText: 'Weight Loss: Has the patient had weight loss of 5% or more of body weight in the last month or 10% or more of body weight in the last 6 months?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No or unknown' },
+      { code: '1', label: 'Yes, on physician-prescribed weight-loss regimen' },
+      { code: '2', label: 'Yes, not on physician-prescribed weight-loss regimen' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1702,
+  },
+  {
+    itemCode: 'K0520A1',
+    itemName: 'Nutritional Approaches - Parenteral/IV Feeding',
+    section: 'swallowing_nutritional',
+    questionText: 'Nutritional Approaches: Parenteral/IV feeding',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not used during last 7 days' },
+      { code: '1', label: 'Used during last 7 days' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1703,
+  },
+  {
+    itemCode: 'K0520A2',
+    itemName: 'Nutritional Approaches - Feeding Tube',
+    section: 'swallowing_nutritional',
+    questionText: 'Nutritional Approaches: Feeding tube (e.g., nasogastric tube, gastrostomy tube)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not used during last 7 days' },
+      { code: '1', label: 'Used during last 7 days' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1704,
+  },
+  {
+    itemCode: 'K0520A3',
+    itemName: 'Nutritional Approaches - Mechanically Altered Diet',
+    section: 'swallowing_nutritional',
+    questionText: 'Nutritional Approaches: Mechanically altered diet—requires change in texture of food or fluids',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not used during last 7 days' },
+      { code: '1', label: 'Used during last 7 days' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1705,
+  },
+  {
+    itemCode: 'K0520A4',
+    itemName: 'Nutritional Approaches - Therapeutic Diet',
+    section: 'swallowing_nutritional',
+    questionText: 'Nutritional Approaches: Therapeutic diet (e.g., low salt, diabetic, low cholesterol)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not used during last 7 days' },
+      { code: '1', label: 'Used during last 7 days' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1706,
+  },
+];
+
+// ===========================================
+// SECTION M: SKIN CONDITIONS - ADDITIONAL ITEMS (M1028-M1060)
+// ===========================================
+
+const skinConditionsAdditionalItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'M1028',
+    itemName: 'Active Diagnoses - Peripheral Vascular Disease',
+    section: 'skin_conditions',
+    questionText: 'Active Diagnoses: Does the patient have an active diagnosis of Peripheral Vascular Disease (PVD) or Peripheral Artery Disease (PAD)?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes, documented PVD/PAD diagnosis, being treated' },
+      { code: '2', label: 'Yes, documented PVD/PAD diagnosis, not being treated' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1800,
+  },
+  {
+    itemCode: 'M1030',
+    itemName: 'Therapies the Patient Receives',
+    section: 'skin_conditions',
+    questionText: 'Therapies the patient receives at home: Check all that apply',
+    responseType: 'multi_select',
+    responses: [
+      { code: '1', label: 'Intravenous or infusion therapy (excludes TPN)' },
+      { code: '2', label: 'Parenteral nutrition (TPN or lipids)' },
+      { code: '3', label: 'Enteral nutrition (nasogastric, gastrostomy, jejunostomy, or other enteral feeding)' },
+      { code: '4', label: 'None of the above' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1801,
+  },
+  {
+    itemCode: 'M1033',
+    itemName: 'Risk for Hospitalization',
+    section: 'skin_conditions',
+    questionText: 'Risk for Hospitalization: Which of the following signs or symptoms characterize this patient as at risk for hospitalization?',
+    responseType: 'multi_select',
+    responses: [
+      { code: '1', label: 'History of falls (2 or more falls—or any fall with an injury—in the past 12 months)' },
+      { code: '2', label: 'Unintentional weight loss of a total of 10 pounds or more in the past 12 months' },
+      { code: '3', label: 'Multiple hospitalizations (2 or more) in the past 6 months' },
+      { code: '4', label: 'Multiple emergency department visits (2 or more) in the past 6 months' },
+      { code: '5', label: 'Decline in mental, emotional, or behavioral status in the past 3 months' },
+      { code: '6', label: 'Reported or observed history of difficulty complying with any medical instructions in the past 3 months' },
+      { code: '7', label: 'Currently taking 5 or more medications' },
+      { code: '8', label: 'Currently reports exhaustion' },
+      { code: '9', label: 'Other risk(s) not listed in 1-8' },
+      { code: '0', label: 'None of the above' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1802,
+  },
+  {
+    itemCode: 'M1051',
+    itemName: 'COVID-19 Vaccine',
+    section: 'skin_conditions',
+    questionText: 'COVID-19 Vaccine: Has the patient received a complete COVID-19 vaccine series?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No, patient has not received all doses of a COVID-19 vaccine' },
+      { code: '1', label: 'Yes, patient has received a complete COVID-19 vaccine series' },
+      { code: '2', label: 'Patient offered but declined COVID-19 vaccine' },
+      { code: '3', label: 'Patient was assessed and determined ineligible' },
+    ],
+    assessmentTypes: SOC_ROC_DC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1803,
+  },
+  {
+    itemCode: 'M1060',
+    itemName: 'Height and Weight',
+    section: 'skin_conditions',
+    questionText: 'Height and Weight: Height (in inches) and Weight (in pounds)',
+    helpText: 'While measuring, if the number of inches or pounds is X.1-X.4 round down; X.5 or greater round up.',
+    responseType: 'text',
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Height and weight are required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1804,
+  },
+];
+
+// ===========================================
+// SECTION N: MEDICATIONS (N0415-N2021)
+// ===========================================
+
+const medicationItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'N0415',
+    itemName: 'High-Risk Drug Classes',
+    section: 'medications',
+    questionText: 'High-Risk Drug Classes: Is the patient currently taking any medications in one or more of these drug classes?',
+    responseType: 'multi_select',
+    responses: [
+      { code: '1', label: 'Anticoagulant (warfarin, heparin, factor Xa inhibitors, direct thrombin inhibitors)' },
+      { code: '2', label: 'Antiplatelet (clopidogrel, prasugrel, ticagrelor)' },
+      { code: '3', label: 'Hypoglycemic (insulin, sulfonylureas, meglitinides)' },
+      { code: '4', label: 'Opioid (morphine, oxycodone, hydrocodone, etc.)' },
+      { code: '9', label: 'None of the above' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'High-risk drug assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    cmsGuidance: 'High-risk drug classes require special monitoring and education.',
+    sortOrder: 1900,
+  },
+  {
+    itemCode: 'N2001',
+    itemName: 'Drug Regimen Review',
+    section: 'medications',
+    questionText: 'Drug Regimen Review: Does a complete drug regimen review indicate a potential clinically significant medication issue?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No—No issues found during drug regimen review, or patient is not taking any medications' },
+      { code: '1', label: 'Yes—Issues found during drug regimen review' },
+      { code: '9', label: 'NA—Unable to determine due to cognitive impairment' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Drug regimen review is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    cmsGuidance: 'A complete drug regimen review includes all medications the patient is currently taking.',
+    sortOrder: 1901,
+  },
+  {
+    itemCode: 'N2003',
+    itemName: 'Medication Follow-up',
+    section: 'medications',
+    questionText: 'Medication Follow-up: Was a physician or authorized practitioner contacted to resolve potential clinically significant medication issues?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+      { code: 'NA', label: 'Not applicable—No clinically significant medication issues identified' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1902,
+  },
+  {
+    itemCode: 'N2005',
+    itemName: 'Medication Intervention',
+    section: 'medications',
+    questionText: 'Medication Intervention: Were the potential clinically significant medication issues resolved through physician or authorized practitioner contact or patient/caregiver education?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes, through physician contact' },
+      { code: '2', label: 'Yes, through patient/caregiver education' },
+      { code: '3', label: 'Yes, through both physician contact and patient/caregiver education' },
+      { code: 'NA', label: 'Not applicable' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1903,
+  },
+  {
+    itemCode: 'N2021',
+    itemName: 'Opioid Medication - Bowel Regimen',
+    section: 'medications',
+    questionText: 'Opioid Medication - Bowel Regimen: Is the patient taking an opioid medication AND has a bowel regimen (e.g., stool softener, stimulant laxative)?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No opioid medication—or—Yes, taking opioid medication and has bowel regimen' },
+      { code: '1', label: 'Yes, taking opioid medication and does NOT have a bowel regimen' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 1904,
+  },
+];
+
+// ===========================================
+// SECTION O: SPECIAL TREATMENTS (O0110-O5000)
+// ===========================================
+
+const specialTreatmentItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'O0110A1',
+    itemName: 'Special Treatments - Chemotherapy',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: Chemotherapy (IV, IM, oral, or topical agent for cancer)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2000,
+  },
+  {
+    itemCode: 'O0110A2',
+    itemName: 'Special Treatments - Radiation',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: Radiation',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2001,
+  },
+  {
+    itemCode: 'O0110B1',
+    itemName: 'Special Treatments - Oxygen Therapy',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: Oxygen therapy (intermittent or continuous)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2002,
+  },
+  {
+    itemCode: 'O0110B2',
+    itemName: 'Special Treatments - BiPAP/CPAP',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: Suctioning, BiPAP, CPAP',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2003,
+  },
+  {
+    itemCode: 'O0110B3',
+    itemName: 'Special Treatments - Tracheostomy',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: Tracheostomy care',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2004,
+  },
+  {
+    itemCode: 'O0110B4',
+    itemName: 'Special Treatments - Invasive Ventilator',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: Invasive mechanical ventilation',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2005,
+  },
+  {
+    itemCode: 'O0110C1',
+    itemName: 'Special Treatments - IV Medications',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: IV medications (excludes flushes)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2006,
+  },
+  {
+    itemCode: 'O0110C2',
+    itemName: 'Special Treatments - Transfusions',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: Transfusions',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2007,
+  },
+  {
+    itemCode: 'O0110D1',
+    itemName: 'Special Treatments - Dialysis',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: Dialysis (hemodialysis or peritoneal dialysis)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2008,
+  },
+  {
+    itemCode: 'O0110E1',
+    itemName: 'Special Treatments - IV Access',
+    section: 'special_treatments',
+    questionText: 'Special Treatments, Procedures, and Programs: IV access device (saline/heparin lock, central line)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Not received during last 14 days and NOT expected at home' },
+      { code: '1', label: 'Received during last 14 days OR expected at home' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2009,
+  },
+  {
+    itemCode: 'O0350',
+    itemName: 'Patient Specific Order for Influenza',
+    section: 'special_treatments',
+    questionText: 'Patient Specific Order for Influenza Vaccine: Does the patient have a patient-specific order for the influenza vaccine?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2010,
+  },
+  {
+    itemCode: 'O5000',
+    itemName: 'Influenza Vaccine Received',
+    section: 'special_treatments',
+    questionText: 'Influenza Vaccine Received: Did the patient receive the influenza vaccine during the home health stay?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes—received from agency' },
+      { code: '2', label: 'Yes—received from another provider' },
+      { code: '3', label: 'Patient offered but declined' },
+      { code: '4', label: 'Patient assessed and determined to have medical contraindication' },
+    ],
+    assessmentTypes: DISCHARGE_TYPES,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2011,
+  },
+];
+
+// ===========================================
+// SECTION Q: PARTICIPATION IN ASSESSMENT (Q0380-Q0500)
+// ===========================================
+
+const participationItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'Q0380',
+    itemName: 'Participation in Assessment and Goal Setting',
+    section: 'participation',
+    questionText: 'Participation in Assessment and Goal Setting: Was the patient (or, where appropriate, the patient representative) involved in the assessment and setting of patient-specific goals?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Participation assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    cmsGuidance: 'Patient-centered care requires involvement of the patient or representative in care planning.',
+    sortOrder: 2100,
+  },
+  {
+    itemCode: 'Q0490',
+    itemName: 'Advance Care Plan',
+    section: 'participation',
+    questionText: 'Advance Care Plan: Does the patient have an advance care plan (e.g., living will, healthcare proxy)?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No advance care plan' },
+      { code: '1', label: 'Yes, advance care plan in patient\'s medical record' },
+      { code: '2', label: 'Yes, patient/caregiver reports advance care plan exists but not in record' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2101,
+  },
+  {
+    itemCode: 'Q0500A',
+    itemName: 'Discharge Goals - Self-Care',
+    section: 'participation',
+    questionText: 'Discharge Goals: Self-care—What is the patient\'s self-care discharge goal?',
+    responseType: 'single_select',
+    responses: [
+      { code: '1', label: 'Patient expects to be discharged to community' },
+      { code: '2', label: 'Patient expects to need caregiver assistance' },
+      { code: '3', label: 'Patient expects to be discharged to facility' },
+      { code: '9', label: 'Unable to determine' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2102,
+  },
+  {
+    itemCode: 'Q0500B',
+    itemName: 'Discharge Goals - Mobility',
+    section: 'participation',
+    questionText: 'Discharge Goals: Mobility—What is the patient\'s mobility discharge goal?',
+    responseType: 'single_select',
+    responses: [
+      { code: '1', label: 'Patient expects to be discharged to community' },
+      { code: '2', label: 'Patient expects to need caregiver assistance' },
+      { code: '3', label: 'Patient expects to be discharged to facility' },
+      { code: '9', label: 'Unable to determine' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2103,
+  },
+];
+
+// ===========================================
+// ADDITIONAL GG ITEMS - SELF-CARE (GG0130D, GG0130I, GG0130J)
+// ===========================================
+
+const additionalSelfCareItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'GG0130D',
+    itemName: 'Self-Care: Wash Upper Body',
+    section: 'functional_abilities',
+    questionText: 'Wash Upper Body: The ability to wash face, hands, armpits, and chest. Excludes washing back and below the waist.',
+    responseType: 'single_select',
+    responses: [
+      { code: '06', label: 'Independent', scoringWeight: 6 },
+      { code: '05', label: 'Setup or clean-up assistance', scoringWeight: 5 },
+      { code: '04', label: 'Supervision or touching assistance', scoringWeight: 4 },
+      { code: '03', label: 'Partial/moderate assistance', scoringWeight: 3 },
+      { code: '02', label: 'Substantial/maximal assistance', scoringWeight: 2 },
+      { code: '01', label: 'Dependent', scoringWeight: 1 },
+      { code: '07', label: 'Patient refused', scoringWeight: 0 },
+      { code: '09', label: 'Not applicable', scoringWeight: 0 },
+      { code: '10', label: 'Not attempted due to environmental limitations', scoringWeight: 0 },
+      { code: '88', label: 'Not attempted due to medical condition or safety concerns', scoringWeight: 0 },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2200,
+  },
+  {
+    itemCode: 'GG0130I',
+    itemName: 'Self-Care: Sit to Stand',
+    section: 'functional_abilities',
+    questionText: 'Sit to Stand: The ability to come to a standing position from sitting in a chair, wheelchair, or on the side of the bed. (Note: This is a GG0130 self-care item for sit-to-stand)',
+    responseType: 'single_select',
+    responses: [
+      { code: '06', label: 'Independent', scoringWeight: 6 },
+      { code: '05', label: 'Setup or clean-up assistance', scoringWeight: 5 },
+      { code: '04', label: 'Supervision or touching assistance', scoringWeight: 4 },
+      { code: '03', label: 'Partial/moderate assistance', scoringWeight: 3 },
+      { code: '02', label: 'Substantial/maximal assistance', scoringWeight: 2 },
+      { code: '01', label: 'Dependent', scoringWeight: 1 },
+      { code: '07', label: 'Patient refused', scoringWeight: 0 },
+      { code: '09', label: 'Not applicable', scoringWeight: 0 },
+      { code: '10', label: 'Not attempted due to environmental limitations', scoringWeight: 0 },
+      { code: '88', label: 'Not attempted due to medical condition or safety concerns', scoringWeight: 0 },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2201,
+  },
+  {
+    itemCode: 'GG0130J',
+    itemName: 'Self-Care: Bed Mobility',
+    section: 'functional_abilities',
+    questionText: 'Bed Mobility: The ability to move to and from a lying position, turn side to side, and position body while in bed or alternative sleep surface.',
+    responseType: 'single_select',
+    responses: [
+      { code: '06', label: 'Independent', scoringWeight: 6 },
+      { code: '05', label: 'Setup or clean-up assistance', scoringWeight: 5 },
+      { code: '04', label: 'Supervision or touching assistance', scoringWeight: 4 },
+      { code: '03', label: 'Partial/moderate assistance', scoringWeight: 3 },
+      { code: '02', label: 'Substantial/maximal assistance', scoringWeight: 2 },
+      { code: '01', label: 'Dependent', scoringWeight: 1 },
+      { code: '07', label: 'Patient refused', scoringWeight: 0 },
+      { code: '09', label: 'Not applicable', scoringWeight: 0 },
+      { code: '10', label: 'Not attempted due to environmental limitations', scoringWeight: 0 },
+      { code: '88', label: 'Not attempted due to medical condition or safety concerns', scoringWeight: 0 },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2202,
+  },
+];
+
+// ===========================================
+// ADDITIONAL GG ITEMS - MOBILITY (GG0170G, GG0170H, GG0170L, GG0170Q, GG0170R, GG0170RR, GG0170S, GG0170SS)
+// ===========================================
+
+const additionalMobilityItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'GG0170G',
+    itemName: 'Mobility: Car Transfer',
+    section: 'functional_abilities',
+    questionText: 'Car Transfer: The ability to transfer in and out of a car or van on the passenger side. Does not include the ability to open/close door or fasten seat belt.',
+    responseType: 'single_select',
+    responses: [
+      { code: '06', label: 'Independent', scoringWeight: 6 },
+      { code: '05', label: 'Setup or clean-up assistance', scoringWeight: 5 },
+      { code: '04', label: 'Supervision or touching assistance', scoringWeight: 4 },
+      { code: '03', label: 'Partial/moderate assistance', scoringWeight: 3 },
+      { code: '02', label: 'Substantial/maximal assistance', scoringWeight: 2 },
+      { code: '01', label: 'Dependent', scoringWeight: 1 },
+      { code: '07', label: 'Patient refused', scoringWeight: 0 },
+      { code: '09', label: 'Not applicable', scoringWeight: 0 },
+      { code: '10', label: 'Not attempted due to environmental limitations', scoringWeight: 0 },
+      { code: '88', label: 'Not attempted due to medical condition or safety concerns', scoringWeight: 0 },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2300,
+  },
+  {
+    itemCode: 'GG0170H',
+    itemName: 'Mobility: Walk 10 Feet on Uneven Surfaces',
+    section: 'functional_abilities',
+    questionText: 'Walk 10 Feet on Uneven Surfaces: The ability to walk at least 10 feet on uneven or sloping surfaces (e.g., grass, gravel).',
+    responseType: 'single_select',
+    responses: [
+      { code: '06', label: 'Independent', scoringWeight: 6 },
+      { code: '05', label: 'Setup or clean-up assistance', scoringWeight: 5 },
+      { code: '04', label: 'Supervision or touching assistance', scoringWeight: 4 },
+      { code: '03', label: 'Partial/moderate assistance', scoringWeight: 3 },
+      { code: '02', label: 'Substantial/maximal assistance', scoringWeight: 2 },
+      { code: '01', label: 'Dependent', scoringWeight: 1 },
+      { code: '07', label: 'Patient refused', scoringWeight: 0 },
+      { code: '09', label: 'Not applicable', scoringWeight: 0 },
+      { code: '10', label: 'Not attempted due to environmental limitations', scoringWeight: 0 },
+      { code: '88', label: 'Not attempted due to medical condition or safety concerns', scoringWeight: 0 },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2301,
+  },
+  {
+    itemCode: 'GG0170L',
+    itemName: 'Mobility: Walking 10 Feet on Uneven Surfaces',
+    section: 'functional_abilities',
+    questionText: 'Walking 10 Feet on Uneven Surfaces: The ability to walk at least 10 feet on uneven or sloping surfaces (e.g., grass, gravel).',
+    responseType: 'single_select',
+    responses: [
+      { code: '06', label: 'Independent', scoringWeight: 6 },
+      { code: '05', label: 'Setup or clean-up assistance', scoringWeight: 5 },
+      { code: '04', label: 'Supervision or touching assistance', scoringWeight: 4 },
+      { code: '03', label: 'Partial/moderate assistance', scoringWeight: 3 },
+      { code: '02', label: 'Substantial/maximal assistance', scoringWeight: 2 },
+      { code: '01', label: 'Dependent', scoringWeight: 1 },
+      { code: '07', label: 'Patient refused', scoringWeight: 0 },
+      { code: '09', label: 'Not applicable', scoringWeight: 0 },
+      { code: '10', label: 'Not attempted due to environmental limitations', scoringWeight: 0 },
+      { code: '88', label: 'Not attempted due to medical condition or safety concerns', scoringWeight: 0 },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2302,
+  },
+  {
+    itemCode: 'GG0170Q',
+    itemName: 'Mobility: Does patient use wheelchair/scooter?',
+    section: 'functional_abilities',
+    questionText: 'Does patient use wheelchair and/or scooter?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No—Skip to GG0170S' },
+      { code: '1', label: 'Yes' },
+    ],
+    skipLogic: {
+      condition: 'GG0170Q = 0',
+      skipToItem: 'GG0170S',
+      reason: 'Patient does not use wheelchair/scooter',
+    },
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2303,
+  },
+  {
+    itemCode: 'GG0170R',
+    itemName: 'Mobility: Wheel 50 Feet with Two Turns',
+    section: 'functional_abilities',
+    questionText: 'Wheel 50 Feet with Two Turns: Once seated in wheelchair/scooter, the ability to wheel at least 50 feet and make two turns.',
+    responseType: 'single_select',
+    responses: [
+      { code: '06', label: 'Independent', scoringWeight: 6 },
+      { code: '05', label: 'Setup or clean-up assistance', scoringWeight: 5 },
+      { code: '04', label: 'Supervision or touching assistance', scoringWeight: 4 },
+      { code: '03', label: 'Partial/moderate assistance', scoringWeight: 3 },
+      { code: '02', label: 'Substantial/maximal assistance', scoringWeight: 2 },
+      { code: '01', label: 'Dependent', scoringWeight: 1 },
+      { code: '07', label: 'Patient refused', scoringWeight: 0 },
+      { code: '09', label: 'Not applicable', scoringWeight: 0 },
+      { code: '10', label: 'Not attempted due to environmental limitations', scoringWeight: 0 },
+      { code: '88', label: 'Not attempted due to medical condition or safety concerns', scoringWeight: 0 },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2304,
+  },
+  {
+    itemCode: 'GG0170RR',
+    itemName: 'Mobility: Wheel 150 Feet',
+    section: 'functional_abilities',
+    questionText: 'Wheel 150 Feet: Once seated in wheelchair/scooter, the ability to wheel at least 150 feet in a corridor or similar space.',
+    responseType: 'single_select',
+    responses: [
+      { code: '06', label: 'Independent', scoringWeight: 6 },
+      { code: '05', label: 'Setup or clean-up assistance', scoringWeight: 5 },
+      { code: '04', label: 'Supervision or touching assistance', scoringWeight: 4 },
+      { code: '03', label: 'Partial/moderate assistance', scoringWeight: 3 },
+      { code: '02', label: 'Substantial/maximal assistance', scoringWeight: 2 },
+      { code: '01', label: 'Dependent', scoringWeight: 1 },
+      { code: '07', label: 'Patient refused', scoringWeight: 0 },
+      { code: '09', label: 'Not applicable', scoringWeight: 0 },
+      { code: '10', label: 'Not attempted due to environmental limitations', scoringWeight: 0 },
+      { code: '88', label: 'Not attempted due to medical condition or safety concerns', scoringWeight: 0 },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2305,
+  },
+  {
+    itemCode: 'GG0170S',
+    itemName: 'Mobility: Does patient use walker?',
+    section: 'functional_abilities',
+    questionText: 'Does patient use a walker or rolling walker?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2306,
+  },
+  {
+    itemCode: 'GG0170SS',
+    itemName: 'Mobility: Does patient use cane/crutch?',
+    section: 'functional_abilities',
+    questionText: 'Does patient use a single-point cane or crutch?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU.concat(DISCHARGE_TYPES),
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2307,
+  },
+];
+
+// ===========================================
 // EXPORT ALL QUESTIONS
 // ===========================================
 
@@ -1440,6 +3145,21 @@ export const allOasisQuestions: OasisQuestionSeed[] = [
   ...neuroEmotionalItems,
   ...functionalSelfCareItems,
   ...functionalMobilityItems,
+  // New OASIS-E1 sections
+  ...administrativeItems,
+  ...hearingSpeechVisionItems,
+  ...cognitiveItems,
+  ...moodItems,
+  ...behaviorItems,
+  ...preferenceItems,
+  ...healthConditionItems,
+  ...swallowingNutritionalItems,
+  ...skinConditionsAdditionalItems,
+  ...medicationItems,
+  ...specialTreatmentItems,
+  ...participationItems,
+  ...additionalSelfCareItems,
+  ...additionalMobilityItems,
 ];
 
 export default allOasisQuestions;
