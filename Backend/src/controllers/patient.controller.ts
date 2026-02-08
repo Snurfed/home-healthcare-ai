@@ -491,7 +491,19 @@ export async function listPatients(
     }
 
     // Role-based filtering for non-admin users
-    if (![UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.BILLING].includes(req.user.role)) {
+    // Clinical staff (NURSE, PT, OT, SLP) can view all patients to support coverage and care coordination
+    // Non-clinical roles (e.g., aides) are restricted to assigned patients only
+    const rolesWithFullPatientAccess = [
+      UserRole.ADMIN,
+      UserRole.SUPERVISOR,
+      UserRole.BILLING,
+      UserRole.NURSE,
+      UserRole.PT,
+      UserRole.OT,
+      UserRole.SLP,
+    ];
+
+    if (!rolesWithFullPatientAccess.includes(req.user.role)) {
       where.assignments = {
         some: {
           userId: req.user.id,
