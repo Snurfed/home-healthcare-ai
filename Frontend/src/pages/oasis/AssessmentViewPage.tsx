@@ -7,6 +7,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useAssessment } from '@hooks/index';
 import { Button, Spinner, Alert, Badge } from '@components/common';
+import { HIPPSCalculator } from '@components/oasis';
 import { STATUS_CONFIG, ASSESSMENT_TYPE_LABELS } from '@typedefs/oasis.types';
 
 export default function AssessmentViewPage() {
@@ -115,10 +116,6 @@ export default function AssessmentViewPage() {
             <dd className="font-medium">{assessment.completionPercentage}%</dd>
           </div>
           <div>
-            <dt className="text-sm text-gray-500">HIPPS Code</dt>
-            <dd className="font-medium">{assessment.scoring?.hippsCode || 'Not calculated'}</dd>
-          </div>
-          <div>
             <dt className="text-sm text-gray-500">Created</dt>
             <dd className="font-medium">
               {new Date(assessment.createdAt).toLocaleDateString()}
@@ -145,6 +142,15 @@ export default function AssessmentViewPage() {
             </div>
           )}
         </dl>
+      </div>
+
+      {/* HIPPS Calculator */}
+      <div className="bg-white rounded-lg shadow-card p-6">
+        <h2 className="text-lg font-semibold mb-4">HIPPS Code & Reimbursement</h2>
+        <HIPPSCalculator
+          assessmentId={assessment.id}
+          isLocked={assessment.status === 'LOCKED'}
+        />
       </div>
 
       {/* Validation Errors */}

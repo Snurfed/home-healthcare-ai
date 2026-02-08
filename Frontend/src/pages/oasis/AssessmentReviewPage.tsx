@@ -9,6 +9,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState, useMemo } from 'react';
 import { useAssessment, useReviewAssessment, useQuestions, useLockAssessment } from '@hooks/index';
 import { Button, Spinner, Alert, Badge, Modal } from '@components/common';
+import { HIPPSCalculator } from '@components/oasis';
 import { STATUS_CONFIG, ASSESSMENT_TYPE_LABELS, OASIS_SECTIONS } from '@typedefs/oasis.types';
 import { getErrorMessage } from '@services/index';
 import type { OASISQuestion, OASISResponse, OASISSectionId } from '@typedefs/index';
@@ -297,14 +298,20 @@ export default function AssessmentReviewPage() {
                 <dd className="font-medium">#{assessment.episode?.episodeNumber}</dd>
               </div>
               <div>
-                <dt className="text-sm text-gray-500">HIPPS Code</dt>
-                <dd className="font-medium">{assessment.scoring?.hippsCode || 'Not calculated'}</dd>
-              </div>
-              <div>
                 <dt className="text-sm text-gray-500">Responses</dt>
                 <dd className="font-medium">{Object.keys(assessment.responses || {}).length}</dd>
               </div>
             </dl>
+          </div>
+
+          {/* HIPPS Calculator with Optimization Suggestions */}
+          <div className="bg-white rounded-lg shadow-card p-6">
+            <h2 className="text-lg font-semibold mb-4">HIPPS Code & Reimbursement</h2>
+            <HIPPSCalculator
+              assessmentId={assessment.id}
+              showOptimizations={true}
+              isLocked={false}  // Review page only shows PENDING_REVIEW/APPROVED, never LOCKED
+            />
           </div>
 
           {/* Validation Errors */}

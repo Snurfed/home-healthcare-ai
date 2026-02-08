@@ -9,6 +9,7 @@ import {
 } from '../generated/prisma';
 import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
+import oasisService from '../services/oasis.service';
 
 // ===========================================
 // CONFIGURATION
@@ -1458,6 +1459,235 @@ export async function deleteAssessment(
   }
 }
 
+/**
+ * Get detailed HIPPS code information for an assessment
+ * GET /api/oasis/assessments/:id/hipps
+ */
+export async function getHippsDetails(
+  req: AuthenticatedRequest & { params: { id: string }; query: { includeOptimizations?: string; wageIndex?: string; recalculate?: string } },
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+    }
+
+    const { id } = req.params;
+    const { includeOptimizations, wageIndex, recalculate } = req.query;
+
+    // Check if assessment exists
+    const assessment = await prisma.oasisAssessment.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        patientId: true,
+        clinicianId: true,
+        reviewerId: true,
+        status: true,
+        patient: {
+          select: { firstName: true, lastName: true },
+        },
+      },
+    });
+
+    if (!assessment) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Assessment not found',
+      });
+    }
+
+    // Check access
+    const hasAccess = await checkAssessmentAccess(
+      req.user.id,
+      req.user.role,
+      { clinicianId: assessment.clinicianId, patientId: assessment.patientId, reviewerId: assessment.reviewerId }
+    );
+
+    if (!hasAccess) {
+      await createOasisAuditLog(
+        AuditAction.READ,
+        req.user.id,
+        req.user.email,
+        req.user.role,
+        id,
+        assessment.patientId,
+        false,
+        req,
+        { errorMessage: 'Access denied to HIPPS details' }
+      );
+
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to access this assessment',
+      });
+    }
+
+    // Only supervisors and admins can see optimization suggestions
+    const canSeeOptimizations = [UserRole.ADMIN, UserRole.SUPERVISOR].includes(req.user.role);
+    const showOptimizations = includeOptimizations === 'true' && canSeeOptimizations;
+
+    // Get HIPPS details from service
+    const hippsDetails = await oasisService.getHippsDetails(id, {
+      includeOptimizations: showOptimizations,
+      wageIndex: wageIndex ? parseFloat(wageIndex) : undefined,
+      recalculate: recalculate === 'true',
+    });
+
+    if (!hippsDetails) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Could not calculate HIPPS details for this assessment',
+      });
+    }
+
+    // Audit log
+    await createOasisAuditLog(
+      AuditAction.READ,
+      req.user.id,
+      req.user.email,
+      req.user.role,
+      id,
+      assessment.patientId,
+      true,
+      req,
+      { description: `Viewed HIPPS details for patient ${assessment.patient.lastName}` }
+    );
+
+    return res.status(200).json({
+      assessmentId: id,
+      hippsCode: hippsDetails.hippsCode,
+      version: hippsDetails.calculationVersion,
+      calculatedAt: hippsDetails.calculatedAt,
+      breakdown: hippsDetails.hippsBreakdown,
+      scores: {
+        functionalScore: hippsDetails.functionalScore,
+        clinicalScore: hippsDetails.clinicalScore,
+        serviceUtilizationScore: hippsDetails.serviceUtilizationScore,
+        caseMixWeight: hippsDetails.caseMixWeight,
+      },
+      clinicalGrouping: hippsDetails.clinicalGroupingDetails,
+      comorbidity: hippsDetails.comorbidityDetails,
+      reimbursement: hippsDetails.estimatedReimbursement,
+      optimizationSuggestions: hippsDetails.optimizationSuggestions,
+      validationWarnings: hippsDetails.validationWarnings,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Calculate enhanced HIPPS score for an assessment
+ * POST /api/oasis/assessments/:id/calculate-hipps
+ */
+export async function calculateEnhancedScore(
+  req: AuthenticatedRequest & { params: { id: string }; body: { includeOptimizations?: boolean; wageIndex?: number } },
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+    }
+
+    const { id } = req.params;
+    const { includeOptimizations, wageIndex } = req.body;
+
+    // Check if assessment exists and is not locked
+    const assessment = await prisma.oasisAssessment.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        patientId: true,
+        clinicianId: true,
+        reviewerId: true,
+        status: true,
+        lockedAt: true,
+        patient: {
+          select: { firstName: true, lastName: true },
+        },
+      },
+    });
+
+    if (!assessment) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Assessment not found',
+      });
+    }
+
+    // Check access
+    const hasAccess = await checkAssessmentAccess(
+      req.user.id,
+      req.user.role,
+      { clinicianId: assessment.clinicianId, patientId: assessment.patientId, reviewerId: assessment.reviewerId }
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to access this assessment',
+      });
+    }
+
+    // Only supervisors and admins can see optimization suggestions
+    const canSeeOptimizations = [UserRole.ADMIN, UserRole.SUPERVISOR].includes(req.user.role);
+    const showOptimizations = includeOptimizations && canSeeOptimizations;
+
+    // Calculate enhanced HIPPS
+    const result = await oasisService.calculateEnhancedHippsCode(id, {
+      includeOptimizations: showOptimizations,
+      wageIndex,
+    });
+
+    // Audit log
+    await createOasisAuditLog(
+      AuditAction.UPDATE,
+      req.user.id,
+      req.user.email,
+      req.user.role,
+      id,
+      assessment.patientId,
+      true,
+      req,
+      {
+        description: `Calculated enhanced HIPPS code for patient ${assessment.patient.lastName}`,
+        newValues: { hippsCode: result.hippsCode, caseMixWeight: result.caseMixWeight },
+      }
+    );
+
+    return res.status(200).json({
+      message: 'Enhanced HIPPS score calculated successfully',
+      assessmentId: id,
+      hippsCode: result.hippsCode,
+      version: result.calculationVersion,
+      calculatedAt: result.calculatedAt,
+      breakdown: result.hippsBreakdown,
+      scores: {
+        functionalScore: result.functionalScore,
+        clinicalScore: result.clinicalScore,
+        serviceUtilizationScore: result.serviceUtilizationScore,
+        caseMixWeight: result.caseMixWeight,
+      },
+      clinicalGrouping: result.clinicalGroupingDetails,
+      comorbidity: result.comorbidityDetails,
+      reimbursement: result.estimatedReimbursement,
+      optimizationSuggestions: result.optimizationSuggestions,
+      validationWarnings: result.validationWarnings,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 // ===========================================
 // EXPORTS
 // ===========================================
@@ -1473,4 +1703,6 @@ export default {
   getQuestionLibrary,
   calculateScore,
   deleteAssessment,
+  getHippsDetails,
+  calculateEnhancedScore,
 };

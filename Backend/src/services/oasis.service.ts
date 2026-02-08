@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import {
   AssessmentType,
   AssessmentStatus,
@@ -8,6 +7,21 @@ import {
   OasisQuestion,
 } from '../generated/prisma';
 import prisma from '../config/prisma';
+import {
+  CLINICAL_GROUPING_MAPPINGS,
+  CLINICAL_GROUP_DESCRIPTIONS,
+  FUNCTIONAL_LEVEL_DESCRIPTIONS,
+  COMORBIDITY_PAIRS,
+  COMORBIDITY_DESCRIPTIONS,
+  SERVICE_UTILIZATION_LEVELS,
+  ADMISSION_SOURCES,
+  OPTIMIZATION_RULES,
+  lookupCaseMixWeight,
+  calculateEstimatedReimbursement,
+  NATIONAL_STANDARDIZED_PAYMENT_30DAY,
+  DEFAULT_WAGE_INDEX,
+  type OptimizationContext,
+} from '../constants/hipps.constants';
 
 // ===========================================
 // CONFIGURATION
@@ -125,6 +139,47 @@ export interface ValidationError {
   severity: 'error' | 'warning';
 }
 
+export interface HIPPSCodeBreakdown {
+  position1: { code: string; label: string; description: string };
+  position2: { code: string; label: string; description: string };
+  position3: { code: string; label: string; description: string };
+  position4: { code: string; label: string; description: string };
+  position5: { code: string; label: string; description: string };
+}
+
+export interface ReimbursementEstimate {
+  baseAmount: number;
+  wageAdjustedAmount: number;
+  totalEstimate: number;
+  periodDays: 30 | 60;
+  wageIndex: number;
+  disclaimer: string;
+}
+
+export interface OptimizationSuggestion {
+  id: string;
+  suggestion: string;
+  priority: 'high' | 'medium' | 'low';
+  category: 'documentation' | 'clinical' | 'coding';
+  potentialImpact: string;
+}
+
+export interface ClinicalGroupingResult {
+  code: string;
+  category: string;
+  description: string;
+  matchedDiagnosis?: string;
+  isEarlyTiming: boolean;
+  admissionSource: 'institutional' | 'community';
+}
+
+export interface ComorbidityResult {
+  adjustment: 'N' | 'L' | 'H';
+  description: string;
+  triggeringDiagnoses?: string[];
+  matchedPairDescription?: string;
+}
+
 export interface ScoringResult {
   hippsCode: string;
   clinicalGrouping: string;
@@ -136,6 +191,15 @@ export interface ScoringResult {
   serviceUtilizationScore: number;
   calculatedAt: Date;
   calculationVersion: string;
+}
+
+export interface EnhancedScoringResult extends ScoringResult {
+  hippsBreakdown: HIPPSCodeBreakdown;
+  clinicalGroupingDetails: ClinicalGroupingResult;
+  comorbidityDetails: ComorbidityResult;
+  estimatedReimbursement: ReimbursementEstimate;
+  optimizationSuggestions?: OptimizationSuggestion[];
+  validationWarnings?: string[];
 }
 
 // ===========================================
@@ -732,9 +796,36 @@ export async function validateAssessment(
 }
 
 /**
- * Calculate HIPPS code and scoring
+ * Calculate HIPPS code and scoring (basic version for compatibility)
  */
 export async function calculateHippsCode(assessmentId: string): Promise<ScoringResult> {
+  const result = await calculateEnhancedHippsCode(assessmentId);
+  return {
+    hippsCode: result.hippsCode,
+    clinicalGrouping: result.clinicalGrouping,
+    functionalLevel: result.functionalLevel,
+    comorbidityAdjustment: result.comorbidityAdjustment,
+    caseMixWeight: result.caseMixWeight,
+    functionalScore: result.functionalScore,
+    clinicalScore: result.clinicalScore,
+    serviceUtilizationScore: result.serviceUtilizationScore,
+    calculatedAt: result.calculatedAt,
+    calculationVersion: result.calculationVersion,
+  };
+}
+
+/**
+ * Calculate enhanced HIPPS code with full breakdown and reimbursement estimate
+ */
+export async function calculateEnhancedHippsCode(
+  assessmentId: string,
+  options: {
+    includeOptimizations?: boolean;
+    wageIndex?: number;
+  } = {}
+): Promise<EnhancedScoringResult> {
+  const { includeOptimizations = false, wageIndex = DEFAULT_WAGE_INDEX } = options;
+
   const assessment = await prisma.oasisAssessment.findFirst({
     where: { id: assessmentId },
     include: { responses: true },
@@ -748,58 +839,219 @@ export async function calculateHippsCode(assessmentId: string): Promise<ScoringR
     assessment.responses.map((r) => [r.itemCode, r.responseCode || r.responseValue])
   );
 
-  // Calculate functional score from GG items
+  // Calculate component scores
   const functionalScore = calculateFunctionalScore(responseMap);
-
-  // Calculate clinical score from diagnosis and clinical items
   const clinicalScore = calculateClinicalScore(responseMap);
-
-  // Calculate service utilization score
   const serviceUtilizationScore = calculateServiceUtilizationScore(responseMap);
 
-  // Determine clinical grouping based on diagnoses
-  const clinicalGrouping = determineClinicalGrouping(responseMap);
+  // Determine clinical grouping with full details
+  const clinicalGroupingDetails = determineClinicalGrouping(responseMap);
 
-  // Determine functional level (Low, Medium, High)
+  // Determine functional level
   const functionalLevel = determineFunctionalLevel(functionalScore);
 
-  // Determine comorbidity adjustment
-  const comorbidityAdjustment = determineComorbidityAdjustment(responseMap);
+  // Determine comorbidity adjustment with full details
+  const comorbidityDetails = determineComorbidityAdjustment(responseMap);
 
-  // Generate HIPPS code: 5 characters
-  // Position 1: Clinical Grouping (A-J)
-  // Position 2: Functional Level (L, M, H)
-  // Position 3: Comorbidity Adjustment (N, L, H)
-  // Position 4-5: NRS score (01-99)
-  const nrsScore = Math.min(99, Math.max(1, Math.round(functionalScore + clinicalScore)));
-  const hippsCode = `${clinicalGrouping}${functionalLevel}${comorbidityAdjustment}${nrsScore.toString().padStart(2, '0')}`;
+  // Determine service utilization level
+  const serviceUtilizationLevel = determineServiceUtilizationLevel(serviceUtilizationScore);
 
-  // Calculate case mix weight
-  const caseMixWeight = calculateCaseMixWeight(clinicalGrouping, functionalLevel, comorbidityAdjustment);
+  // Determine admission/timing code
+  const admissionTimingCode = determineAdmissionTimingCode(
+    clinicalGroupingDetails.admissionSource,
+    clinicalGroupingDetails.isEarlyTiming
+  );
+
+  // Generate the 5-character HIPPS code
+  const hippsCode = generateHIPPSCode(
+    clinicalGroupingDetails.code,
+    functionalLevel,
+    comorbidityDetails.adjustment,
+    serviceUtilizationLevel,
+    admissionTimingCode
+  );
+
+  // Generate HIPPS code breakdown
+  const hippsBreakdown = generateHIPPSBreakdown(
+    clinicalGroupingDetails.code,
+    functionalLevel,
+    comorbidityDetails.adjustment,
+    serviceUtilizationLevel,
+    admissionTimingCode
+  );
+
+  // Calculate case mix weight using lookup table
+  const caseMixWeight = lookupCaseMixWeight(
+    clinicalGroupingDetails.code,
+    functionalLevel,
+    comorbidityDetails.adjustment,
+    clinicalGroupingDetails.admissionSource
+  );
+
+  // Calculate reimbursement estimate
+  const totalEstimate = calculateEstimatedReimbursement(caseMixWeight, wageIndex, 30);
+  const estimatedReimbursement: ReimbursementEstimate = {
+    baseAmount: NATIONAL_STANDARDIZED_PAYMENT_30DAY,
+    wageAdjustedAmount: Math.round(NATIONAL_STANDARDIZED_PAYMENT_30DAY * wageIndex * 100) / 100,
+    totalEstimate,
+    periodDays: 30,
+    wageIndex,
+    disclaimer: 'Estimate based on FY2024 rates. Actual payment may vary based on LUPA, outlier adjustments, and other factors.',
+  };
+
+  // Generate optimization suggestions if requested
+  let optimizationSuggestions: OptimizationSuggestion[] | undefined;
+  if (includeOptimizations) {
+    optimizationSuggestions = generateOptimizationSuggestions(
+      responseMap,
+      clinicalGroupingDetails.code,
+      functionalLevel,
+      comorbidityDetails.adjustment,
+      functionalScore
+    );
+  }
+
+  // Collect validation warnings
+  const validationWarnings: string[] = [];
+  if (!clinicalGroupingDetails.matchedDiagnosis) {
+    validationWarnings.push('No primary diagnosis found - defaulting to MMTA-Other grouping');
+  }
+  if (functionalScore === 0) {
+    validationWarnings.push('No functional items responded - functional score is 0');
+  }
 
   // Update assessment with scoring
   await prisma.oasisAssessment.update({
     where: { id: assessmentId },
     data: {
       hippsCode,
-      clinicalGrouping,
+      clinicalGrouping: clinicalGroupingDetails.code,
       functionalLevel,
-      comorbidityAdjustment,
+      comorbidityAdjustment: comorbidityDetails.adjustment,
       caseMixWeight: new Prisma.Decimal(caseMixWeight),
     },
   });
 
   return {
     hippsCode,
-    clinicalGrouping,
+    clinicalGrouping: clinicalGroupingDetails.code,
     functionalLevel,
-    comorbidityAdjustment,
+    comorbidityAdjustment: comorbidityDetails.adjustment,
     caseMixWeight,
     functionalScore,
     clinicalScore,
     serviceUtilizationScore,
     calculatedAt: new Date(),
-    calculationVersion: '2024.1',
+    calculationVersion: 'PDGM-2024.1',
+    hippsBreakdown,
+    clinicalGroupingDetails,
+    comorbidityDetails,
+    estimatedReimbursement,
+    optimizationSuggestions,
+    validationWarnings: validationWarnings.length > 0 ? validationWarnings : undefined,
+  };
+}
+
+/**
+ * Get HIPPS details for an existing assessment (without recalculating)
+ */
+export async function getHippsDetails(
+  assessmentId: string,
+  options: {
+    includeOptimizations?: boolean;
+    wageIndex?: number;
+    recalculate?: boolean;
+  } = {}
+): Promise<EnhancedScoringResult | null> {
+  const { recalculate = false } = options;
+
+  // If recalculate is requested or assessment has no HIPPS code, calculate fresh
+  const assessment = await prisma.oasisAssessment.findFirst({
+    where: { id: assessmentId },
+    include: { responses: true },
+  });
+
+  if (!assessment) {
+    return null;
+  }
+
+  if (recalculate || !assessment.hippsCode) {
+    return calculateEnhancedHippsCode(assessmentId, options);
+  }
+
+  // Build result from stored data
+  const responseMap = new Map(
+    assessment.responses.map((r) => [r.itemCode, r.responseCode || r.responseValue])
+  );
+
+  // Recalculate component scores for the display
+  const functionalScore = calculateFunctionalScore(responseMap);
+  const clinicalScore = calculateClinicalScore(responseMap);
+  const serviceUtilizationScore = calculateServiceUtilizationScore(responseMap);
+
+  // Parse existing HIPPS code (we know it's 5 characters from earlier check)
+  const hippsCode = assessment.hippsCode!;
+  const clinicalGroup = hippsCode.charAt(0);
+  const funcLevel = hippsCode.charAt(1);
+  const comorbAdj = hippsCode.charAt(2) as 'N' | 'L' | 'H';
+  const serviceLevel = hippsCode.charAt(3);
+  const admTiming = hippsCode.charAt(4);
+
+  // Generate breakdown from stored code
+  const hippsBreakdown = generateHIPPSBreakdown(
+    clinicalGroup,
+    funcLevel,
+    comorbAdj,
+    serviceLevel,
+    admTiming
+  );
+
+  // Get detailed grouping info
+  const clinicalGroupingDetails = determineClinicalGrouping(responseMap);
+  const comorbidityDetails = determineComorbidityAdjustment(responseMap);
+
+  const caseMixWeight = assessment.caseMixWeight?.toNumber() || 1.0;
+  const wageIndex = options.wageIndex || DEFAULT_WAGE_INDEX;
+
+  // Calculate reimbursement estimate
+  const totalEstimate = calculateEstimatedReimbursement(caseMixWeight, wageIndex, 30);
+  const estimatedReimbursement: ReimbursementEstimate = {
+    baseAmount: NATIONAL_STANDARDIZED_PAYMENT_30DAY,
+    wageAdjustedAmount: Math.round(NATIONAL_STANDARDIZED_PAYMENT_30DAY * wageIndex * 100) / 100,
+    totalEstimate,
+    periodDays: 30,
+    wageIndex,
+    disclaimer: 'Estimate based on FY2024 rates. Actual payment may vary based on LUPA, outlier adjustments, and other factors.',
+  };
+
+  // Generate optimization suggestions if requested
+  let optimizationSuggestions: OptimizationSuggestion[] | undefined;
+  if (options.includeOptimizations) {
+    optimizationSuggestions = generateOptimizationSuggestions(
+      responseMap,
+      clinicalGroup,
+      funcLevel,
+      comorbAdj,
+      functionalScore
+    );
+  }
+
+  return {
+    hippsCode,
+    clinicalGrouping: clinicalGroup,
+    functionalLevel: funcLevel,
+    comorbidityAdjustment: comorbAdj,
+    caseMixWeight,
+    functionalScore,
+    clinicalScore,
+    serviceUtilizationScore,
+    calculatedAt: assessment.updatedAt,
+    calculationVersion: 'PDGM-2024.1',
+    hippsBreakdown,
+    clinicalGroupingDetails,
+    comorbidityDetails,
+    estimatedReimbursement,
+    optimizationSuggestions,
   };
 }
 
@@ -958,6 +1210,7 @@ function evaluateSkipLogic(
   const match = condition.match(/(\w+)\s*=\s*['"]?(\w+)['"]?/);
   if (match) {
     const [, itemCode, expectedValue] = match;
+    if (!itemCode) return false;
     const response = responseMap.get(itemCode);
     return response?.responseCode === expectedValue || response?.responseValue === expectedValue;
   }
@@ -1048,13 +1301,74 @@ function calculateServiceUtilizationScore(responseMap: Map<string, string | null
 
 /**
  * Determine clinical grouping based on primary diagnosis
+ * Returns detailed grouping information for PDGM classification
  */
-function determineClinicalGrouping(responseMap: Map<string, string | null>): string {
-  // This is a simplified version - actual PDGM logic is more complex
-  // Based on primary diagnosis ICD-10 codes
+function determineClinicalGrouping(responseMap: Map<string, string | null>): ClinicalGroupingResult {
+  // Get primary diagnosis from M1021 (or similar field storing ICD-10)
+  const primaryDiagnosis = responseMap.get('M1021') || responseMap.get('M1021_PRIMARY_DIAG') || '';
 
-  // Default to group B (MMTA - Other)
-  return 'B';
+  // Get admission source from M1000
+  const admissionSourceCode = responseMap.get('M1000') || '01';
+  const admissionSourceInfo = ADMISSION_SOURCES.find(s => s.code === admissionSourceCode);
+  const isInstitutional = admissionSourceInfo?.isInstitutional ?? false;
+  const admissionSource: 'institutional' | 'community' = isInstitutional ? 'institutional' : 'community';
+
+  // "Early" is within 14 days of institutional discharge
+  // For simplicity, assume early timing for institutional admissions
+  // TODO: In production, calculate based on M0104 (referral) and M0030 (SOC) dates
+  const isEarlyTiming = isInstitutional;
+
+  // Match primary diagnosis against ICD-10 patterns
+  let matchedGroup: { clinicalGroup: string; category: string; description: string } | null = null;
+
+  for (const mapping of CLINICAL_GROUPING_MAPPINGS) {
+    try {
+      const regex = new RegExp(mapping.icd10Pattern, 'i');
+      if (regex.test(primaryDiagnosis)) {
+        matchedGroup = {
+          clinicalGroup: mapping.clinicalGroup,
+          category: mapping.category,
+          description: mapping.description,
+        };
+        break;
+      }
+    } catch {
+      // Invalid regex pattern, skip
+      continue;
+    }
+  }
+
+  // Default to MMTA-Other if no match
+  if (!matchedGroup) {
+    matchedGroup = {
+      clinicalGroup: '6',
+      category: 'MMTA-Other',
+      description: 'Medication Management, Teaching, Assessment - Other',
+    };
+  }
+
+  // Convert numeric group to letter code based on timing
+  // Odd letters (A, C, E, G, I, K) = Early, Even letters (B, D, F, H, J, L) = Late
+  const clinicalGroupLetterMap: Record<string, { early: string; late: string }> = {
+    '1': { early: 'A', late: 'B' }, // Neuro/Stroke
+    '2': { early: 'C', late: 'D' }, // Wounds
+    '3': { early: 'E', late: 'F' }, // Complex Medical
+    '4': { early: 'G', late: 'H' }, // Behavioral Health
+    '5': { early: 'I', late: 'J' }, // MS/Rehab
+    '6': { early: 'K', late: 'L' }, // MMTA-Other
+  };
+
+  const letterMapping = clinicalGroupLetterMap[matchedGroup.clinicalGroup] || { early: 'K', late: 'L' };
+  const groupCode = isEarlyTiming ? letterMapping.early : letterMapping.late;
+
+  return {
+    code: groupCode,
+    category: matchedGroup.category,
+    description: CLINICAL_GROUP_DESCRIPTIONS[groupCode] || matchedGroup.description,
+    matchedDiagnosis: primaryDiagnosis || undefined,
+    isEarlyTiming,
+    admissionSource,
+  };
 }
 
 /**
@@ -1067,43 +1381,248 @@ function determineFunctionalLevel(functionalScore: number): string {
 }
 
 /**
- * Determine comorbidity adjustment
+ * Determine comorbidity adjustment based on diagnosis interactions
+ * Returns detailed comorbidity information including triggering diagnoses
  */
-function determineComorbidityAdjustment(responseMap: Map<string, string | null>): string {
-  // Based on secondary diagnoses and comorbidity interactions
-  // This is simplified - actual logic involves specific diagnosis combinations
+function determineComorbidityAdjustment(responseMap: Map<string, string | null>): ComorbidityResult {
+  // Get primary diagnosis
+  const primaryDiagnosis = responseMap.get('M1021') || responseMap.get('M1021_PRIMARY_DIAG') || '';
 
-  return 'N'; // None (default)
+  // Get secondary diagnoses from M1023 (typically stored as comma-separated or in multiple fields)
+  const secondaryDiagnosesRaw = responseMap.get('M1023') || responseMap.get('M1023_SECONDARY_DIAG') || '';
+  const secondaryDiagnoses = secondaryDiagnosesRaw
+    .split(/[,;|]/)
+    .map(d => d.trim())
+    .filter(d => d.length > 0);
+
+  // Also check individual secondary diagnosis fields if they exist
+  for (let i = 1; i <= 6; i++) {
+    const diagCode = responseMap.get(`M1023_${i}`) || responseMap.get(`M1023${String.fromCharCode(64 + i)}`);
+    if (diagCode && diagCode.trim()) {
+      secondaryDiagnoses.push(diagCode.trim());
+    }
+  }
+
+  // Check all diagnoses together
+  const allDiagnoses = [primaryDiagnosis, ...secondaryDiagnoses].filter(d => d.length > 0);
+
+  // Look for comorbidity pair matches
+  let bestAdjustment: 'N' | 'L' | 'H' = 'N';
+  let triggeringDiagnoses: string[] = [];
+  let matchedPairDescription: string | undefined;
+
+  for (const pair of COMORBIDITY_PAIRS) {
+    // Check if any diagnosis matches primary pattern
+    let primaryMatched = false;
+    let matchedPrimary = '';
+    for (const pattern of pair.primary) {
+      try {
+        const regex = new RegExp(pattern, 'i');
+        for (const diag of allDiagnoses) {
+          if (regex.test(diag)) {
+            primaryMatched = true;
+            matchedPrimary = diag;
+            break;
+          }
+        }
+        if (primaryMatched) break;
+      } catch {
+        continue;
+      }
+    }
+
+    if (!primaryMatched) continue;
+
+    // Check if any diagnosis matches secondary pattern
+    let secondaryMatched = false;
+    let matchedSecondary = '';
+    for (const pattern of pair.secondary) {
+      try {
+        const regex = new RegExp(pattern, 'i');
+        for (const diag of allDiagnoses) {
+          if (regex.test(diag) && diag !== matchedPrimary) {
+            secondaryMatched = true;
+            matchedSecondary = diag;
+            break;
+          }
+        }
+        if (secondaryMatched) break;
+      } catch {
+        continue;
+      }
+    }
+
+    if (primaryMatched && secondaryMatched) {
+      // Found a comorbidity pair match
+      if (pair.adjustment === 'H' || (pair.adjustment === 'L' && bestAdjustment === 'N')) {
+        bestAdjustment = pair.adjustment;
+        triggeringDiagnoses = [matchedPrimary, matchedSecondary];
+        matchedPairDescription = pair.description;
+      }
+      // If we found a High adjustment, we can stop looking
+      if (bestAdjustment === 'H') break;
+    }
+  }
+
+  return {
+    adjustment: bestAdjustment,
+    description: COMORBIDITY_DESCRIPTIONS[bestAdjustment] ?? 'No Comorbidity Adjustment',
+    triggeringDiagnoses: triggeringDiagnoses.length > 0 ? triggeringDiagnoses : undefined,
+    matchedPairDescription,
+  };
 }
 
 /**
- * Calculate case mix weight
+ * Determine service utilization level for Position 4 of HIPPS code
  */
-function calculateCaseMixWeight(
-  clinicalGrouping: string,
+function determineServiceUtilizationLevel(serviceScore: number): string {
+  // Map service utilization score to level code
+  if (serviceScore >= 20) return 'E'; // Very High
+  if (serviceScore >= 14) return 'D'; // High
+  if (serviceScore >= 10) return 'C'; // Moderate
+  if (serviceScore >= 6) return 'B'; // Low
+  return 'A'; // Minimal
+}
+
+/**
+ * Determine admission/timing code for Position 5 of HIPPS code
+ */
+function determineAdmissionTimingCode(
+  admissionSource: 'institutional' | 'community',
+  isEarlyTiming: boolean
+): string {
+  // Position 5 encodes admission source + timing
+  // 1 = Community, Early
+  // 2 = Community, Late
+  // 3 = Institutional, Early
+  // 4 = Institutional, Late
+  if (admissionSource === 'community') {
+    return isEarlyTiming ? '1' : '2';
+  } else {
+    return isEarlyTiming ? '3' : '4';
+  }
+}
+
+/**
+ * Generate proper 5-character HIPPS code
+ */
+function generateHIPPSCode(
+  clinicalGroupCode: string,
   functionalLevel: string,
-  comorbidityAdjustment: string
-): number {
-  // Case mix weights are published by CMS annually
-  // This is a simplified placeholder
-  const baseWeights: Record<string, number> = {
-    A: 1.0, B: 0.9, C: 1.1, D: 1.2, E: 1.3,
-    F: 1.4, G: 1.5, H: 1.6, I: 1.7, J: 1.8,
+  comorbidityAdjustment: string,
+  serviceUtilizationLevel: string,
+  admissionTimingCode: string
+): string {
+  return `${clinicalGroupCode}${functionalLevel}${comorbidityAdjustment}${serviceUtilizationLevel}${admissionTimingCode}`;
+}
+
+/**
+ * Generate HIPPS code breakdown with descriptions
+ */
+function generateHIPPSBreakdown(
+  clinicalGroupCode: string,
+  functionalLevel: string,
+  comorbidityAdjustment: string,
+  serviceUtilizationLevel: string,
+  admissionTimingCode: string
+): HIPPSCodeBreakdown {
+  const serviceLevel = SERVICE_UTILIZATION_LEVELS.find(l => l.code === serviceUtilizationLevel);
+
+  const admissionTimingDescriptions: Record<string, string> = {
+    '1': 'Community admission, Early period',
+    '2': 'Community admission, Late period',
+    '3': 'Institutional admission, Early period (within 14 days)',
+    '4': 'Institutional admission, Late period',
   };
 
-  const functionalMultipliers: Record<string, number> = {
-    L: 0.8, M: 1.0, H: 1.3,
+  return {
+    position1: {
+      code: clinicalGroupCode,
+      label: 'Clinical Group',
+      description: CLINICAL_GROUP_DESCRIPTIONS[clinicalGroupCode] || 'Unknown clinical group',
+    },
+    position2: {
+      code: functionalLevel,
+      label: 'Functional Level',
+      description: FUNCTIONAL_LEVEL_DESCRIPTIONS[functionalLevel] || 'Unknown functional level',
+    },
+    position3: {
+      code: comorbidityAdjustment,
+      label: 'Comorbidity',
+      description: COMORBIDITY_DESCRIPTIONS[comorbidityAdjustment] || 'Unknown comorbidity adjustment',
+    },
+    position4: {
+      code: serviceUtilizationLevel,
+      label: 'Service Utilization',
+      description: serviceLevel?.description || 'Unknown service utilization level',
+    },
+    position5: {
+      code: admissionTimingCode,
+      label: 'Admission/Timing',
+      description: admissionTimingDescriptions[admissionTimingCode] || 'Unknown admission timing',
+    },
+  };
+}
+
+/**
+ * Generate optimization suggestions based on assessment data
+ */
+function generateOptimizationSuggestions(
+  responseMap: Map<string, string | null>,
+  clinicalGroupCode: string,
+  functionalLevel: string,
+  comorbidityAdjustment: string,
+  functionalScore: number
+): OptimizationSuggestion[] {
+  const suggestions: OptimizationSuggestion[] = [];
+
+  // Build context for optimization rules
+  const primaryDiagnosis = responseMap.get('M1021') || responseMap.get('M1021_PRIMARY_DIAG') || undefined;
+  const secondaryDiagnosesRaw = responseMap.get('M1023') || responseMap.get('M1023_SECONDARY_DIAG') || '';
+  const secondaryDiagnoses = secondaryDiagnosesRaw
+    .split(/[,;|]/)
+    .map(d => d.trim())
+    .filter(d => d.length > 0);
+
+  const admissionSource = responseMap.get('M1000');
+  const hasWoundCare = responseMap.get('M1300') !== '0' && responseMap.get('M1300') !== null;
+  const hasTherapyNeed = responseMap.get('M2200') === '1';
+
+  const context: OptimizationContext = {
+    clinicalGroup: clinicalGroupCode,
+    functionalLevel,
+    comorbidityAdjustment,
+    primaryDiagnosis,
+    secondaryDiagnoses,
+    functionalScore,
+    admissionSource: admissionSource || undefined,
+    hasWoundCare,
+    hasTherapyNeed,
   };
 
-  const comorbidityMultipliers: Record<string, number> = {
-    N: 1.0, L: 1.1, H: 1.2,
-  };
+  // Evaluate each optimization rule
+  for (const rule of OPTIMIZATION_RULES) {
+    try {
+      if (rule.condition(context)) {
+        suggestions.push({
+          id: rule.id,
+          suggestion: rule.suggestion,
+          priority: rule.priority,
+          category: rule.category,
+          potentialImpact: rule.potentialImpact,
+        });
+      }
+    } catch {
+      // Skip rules that fail to evaluate
+      continue;
+    }
+  }
 
-  const baseWeight = baseWeights[clinicalGrouping] || 1.0;
-  const funcMult = functionalMultipliers[functionalLevel] || 1.0;
-  const comorbMult = comorbidityMultipliers[comorbidityAdjustment] || 1.0;
+  // Sort by priority (high first)
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  suggestions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 
-  return Math.round(baseWeight * funcMult * comorbMult * 1000) / 1000;
+  return suggestions;
 }
 
 export default {
@@ -1117,5 +1636,7 @@ export default {
   lockAssessment,
   validateAssessment,
   calculateHippsCode,
+  calculateEnhancedHippsCode,
+  getHippsDetails,
   getQuestionLibrary,
 };

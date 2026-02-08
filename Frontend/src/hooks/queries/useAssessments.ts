@@ -18,6 +18,8 @@ import type {
   SubmitForReviewRequest,
   ReviewAssessmentRequest,
   PaginatedResponse,
+  HIPPSDetailsResponse,
+  HIPPSDetailsOptions,
 } from '@typedefs/index';
 
 /**
@@ -192,6 +194,41 @@ export function useCalculateScore(id: string) {
     {
       onSuccess: () => {
         queryClient.invalidateQueries(queryKeys.assessments.detail(id));
+      },
+    }
+  );
+}
+
+/**
+ * Hook to get detailed HIPPS information
+ */
+export function useHippsDetails(id: string | undefined, options?: HIPPSDetailsOptions) {
+  return useQuery<HIPPSDetailsResponse, Error>(
+    ['hipps', id, options],
+    () => oasisService.getHippsDetails(id!, options),
+    {
+      enabled: !!id,
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    }
+  );
+}
+
+/**
+ * Hook to calculate enhanced HIPPS score with breakdown
+ */
+export function useCalculateEnhancedScore(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    HIPPSDetailsResponse,
+    Error,
+    { includeOptimizations?: boolean; wageIndex?: number }
+  >(
+    (options) => oasisService.calculateEnhancedScore(id, options),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(queryKeys.assessments.detail(id));
+        queryClient.invalidateQueries(['hipps', id]);
       },
     }
   );

@@ -835,4 +835,52 @@ router.post(
   oasisController.calculateScore
 );
 
+/**
+ * @route   GET /api/oasis/assessments/:id/hipps
+ * @desc    Get detailed HIPPS code information with breakdown and reimbursement estimate
+ * @access  Private - Clinical staff only
+ * @query   includeOptimizations - If 'true', include optimization suggestions (supervisors only)
+ * @query   wageIndex - Optional wage index for reimbursement calculation (default: 1.0)
+ * @query   recalculate - If 'true', recalculate HIPPS code instead of using cached value
+ */
+router.get(
+  '/assessments/:id/hipps',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+    UserRole.BILLING,
+    UserRole.READONLY,
+  ]),
+  oasisController.getHippsDetails
+);
+
+/**
+ * @route   POST /api/oasis/assessments/:id/calculate-hipps
+ * @desc    Calculate enhanced HIPPS code with full breakdown and optimization suggestions
+ * @access  Private - Clinical staff only
+ * @body    includeOptimizations - If true, include optimization suggestions (supervisors only)
+ * @body    wageIndex - Optional wage index for reimbursement calculation
+ */
+router.post(
+  '/assessments/:id/calculate-hipps',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+    UserRole.BILLING,
+  ]),
+  oasisController.calculateEnhancedScore
+);
+
 export default router;

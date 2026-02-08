@@ -157,8 +157,103 @@ export interface ScoringResult {
   hippsCode?: string;
   clinicalGrouping?: string;
   functionalLevel?: string;
-  comorbidityAdjustment?: number;
+  comorbidityAdjustment?: string;
   caseMixWeight?: number;
+}
+
+// HIPPS Code position breakdown
+export interface HIPPSCodePosition {
+  code: string;
+  label: string;
+  description: string;
+}
+
+// Full HIPPS code breakdown
+export interface HIPPSCodeBreakdown {
+  position1: HIPPSCodePosition;
+  position2: HIPPSCodePosition;
+  position3: HIPPSCodePosition;
+  position4: HIPPSCodePosition;
+  position5: HIPPSCodePosition;
+}
+
+// Clinical grouping details
+export interface ClinicalGroupingDetails {
+  code: string;
+  category: string;
+  description: string;
+  matchedDiagnosis?: string;
+  isEarlyTiming: boolean;
+  admissionSource: 'institutional' | 'community';
+}
+
+// Comorbidity details
+export interface ComorbidityDetails {
+  adjustment: 'N' | 'L' | 'H';
+  description: string;
+  triggeringDiagnoses?: string[];
+  matchedPairDescription?: string;
+}
+
+// Reimbursement estimate
+export interface ReimbursementEstimate {
+  baseAmount: number;
+  wageAdjustedAmount: number;
+  totalEstimate: number;
+  periodDays: 30 | 60;
+  wageIndex: number;
+  disclaimer: string;
+}
+
+// Optimization suggestion
+export interface OptimizationSuggestion {
+  id: string;
+  suggestion: string;
+  priority: 'high' | 'medium' | 'low';
+  category: 'documentation' | 'clinical' | 'coding';
+  potentialImpact: string;
+}
+
+// Enhanced scoring result with full HIPPS details
+export interface EnhancedScoringResult extends ScoringResult {
+  hippsBreakdown: HIPPSCodeBreakdown;
+  clinicalGroupingDetails: ClinicalGroupingDetails;
+  comorbidityDetails: ComorbidityDetails;
+  estimatedReimbursement: ReimbursementEstimate;
+  optimizationSuggestions?: OptimizationSuggestion[];
+  validationWarnings?: string[];
+  functionalScore?: number;
+  clinicalScore?: number;
+  serviceUtilizationScore?: number;
+  calculatedAt?: string;
+  calculationVersion?: string;
+}
+
+// HIPPS details API response
+export interface HIPPSDetailsResponse {
+  assessmentId: string;
+  hippsCode: string;
+  version: string;
+  calculatedAt: string;
+  breakdown: HIPPSCodeBreakdown;
+  scores: {
+    functionalScore: number;
+    clinicalScore: number;
+    serviceUtilizationScore: number;
+    caseMixWeight: number;
+  };
+  clinicalGrouping: ClinicalGroupingDetails;
+  comorbidity: ComorbidityDetails;
+  reimbursement: ReimbursementEstimate;
+  optimizationSuggestions?: OptimizationSuggestion[];
+  validationWarnings?: string[];
+}
+
+// Options for HIPPS details request
+export interface HIPPSDetailsOptions {
+  includeOptimizations?: boolean;
+  wageIndex?: number;
+  recalculate?: boolean;
 }
 
 // Patient summary for assessment display

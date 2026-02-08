@@ -17,6 +17,8 @@ import type {
   QuestionLibraryParams,
   PaginatedResponse,
   ScoringResult,
+  HIPPSDetailsResponse,
+  HIPPSDetailsOptions,
 } from '@typedefs/index';
 
 // Response types for create/update
@@ -159,6 +161,44 @@ export const oasisService = {
    */
   async deleteAssessment(id: string): Promise<void> {
     await apiClient.delete(`/oasis/assessments/${id}`);
+  },
+
+  /**
+   * Get detailed HIPPS code information with breakdown and reimbursement
+   */
+  async getHippsDetails(
+    id: string,
+    options?: HIPPSDetailsOptions
+  ): Promise<HIPPSDetailsResponse> {
+    const params: Record<string, string> = {};
+    if (options?.includeOptimizations) {
+      params.includeOptimizations = 'true';
+    }
+    if (options?.wageIndex) {
+      params.wageIndex = options.wageIndex.toString();
+    }
+    if (options?.recalculate) {
+      params.recalculate = 'true';
+    }
+    const response = await apiClient.get<HIPPSDetailsResponse>(
+      `/oasis/assessments/${id}/hipps`,
+      { params }
+    );
+    return response.data;
+  },
+
+  /**
+   * Calculate enhanced HIPPS score with full breakdown
+   */
+  async calculateEnhancedScore(
+    id: string,
+    options?: { includeOptimizations?: boolean; wageIndex?: number }
+  ): Promise<HIPPSDetailsResponse> {
+    const response = await apiClient.post<HIPPSDetailsResponse>(
+      `/oasis/assessments/${id}/calculate-hipps`,
+      options
+    );
+    return response.data;
   },
 };
 
