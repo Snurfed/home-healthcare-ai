@@ -21,7 +21,7 @@ import { oasisExtractionService, OasisFieldMapping as ExtractedOasisField } from
 
 const UPLOAD_DIR = process.env.VOICE_UPLOAD_DIR || './uploads/voice';
 const MAX_AUDIO_SIZE = parseInt(process.env.MAX_AUDIO_SIZE || '52428800', 10); // 50MB default
-const DEFAULT_PROVIDER = (process.env.DEFAULT_TRANSCRIPTION_PROVIDER || 'google') as TranscriptionProvider;
+const DEFAULT_PROVIDER = TranscriptionProvider.OPENAI; // Using OpenAI Whisper for transcription
 const SUPPORTED_AUDIO_TYPES = [
   'audio/wav',
   'audio/wave',
