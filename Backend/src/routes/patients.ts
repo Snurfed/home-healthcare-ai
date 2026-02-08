@@ -318,4 +318,27 @@ router.delete(
   patientController.deletePatient
 );
 
+/**
+ * @route   GET /api/patients/:id/assessment-timeline
+ * @desc    Get patient assessment timeline grouped by 60-day episodes
+ * @access  Private - Clinical staff with patient access
+ */
+router.get(
+  '/:id/assessment-timeline',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.HOME_HEALTH_AIDE,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+    UserRole.BILLING,
+    UserRole.READONLY,
+  ]),
+  patientController.getPatientAssessmentTimeline
+);
+
 export default router;

@@ -1187,6 +1187,82 @@ export async function deletePatient(
 }
 
 // ===========================================
+// ASSESSMENT TIMELINE
+// ===========================================
+
+/**
+ * Get patient assessment timeline grouped by 60-day episodes
+ * GET /api/patients/:id/assessment-timeline
+ */
+export async function getPatientAssessmentTimeline(
+  req: AuthenticatedRequest & { params: { id: string } },
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+    }
+
+    const { id } = req.params;
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid patient ID format',
+      });
+    }
+
+    // Check access permissions
+    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, id);
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to access this patient',
+      });
+    }
+
+    // Get timeline from OASIS service
+    const { getPatientAssessmentTimeline: getTimeline } = await import('../services/oasis.service');
+    const timeline = await getTimeline(id);
+
+    // Audit log for PHI access
+    await createPHIAuditLog(
+      AuditAction.READ,
+      req.user.id,
+      req.user.email,
+      req.user.role,
+      id,
+      `Assessment Timeline`,
+      true,
+      req,
+      {
+        description: `Viewed assessment timeline for patient`,
+        phiFields: ['assessment_data'],
+      }
+    );
+
+    return res.status(200).json({
+      patientId: id,
+      timeline,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Patient not found') {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Patient not found',
+      });
+    }
+    next(error);
+  }
+}
+
+// ===========================================
 // EXPORTS
 // ===========================================
 
@@ -1196,4 +1272,5 @@ export default {
   createPatient,
   updatePatient,
   deletePatient,
+  getPatientAssessmentTimeline,
 };

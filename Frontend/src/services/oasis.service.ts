@@ -19,6 +19,7 @@ import type {
   ScoringResult,
   HIPPSDetailsResponse,
   HIPPSDetailsOptions,
+  ValidationResponse,
 } from '@typedefs/index';
 
 // Response types for create/update
@@ -197,6 +198,16 @@ export const oasisService = {
     const response = await apiClient.post<HIPPSDetailsResponse>(
       `/oasis/assessments/${id}/calculate-hipps`,
       options
+    );
+    return response.data;
+  },
+
+  /**
+   * Validate an assessment before submission
+   */
+  async validateAssessment(id: string): Promise<ValidationResponse> {
+    const response = await apiClient.get<ValidationResponse>(
+      `/oasis/assessments/${id}/validate`
     );
     return response.data;
   },

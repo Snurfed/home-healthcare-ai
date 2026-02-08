@@ -1625,6 +1625,101 @@ function generateOptimizationSuggestions(
   return suggestions;
 }
 
+// ===========================================
+// PATIENT ASSESSMENT TIMELINE
+// ===========================================
+
+export interface AssessmentTimelineEpisode {
+  id: string;
+  episodeNumber: number;
+  startDate: Date;
+  endDate: Date | null;
+  status: string;
+  assessments: AssessmentTimelineItem[];
+}
+
+export interface AssessmentTimelineItem {
+  id: string;
+  assessmentType: AssessmentType;
+  status: AssessmentStatus;
+  completionPercentage: number;
+  hippsCode: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  submittedAt: Date | null;
+  approvedAt: Date | null;
+  clinician: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
+/**
+ * Get patient assessment timeline grouped by 60-day episodes
+ */
+export async function getPatientAssessmentTimeline(
+  patientId: string
+): Promise<AssessmentTimelineEpisode[]> {
+  // Verify patient exists
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, deletedAt: null },
+  });
+
+  if (!patient) {
+    throw new Error('Patient not found');
+  }
+
+  // Get all episodes with their assessments
+  const episodes = await prisma.episode.findMany({
+    where: {
+      patientId,
+      deletedAt: null,
+    },
+    orderBy: { startDate: 'desc' },
+    include: {
+      assessments: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          clinician: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Map to timeline format
+  return episodes.map((episode) => ({
+    id: episode.id,
+    episodeNumber: episode.episodeNumber,
+    startDate: episode.startDate,
+    endDate: episode.endDate,
+    status: episode.status,
+    assessments: episode.assessments.map((assessment) => ({
+      id: assessment.id,
+      assessmentType: assessment.assessmentType,
+      status: assessment.status,
+      completionPercentage: assessment.completionPercentage,
+      hippsCode: assessment.hippsCode,
+      createdAt: assessment.createdAt,
+      updatedAt: assessment.updatedAt,
+      submittedAt: assessment.submittedAt,
+      approvedAt: assessment.approvedAt,
+      clinician: {
+        id: assessment.clinician.id,
+        firstName: assessment.clinician.firstName,
+        lastName: assessment.clinician.lastName,
+      },
+    })),
+  }));
+}
+
 export default {
   createAssessment,
   getAssessment,
@@ -1639,4 +1734,5 @@ export default {
   calculateEnhancedHippsCode,
   getHippsDetails,
   getQuestionLibrary,
+  getPatientAssessmentTimeline,
 };

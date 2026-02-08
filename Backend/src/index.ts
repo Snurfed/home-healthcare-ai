@@ -14,6 +14,7 @@ import episodeRoutes from './routes/episodes';
 import voiceRoutes from './routes/voice';
 import documentRoutes from './routes/documents';
 import oasisRoutes from './routes/oasis';
+import supervisorRoutes from './routes/supervisor';
 
 // Initialize Express app
 const app: Application = express();
@@ -136,6 +137,9 @@ app.use('/api/documents', documentRoutes);
 
 // OASIS assessment routes
 app.use('/api/oasis', oasisRoutes);
+
+// Supervisor dashboard routes
+app.use('/api/supervisor', supervisorRoutes);
 
 // ===========================================
 // 404 HANDLER

@@ -4,6 +4,7 @@ import { Suspense, lazy } from 'react';
 // Lazy-loaded pages
 const LoginPage = lazy(() => import('@pages/auth/LoginPage'));
 const DashboardPage = lazy(() => import('@pages/dashboard/DashboardPage'));
+const SupervisorDashboardPage = lazy(() => import('@pages/supervisor/SupervisorDashboardPage'));
 const AssessmentListPage = lazy(() => import('@pages/oasis/AssessmentListPage'));
 const CreateAssessmentPage = lazy(() => import('@pages/oasis/CreateAssessmentPage'));
 const AssessmentWizardPage = lazy(() => import('@pages/oasis/AssessmentWizardPage'));
@@ -47,6 +48,16 @@ function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
+
+          {/* Supervisor Dashboard - role protected */}
+          <Route
+            path="supervisor"
+            element={
+              <RoleGuard allowedRoles={['ADMIN', 'SUPERVISOR']}>
+                <SupervisorDashboardPage />
+              </RoleGuard>
+            }
+          />
 
           {/* OASIS Assessment routes */}
           <Route path="assessments">

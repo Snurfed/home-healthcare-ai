@@ -20,6 +20,7 @@ import type {
   PaginatedResponse,
   HIPPSDetailsResponse,
   HIPPSDetailsOptions,
+  ValidationResponse,
 } from '@typedefs/index';
 
 /**
@@ -231,5 +232,14 @@ export function useCalculateEnhancedScore(id: string) {
         queryClient.invalidateQueries(['hipps', id]);
       },
     }
+  );
+}
+
+/**
+ * Hook to validate an assessment before submission
+ */
+export function useValidateAssessment(id: string) {
+  return useMutation<ValidationResponse, Error>(
+    () => oasisService.validateAssessment(id)
   );
 }

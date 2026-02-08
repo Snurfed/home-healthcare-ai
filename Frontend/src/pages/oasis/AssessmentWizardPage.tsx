@@ -21,12 +21,14 @@ import { OASIS_SECTIONS, STATUS_CONFIG } from '@typedefs/oasis.types';
 import SectionStepper from '@components/oasis/SectionStepper';
 import SectionContent from '@components/oasis/SectionContent';
 import SubmissionValidation from '@components/oasis/SubmissionValidation';
+import ValidationModal from '@components/oasis/ValidationModal';
 
 export default function AssessmentWizardPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showReview, setShowReview] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
 
   const { data: assessment, isLoading, error } = useAssessment(id);
   // Fetch questions filtered by assessment type for better performance
@@ -63,18 +65,16 @@ export default function AssessmentWizardPage() {
     }
   }, [id, queryClient]);
 
-  // Handle submission
-  const handleSubmit = useCallback(async () => {
-    try {
-      await submitForReview.mutateAsync({
-        attestation: true,
-        notes: 'Submitted via assessment wizard',
-      });
-      navigate(`/assessments/${id}`);
-    } catch (err) {
-      // Error handled by mutation
-    }
-  }, [submitForReview, navigate, id]);
+  // Handle submission - now opens validation modal instead of direct submit
+  const handleSubmit = useCallback(() => {
+    setShowValidationModal(true);
+  }, []);
+
+  // Handle successful submission from validation modal
+  const handleSubmitSuccess = useCallback(() => {
+    setShowValidationModal(false);
+    navigate(`/assessments/${id}`);
+  }, [navigate, id]);
 
   // Handle fix error - navigate to the section containing the error
   const handleFixError = useCallback((itemCode: string) => {
@@ -332,6 +332,15 @@ export default function AssessmentWizardPage() {
           <span>Review</span>
         </button>
       </div>
+
+      {/* Validation Modal */}
+      <ValidationModal
+        isOpen={showValidationModal}
+        onClose={() => setShowValidationModal(false)}
+        assessmentId={id || ''}
+        onFixError={handleFixError}
+        onSubmitSuccess={handleSubmitSuccess}
+      />
     </div>
   );
 }

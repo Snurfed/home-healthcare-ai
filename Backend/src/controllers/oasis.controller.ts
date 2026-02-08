@@ -1688,6 +1688,99 @@ export async function calculateEnhancedScore(
   }
 }
 
+/**
+ * Validate an assessment before submission
+ * GET /api/oasis/assessments/:id/validate
+ */
+export async function validateAssessment(
+  req: AuthenticatedRequest & { params: { id: string } },
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+    }
+
+    const { id } = req.params;
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid assessment ID format',
+      });
+    }
+
+    const assessment = await prisma.oasisAssessment.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        patientId: true,
+        clinicianId: true,
+        reviewerId: true,
+        assessmentType: true,
+        status: true,
+        completionPercentage: true,
+      },
+    });
+
+    if (!assessment || assessment.status === AssessmentStatus.LOCKED) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Assessment not found',
+      });
+    }
+
+    // Check access
+    const hasAccess = await checkAssessmentAccess(
+      req.user.id,
+      req.user.role,
+      { clinicianId: assessment.clinicianId, patientId: assessment.patientId, reviewerId: assessment.reviewerId }
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to access this assessment',
+      });
+    }
+
+    // Get validation errors
+    const validationErrors = await validateAssessmentResponses(id);
+    const errors = validationErrors.filter(e => e.severity === 'error');
+    const warnings = validationErrors.filter(e => e.severity === 'warning');
+
+    // Get responses count for completion check
+    const responses = await prisma.oasisResponse.findMany({
+      where: { assessmentId: id },
+      select: { itemCode: true, responseValue: true, responseCode: true },
+    });
+
+    const completedItems = responses.filter(r => r.responseValue || r.responseCode).length;
+
+    // Determine if ready for submission
+    const isValid = errors.length === 0 && assessment.completionPercentage >= 80;
+
+    return res.status(200).json({
+      assessmentId: id,
+      isValid,
+      completionPercentage: assessment.completionPercentage,
+      completedItems,
+      errors,
+      warnings,
+      canSubmit: isValid && [AssessmentStatus.IN_PROGRESS, AssessmentStatus.NEEDS_CORRECTION].includes(assessment.status),
+      status: assessment.status,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 // ===========================================
 // EXPORTS
 // ===========================================
@@ -1705,4 +1798,5 @@ export default {
   deleteAssessment,
   getHippsDetails,
   calculateEnhancedScore,
+  validateAssessment,
 };

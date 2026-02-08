@@ -99,8 +99,51 @@ export async function createPatient(data: CreatePatientRequest): Promise<Patient
   return response.data.patient;
 }
 
+// Assessment timeline types
+export interface AssessmentTimelineItem {
+  id: string;
+  assessmentType: string;
+  status: string;
+  completionPercentage: number;
+  hippsCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  clinician: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
+export interface AssessmentTimelineEpisode {
+  id: string;
+  episodeNumber: number;
+  startDate: string;
+  endDate: string | null;
+  status: string;
+  assessments: AssessmentTimelineItem[];
+}
+
+export interface AssessmentTimelineResponse {
+  patientId: string;
+  timeline: AssessmentTimelineEpisode[];
+}
+
+/**
+ * Get patient assessment timeline grouped by 60-day episodes
+ */
+export async function getAssessmentTimeline(id: string): Promise<AssessmentTimelineResponse> {
+  const response = await apiClient.get<AssessmentTimelineResponse>(
+    `/patients/${id}/assessment-timeline`
+  );
+  return response.data;
+}
+
 export default {
   searchPatients,
   getPatient,
   createPatient,
+  getAssessmentTimeline,
 };

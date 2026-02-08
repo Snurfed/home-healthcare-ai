@@ -56,6 +56,7 @@ export type {
   ReviewAssessmentRequest,
   ListAssessmentsParams,
   QuestionLibraryParams,
+  ValidationResponse,
 } from './oasis.types';
 
 export {

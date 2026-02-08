@@ -450,3 +450,15 @@ export const STATUS_CONFIG: Record<AssessmentStatus, { label: string; color: str
   SUBMITTED: { label: 'Submitted', color: 'purple' },
   LOCKED: { label: 'Locked', color: 'gray' },
 };
+
+// Validation response from API
+export interface ValidationResponse {
+  assessmentId: string;
+  isValid: boolean;
+  completionPercentage: number;
+  completedItems: number;
+  errors: ValidationError[];
+  warnings: ValidationError[];
+  canSubmit: boolean;
+  status: AssessmentStatus;
+}

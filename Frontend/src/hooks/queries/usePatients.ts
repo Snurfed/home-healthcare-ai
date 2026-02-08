@@ -52,3 +52,16 @@ export function useCreatePatient() {
     }
   );
 }
+
+/**
+ * Hook to get patient assessment timeline
+ */
+export function usePatientAssessmentTimeline(patientId: string | undefined) {
+  return useQuery(
+    ['patients', 'timeline', patientId],
+    () => patientService.getAssessmentTimeline(patientId!),
+    {
+      enabled: !!patientId,
+    }
+  );
+}

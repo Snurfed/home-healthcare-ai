@@ -883,4 +883,24 @@ router.post(
   oasisController.calculateEnhancedScore
 );
 
+/**
+ * @route   GET /api/oasis/assessments/:id/validate
+ * @desc    Validate an assessment before submission
+ * @access  Private - Clinical staff only
+ */
+router.get(
+  '/assessments/:id/validate',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  oasisController.validateAssessment
+);
+
 export default router;

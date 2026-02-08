@@ -8,6 +8,7 @@ import { Link, useParams } from 'react-router-dom';
 import { usePatient, usePatientEpisodes, useAssessments } from '@hooks/index';
 import { Button, Badge, Spinner, Alert } from '@components/common';
 import { STATUS_CONFIG, ASSESSMENT_TYPE_LABELS } from '@typedefs/oasis.types';
+import AssessmentTimeline from '@components/patients/AssessmentTimeline';
 
 // Patient status configuration
 const PATIENT_STATUS_CONFIG = {
@@ -276,6 +277,9 @@ export default function PatientDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Assessment Timeline */}
+          <AssessmentTimeline patientId={id!} />
         </div>
 
         {/* Sidebar */}
