@@ -84,10 +84,11 @@ function PatientSearchStep({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Search all non-discharged patients (ACTIVE and PENDING)
+  // Don't filter by status to allow assessments for patients in any active state
   const { data, isLoading } = usePatientSearch({
-    search: debouncedQuery,
+    search: debouncedQuery || undefined,
     limit: 10,
-    status: 'ACTIVE',
   });
 
   const formatDate = (dateStr: string) => {

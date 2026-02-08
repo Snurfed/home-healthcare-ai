@@ -36,23 +36,30 @@ export type ResponseType =
 // Source of response data
 export type SourceType = 'manual' | 'voice' | 'ocr' | 'emr';
 
-// OASIS section identifiers
+// OASIS-E1 section identifiers (matches database section values)
 export type OASISSectionId =
+  | 'administrative'
   | 'clinical_record'
   | 'patient_tracking'
   | 'patient_history'
-  | 'living_situation'
+  | 'hearing_speech_vision'
   | 'sensory_status'
-  | 'pain_assessment'
+  | 'cognitive'
+  | 'mood'
+  | 'behavior'
+  | 'preferences'
   | 'integumentary_status'
+  | 'skin_conditions'
   | 'respiratory_status'
   | 'cardiac_status'
   | 'elimination_status'
   | 'neuro_emotional'
+  | 'health_conditions'
+  | 'swallowing_nutritional'
   | 'functional_abilities'
-  | 'medication_management'
-  | 'care_management'
-  | 'therapy_need';
+  | 'medications'
+  | 'special_treatments'
+  | 'participation';
 
 // Section configuration
 export interface OASISSection {
@@ -301,23 +308,30 @@ export interface QuestionLibraryParams {
   search?: string;
 }
 
-// Section configuration data
+// Section configuration data - OASIS-E1 (matches database section values)
 export const OASIS_SECTIONS: OASISSection[] = [
-  { id: 'clinical_record', name: 'Clinical Record Items', requiredItems: 12, sortOrder: 1 },
-  { id: 'patient_tracking', name: 'Patient Tracking Sheet', requiredItems: 8, sortOrder: 2 },
-  { id: 'patient_history', name: 'Patient History & Diagnoses', requiredItems: 15, sortOrder: 3 },
-  { id: 'living_situation', name: 'Living Situation', requiredItems: 6, sortOrder: 4 },
-  { id: 'sensory_status', name: 'Sensory Status', requiredItems: 6, sortOrder: 5 },
-  { id: 'pain_assessment', name: 'Pain Assessment', requiredItems: 4, sortOrder: 6 },
-  { id: 'integumentary_status', name: 'Integumentary Status', requiredItems: 14, sortOrder: 7 },
-  { id: 'respiratory_status', name: 'Respiratory Status', requiredItems: 3, sortOrder: 8 },
-  { id: 'cardiac_status', name: 'Cardiac Status', requiredItems: 2, sortOrder: 9 },
-  { id: 'elimination_status', name: 'Elimination Status', requiredItems: 5, sortOrder: 10 },
-  { id: 'neuro_emotional', name: 'Neuro/Emotional/Behavioral', requiredItems: 8, sortOrder: 11 },
-  { id: 'functional_abilities', name: 'Functional Abilities (GG)', requiredItems: 24, sortOrder: 12 },
-  { id: 'medication_management', name: 'Medication Management', requiredItems: 8, sortOrder: 13 },
-  { id: 'care_management', name: 'Care Management', requiredItems: 4, sortOrder: 14 },
-  { id: 'therapy_need', name: 'Therapy Need', requiredItems: 3, sortOrder: 15 },
+  { id: 'administrative', name: 'A. Administrative Information', requiredItems: 11, sortOrder: 1 },
+  { id: 'clinical_record', name: 'Clinical Record Items', requiredItems: 13, sortOrder: 2 },
+  { id: 'patient_tracking', name: 'Patient Tracking', requiredItems: 3, sortOrder: 3 },
+  { id: 'patient_history', name: 'Patient History & Diagnoses', requiredItems: 5, sortOrder: 4 },
+  { id: 'hearing_speech_vision', name: 'B. Hearing, Speech & Vision', requiredItems: 3, sortOrder: 5 },
+  { id: 'sensory_status', name: 'Sensory Status', requiredItems: 6, sortOrder: 6 },
+  { id: 'cognitive', name: 'C. Cognitive Patterns', requiredItems: 16, sortOrder: 7 },
+  { id: 'mood', name: 'D. Mood', requiredItems: 3, sortOrder: 8 },
+  { id: 'behavior', name: 'E. Behavior', requiredItems: 5, sortOrder: 9 },
+  { id: 'preferences', name: 'F. Preferences', requiredItems: 4, sortOrder: 10 },
+  { id: 'functional_abilities', name: 'GG. Functional Abilities', requiredItems: 31, sortOrder: 11 },
+  { id: 'elimination_status', name: 'H. Bladder & Bowel', requiredItems: 4, sortOrder: 12 },
+  { id: 'health_conditions', name: 'J. Health Conditions', requiredItems: 10, sortOrder: 13 },
+  { id: 'swallowing_nutritional', name: 'K. Swallowing/Nutritional', requiredItems: 7, sortOrder: 14 },
+  { id: 'integumentary_status', name: 'M. Skin Conditions', requiredItems: 8, sortOrder: 15 },
+  { id: 'skin_conditions', name: 'Skin Conditions (Additional)', requiredItems: 5, sortOrder: 16 },
+  { id: 'respiratory_status', name: 'Respiratory Status', requiredItems: 1, sortOrder: 17 },
+  { id: 'cardiac_status', name: 'Cardiac Status', requiredItems: 1, sortOrder: 18 },
+  { id: 'neuro_emotional', name: 'Neuro/Emotional/Behavioral', requiredItems: 6, sortOrder: 19 },
+  { id: 'medications', name: 'N. Medications', requiredItems: 5, sortOrder: 20 },
+  { id: 'special_treatments', name: 'O. Special Treatments', requiredItems: 12, sortOrder: 21 },
+  { id: 'participation', name: 'Q. Participation', requiredItems: 4, sortOrder: 22 },
 ];
 
 // Assessment type labels
