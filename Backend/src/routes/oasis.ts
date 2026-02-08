@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as oasisController from '../controllers/oasis.controller';
+import * as suggestionController from '../controllers/suggestion.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { UserRole } from '../generated/prisma';
 
@@ -901,6 +902,90 @@ router.get(
     UserRole.MEDICAL_SOCIAL_WORKER,
   ]),
   oasisController.validateAssessment
+);
+
+// ===========================================
+// SMART SUGGESTIONS ROUTES
+// ===========================================
+
+/**
+ * @route   POST /api/oasis/assessments/:id/suggestions
+ * @desc    Get real-time suggestions for a specific question
+ * @access  Private - Clinical staff only
+ * @body    questionCode - The OASIS question code being answered
+ * @body    currentValue - The current value of the question
+ * @body    allResponses - Object with all current assessment responses
+ */
+router.post(
+  '/assessments/:id/suggestions',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  suggestionController.getSuggestions
+);
+
+/**
+ * @route   GET /api/oasis/assessments/:id/suggestions
+ * @desc    Get all active suggestions for an assessment
+ * @access  Private - Clinical staff only
+ */
+router.get(
+  '/assessments/:id/suggestions',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  suggestionController.getAllSuggestions
+);
+
+/**
+ * @route   GET /api/oasis/assessments/:id/suggestions/summary
+ * @desc    Get suggestions summary with financial opportunity totals
+ * @access  Private - Supervisors and billing only (contains revenue info)
+ */
+router.get(
+  '/assessments/:id/suggestions/summary',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.BILLING,
+  ]),
+  suggestionController.getSuggestionsSummary
+);
+
+/**
+ * @route   POST /api/oasis/assessments/:id/suggestions/:suggestionId/dismiss
+ * @desc    Dismiss a suggestion (mark as addressed, not applicable, or reviewed)
+ * @access  Private - Clinical staff only
+ * @body    reason - 'addressed' | 'not_applicable' | 'reviewed'
+ */
+router.post(
+  '/assessments/:id/suggestions/:suggestionId/dismiss',
+  authenticate,
+  authorize([
+    UserRole.ADMIN,
+    UserRole.SUPERVISOR,
+    UserRole.NURSE,
+    UserRole.THERAPIST_PT,
+    UserRole.THERAPIST_OT,
+    UserRole.THERAPIST_ST,
+    UserRole.MEDICAL_SOCIAL_WORKER,
+  ]),
+  suggestionController.dismissSuggestion
 );
 
 export default router;

@@ -751,6 +751,24 @@ model OasisResponse {
 }
 
 // ===========================================
+// SUGGESTION DISMISSALS
+// ===========================================
+
+model SuggestionDismissal {
+  id            String   @id @default(uuid())
+  assessmentId  String
+  suggestionId  String   // Format: ruleId-questionCode
+  questionCode  String
+  reason        String   // 'addressed' | 'not_applicable' | 'reviewed'
+  dismissedAt   DateTime @default(now())
+  dismissedBy   String   // User ID who dismissed
+
+  @@unique([assessmentId, suggestionId])
+  @@index([assessmentId])
+  @@map("suggestion_dismissals")
+}
+
+// ===========================================
 // DOCUMENTS
 // ===========================================
 

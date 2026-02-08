@@ -1,10 +1,11 @@
 /**
  * Question Renderer Component
  *
- * Renders appropriate input based on question type
+ * Renders appropriate input based on question type with real-time
+ * smart suggestions and optimization guidance.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import {
   Input,
   RadioGroup,
@@ -13,7 +14,15 @@ import {
   ICD10Autocomplete,
   Badge,
 } from '@components/common';
-import type { OASISQuestion, OASISResponse, QuestionOption, ValidationRule } from '@typedefs/index';
+import SmartSuggestions from './SmartSuggestions';
+import type {
+  OASISQuestion,
+  OASISResponse,
+  QuestionOption,
+  ValidationRule,
+  QuestionSuggestion,
+  DismissalReason,
+} from '@typedefs/index';
 import type { QuestionValidationError } from '@utils/validation';
 
 interface QuestionRendererProps {
@@ -22,6 +31,16 @@ interface QuestionRendererProps {
   onChange: (response: Partial<OASISResponse>) => void;
   disabled?: boolean;
   error?: QuestionValidationError;
+  /** Suggestions for this question */
+  suggestions?: QuestionSuggestion[];
+  /** Called when a suggestion is dismissed */
+  onDismissSuggestion?: (suggestionId: string, reason: DismissalReason) => void;
+  /** Called to navigate to a related question */
+  onNavigateToQuestion?: (questionCode: string) => void;
+  /** Whether suggestions are loading */
+  suggestionsLoading?: boolean;
+  /** Called when value changes (for triggering suggestion fetch) */
+  onValueChange?: (questionCode: string, value: string | number | null) => void;
 }
 
 export default function QuestionRenderer({
@@ -30,6 +49,11 @@ export default function QuestionRenderer({
   onChange,
   disabled = false,
   error,
+  suggestions = [],
+  onDismissSuggestion,
+  onNavigateToQuestion,
+  suggestionsLoading = false,
+  onValueChange,
 }: QuestionRendererProps) {
   const hasAIConfidence = value?.confidence !== undefined && value.confidence !== null;
   const confidenceLevel =
@@ -62,21 +86,37 @@ export default function QuestionRenderer({
     return { min, max };
   }, [question.responseType, question.validationRules]);
 
-  const handleValueChange = (newValue: string | string[] | number | null) => {
-    if (Array.isArray(newValue)) {
-      // Multi-select: store as comma-separated string
-      onChange({
-        responseValue: newValue.join(','),
-        responseCode: newValue.join(','),
-      });
-    } else {
-      onChange({
-        responseValue: typeof newValue === 'string' ? newValue : undefined,
-        responseCode: typeof newValue === 'string' ? newValue : undefined,
-        responseNumeric: typeof newValue === 'number' ? newValue : undefined,
-      });
-    }
-  };
+  const handleValueChange = useCallback(
+    (newValue: string | string[] | number | null) => {
+      if (Array.isArray(newValue)) {
+        // Multi-select: store as comma-separated string
+        const joinedValue = newValue.join(',');
+        onChange({
+          responseValue: joinedValue,
+          responseCode: joinedValue,
+        });
+        // Trigger suggestion fetch
+        onValueChange?.(question.itemCode, joinedValue);
+      } else {
+        onChange({
+          responseValue: typeof newValue === 'string' ? newValue : undefined,
+          responseCode: typeof newValue === 'string' ? newValue : undefined,
+          responseNumeric: typeof newValue === 'number' ? newValue : undefined,
+        });
+        // Trigger suggestion fetch
+        onValueChange?.(question.itemCode, newValue);
+      }
+    },
+    [onChange, onValueChange, question.itemCode]
+  );
+
+  // Handle suggestion dismissal
+  const handleDismissSuggestion = useCallback(
+    (suggestionId: string, reason: DismissalReason) => {
+      onDismissSuggestion?.(suggestionId, reason);
+    },
+    [onDismissSuggestion]
+  );
 
   // Parse multi-select value from comma-separated string
   const multiSelectValue = useMemo(() => {
@@ -272,6 +312,16 @@ export default function QuestionRenderer({
           <span className="font-medium">Voice transcription: </span>
           "{value.sourceText}"
         </div>
+      )}
+
+      {/* Smart Suggestions */}
+      {(suggestions.length > 0 || suggestionsLoading) && (
+        <SmartSuggestions
+          suggestions={suggestions}
+          onDismiss={handleDismissSuggestion}
+          onNavigate={onNavigateToQuestion}
+          isLoading={suggestionsLoading}
+        />
       )}
     </div>
   );

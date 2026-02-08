@@ -6,15 +6,16 @@
  * Applies skip logic to conditionally show/hide questions
  * Validates required questions before section navigation
  * Supports voice input with AI-powered field extraction
+ * Provides real-time smart suggestions for documentation guidance
  */
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
-import { useSkipLogic, useSectionValidation } from '@hooks/index';
+import { useSkipLogic, useSectionValidation, useSuggestions } from '@hooks/index';
 import { Button, Alert, Modal } from '@components/common';
 import QuestionRenderer from './QuestionRenderer';
 import { VoiceRecorder, VoiceSuggestionReview } from '@components/voice';
-import type { OASISSection, OASISAssessment, OASISQuestion } from '@typedefs/index';
+import type { OASISSection, OASISAssessment, OASISQuestion, DismissalReason } from '@typedefs/index';
 import { OASIS_SECTIONS } from '@typedefs/oasis.types';
 import type { VoiceProcessingResult, OasisFieldMapping } from '@services/voice.service';
 
@@ -40,6 +41,19 @@ export default function SectionContent({
   // Voice recording state
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [voiceResults, setVoiceResults] = useState<VoiceProcessingResult['result'] | null>(null);
+
+  // Smart suggestions - only enabled for unlocked assessments
+  const isLocked = assessment.status === 'LOCKED' || assessment.status === 'SUBMITTED';
+  const {
+    fetchSuggestions,
+    dismissSuggestion,
+    getSuggestionsForQuestion,
+    isLoading: suggestionsLoading,
+  } = useSuggestions({
+    assessmentId: assessment.id,
+    debounceMs: 500,
+    enabled: !isLocked,
+  });
 
   // Filter questions for this section
   const sectionQuestions = useMemo(() => {
@@ -145,6 +159,37 @@ export default function SectionContent({
       });
     });
   }, [updateResponse, voiceResults?.transcriptionId]);
+
+  // Handle value change for suggestions
+  const handleValueChangeForSuggestions = useCallback(
+    (questionCode: string, value: string | number | null) => {
+      // Build current responses map for suggestion context
+      const allResponses = { ...assessment.responses, ...draftResponses };
+      fetchSuggestions(questionCode, value, allResponses);
+    },
+    [fetchSuggestions, assessment.responses, draftResponses]
+  );
+
+  // Handle dismissing a suggestion
+  const handleDismissSuggestion = useCallback(
+    (suggestionId: string, reason: DismissalReason) => {
+      dismissSuggestion(suggestionId, reason);
+    },
+    [dismissSuggestion]
+  );
+
+  // Handle navigating to a related question
+  const handleNavigateToQuestion = useCallback((questionCode: string) => {
+    const element = document.getElementById(`question-${questionCode}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Briefly highlight the question
+      element.classList.add('ring-2', 'ring-primary-500');
+      setTimeout(() => {
+        element.classList.remove('ring-2', 'ring-primary-500');
+      }, 2000);
+    }
+  }, []);
 
   return (
     <div className="bg-white rounded-lg shadow-card">
@@ -269,6 +314,11 @@ export default function SectionContent({
                 })
               }
               error={getQuestionError(question.itemCode)}
+              suggestions={getSuggestionsForQuestion(question.itemCode)}
+              onDismissSuggestion={handleDismissSuggestion}
+              onNavigateToQuestion={handleNavigateToQuestion}
+              suggestionsLoading={suggestionsLoading}
+              onValueChange={handleValueChangeForSuggestions}
             />
           ))
         )}

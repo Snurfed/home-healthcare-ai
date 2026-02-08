@@ -54,6 +54,7 @@ export { useAutoSave } from './useAutoSave';
 export { useSkipLogic } from './useSkipLogic';
 export { useSectionValidation } from './useSectionValidation';
 export { useAssessmentValidation } from './useAssessmentValidation';
+export { useSuggestions } from './useSuggestions';
 
 // Voice hooks
 export { useVoiceRecording } from './useVoiceRecording';

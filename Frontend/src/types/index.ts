@@ -89,3 +89,24 @@ export {
   TOKEN_KEYS,
   API_ENDPOINTS,
 } from './api.types';
+
+// Suggestion types
+export type {
+  SuggestionType,
+  SuggestionPriority,
+  FinancialDirection,
+  RelatedQuestion,
+  FinancialImpact,
+  QuestionSuggestion,
+  DismissalReason,
+  SuggestionDismissal,
+  GetSuggestionsRequest,
+  GetSuggestionsResponse,
+  DismissSuggestionRequest,
+  SuggestionsSummary,
+} from './suggestion.types';
+
+export {
+  SUGGESTION_TYPE_CONFIG,
+  SUGGESTION_PRIORITY_CONFIG,
+} from './suggestion.types';
