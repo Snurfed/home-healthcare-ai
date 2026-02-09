@@ -113,10 +113,21 @@ export default function AssessmentWizardPage() {
   }
 
   if (error || !assessment) {
+    // Check if this is a 403 forbidden error (access denied)
+    const isForbidden = error?.message?.includes('403') ||
+                        error?.message?.toLowerCase().includes('access') ||
+                        error?.message?.toLowerCase().includes('forbidden');
+
     return (
       <div className="max-w-2xl mx-auto">
-        <Alert variant="error" title="Error loading assessment">
-          {error?.message || 'Assessment not found'}
+        <Alert
+          variant="error"
+          title={isForbidden ? "Access Denied" : "Error loading assessment"}
+        >
+          {isForbidden
+            ? "You do not have access to this patient. Please contact your supervisor to be assigned to this patient's care team."
+            : (error?.message || 'Assessment not found')
+          }
         </Alert>
         <Link to="/assessments" className="mt-4 inline-block">
           <Button variant="secondary">Back to Assessments</Button>

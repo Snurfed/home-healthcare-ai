@@ -12,7 +12,7 @@
 import 'dotenv/config';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, Prisma, UserRole, UserStatus } from '../src/generated/prisma';
+import { PrismaClient, Prisma, UserRole, UserStatus, VisitType } from '../src/generated/prisma';
 import { allOasisQuestions } from './seed/oasis-questions';
 import * as bcrypt from 'bcryptjs';
 
@@ -173,12 +173,96 @@ async function seedDefaultUsers() {
   console.log(`Users: ${created} created`);
 }
 
+/**
+ * Assign clinicians to all existing patients for development/testing
+ * This ensures nurses and therapists can access patient data
+ */
+async function seedPatientAssignments() {
+  // Only seed in development
+  if (process.env['NODE_ENV'] === 'production') {
+    console.log('Skipping patient assignment seeding in production');
+    return;
+  }
+
+  console.log('Seeding patient assignments...');
+
+  // Get all patients
+  const patients = await prisma.patient.findMany({
+    where: { deletedAt: null },
+    select: { id: true, firstName: true, lastName: true },
+  });
+
+  if (patients.length === 0) {
+    console.log('No patients found to assign clinicians to');
+    return;
+  }
+
+  // Get clinicians who need assignments (non-admin roles)
+  const clinicianRoles = [
+    { email: 'nurse@homehealthai.test', discipline: VisitType.SKILLED_NURSING },
+    { email: 'pt@homehealthai.test', discipline: VisitType.PHYSICAL_THERAPY },
+    { email: 'ot@homehealthai.test', discipline: VisitType.OCCUPATIONAL_THERAPY },
+    { email: 'st@homehealthai.test', discipline: VisitType.SPEECH_THERAPY },
+    { email: 'hha@homehealthai.test', discipline: VisitType.HOME_HEALTH_AIDE },
+    { email: 'msw@homehealthai.test', discipline: VisitType.MEDICAL_SOCIAL_WORK },
+  ];
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const patient of patients) {
+    for (const { email, discipline } of clinicianRoles) {
+      const clinician = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      });
+
+      if (!clinician) continue;
+
+      // Check if assignment already exists
+      const existing = await prisma.patientAssignment.findFirst({
+        where: {
+          patientId: patient.id,
+          userId: clinician.id,
+          discipline,
+          endDate: null,
+        },
+      });
+
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        await prisma.patientAssignment.create({
+          data: {
+            patientId: patient.id,
+            userId: clinician.id,
+            discipline,
+            isPrimary: discipline === VisitType.SKILLED_NURSING,
+            startDate: new Date(),
+            notes: 'Auto-assigned via seed script',
+          },
+        });
+        created++;
+      } catch (error) {
+        // Ignore unique constraint violations (duplicate assignments)
+        skipped++;
+      }
+    }
+  }
+
+  console.log(`Patient Assignments: ${created} created, ${skipped} skipped`);
+}
+
 async function main() {
   console.log('Starting database seed...\n');
 
   try {
     await seedOasisQuestions();
     await seedDefaultUsers();
+    await seedPatientAssignments();
 
     console.log('\nDatabase seed completed successfully!');
   } catch (error) {
