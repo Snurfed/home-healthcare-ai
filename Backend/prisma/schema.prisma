@@ -213,6 +213,29 @@ enum PHILevel {
   CRITICAL
 }
 
+enum ReferralDocumentType {
+  REFERRAL
+  DISCHARGE_SUMMARY
+  FACE_TO_FACE
+  MEDICATION_LIST
+  LAB_RESULTS
+  OTHER
+}
+
+enum ExtractionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum SoapNoteStatus {
+  DRAFT
+  REVIEWED
+  FINALIZED
+  AMENDED
+}
+
 // ===========================================
 // USER & AUTHENTICATION
 // ===========================================
@@ -263,6 +286,14 @@ model User {
   uploadedDocuments     Document[]           @relation("DocumentUploader")
   transcriptions        VoiceTranscription[]
   auditLogs             AuditLog[]
+
+  // Referral Documents
+  uploadedReferrals     ReferralDocument[]   @relation("ReferralUploader")
+
+  // SOAP Notes
+  generatedSoapNotes    SoapNote[]           @relation("SoapNoteGenerator")
+  reviewedSoapNotes     SoapNote[]           @relation("SoapNoteReviewer")
+  finalizedSoapNotes    SoapNote[]           @relation("SoapNoteFinalizer")
 
   @@index([email])
   @@index([role])
@@ -358,6 +389,8 @@ model Patient {
   documents             Document[]
   transcriptions        VoiceTranscription[]
   assignments           PatientAssignment[]
+  referralDocuments     ReferralDocument[]
+  soapNotes             SoapNote[]
 
   @@index([mrn])
   @@index([lastName, firstName])
@@ -700,6 +733,8 @@ model OasisAssessment {
 
   // Relationships
   responses             OasisResponse[]
+  referralDocuments     ReferralDocument[]
+  soapNotes             SoapNote[]
 
   @@index([patientId])
   @@index([episodeId])
@@ -851,6 +886,118 @@ model Document {
   @@index([createdAt])
   @@index([deletedAt])
   @@map("documents")
+}
+
+// ===========================================
+// REFERRAL DOCUMENTS
+// ===========================================
+
+model ReferralDocument {
+  id                    String               @id @default(uuid())
+  patientId             String
+  patient               Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  assessmentId          String?
+  assessment            OasisAssessment?     @relation(fields: [assessmentId], references: [id])
+
+  // File Information
+  fileName              String
+  fileType              String               // pdf, docx, jpg, png, tiff
+  fileUrl               String               // Storage path
+  fileSize              Int?                 // bytes
+  checksum              String?              // SHA-256
+
+  // Upload Information
+  uploadedById          String
+  uploadedBy            User                 @relation("ReferralUploader", fields: [uploadedById], references: [id])
+  uploadedAt            DateTime             @default(now())
+
+  // Document Classification
+  documentType          ReferralDocumentType @default(REFERRAL)
+  title                 String?
+  description           String?
+
+  // Extraction Processing
+  extractionStatus      ExtractionStatus     @default(PENDING)
+  extractedData         Json?                // All extracted fields mapped to OASIS codes
+  rawText               String?              // Full OCR/extracted text from document
+  extractionError       String?              // Error message if extraction failed
+  extractedAt           DateTime?
+
+  // PHI & Security
+  phiLevel              PHILevel             @default(HIGH)
+  isEncrypted           Boolean              @default(true)
+
+  // Audit fields
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  deletedAt             DateTime?
+
+  @@index([patientId])
+  @@index([assessmentId])
+  @@index([documentType])
+  @@index([extractionStatus])
+  @@index([uploadedAt])
+  @@index([deletedAt])
+  @@map("referral_documents")
+}
+
+// ===========================================
+// SOAP NOTES
+// ===========================================
+
+model SoapNote {
+  id                    String           @id @default(uuid())
+  assessmentId          String
+  assessment            OasisAssessment  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  patientId             String
+  patient               Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  // SOAP Content
+  subjective            String?          // Subjective - patient's symptoms, concerns
+  objective             String?          // Objective - measurable findings
+  assessmentContent     String?          @map("assessment_content") // Assessment - diagnosis/analysis
+  plan                  String?          // Plan - treatment plan
+
+  // Workflow
+  status                SoapNoteStatus   @default(DRAFT)
+
+  // Generation
+  generatedById         String
+  generatedBy           User             @relation("SoapNoteGenerator", fields: [generatedById], references: [id])
+  generatedAt           DateTime         @default(now())
+
+  // Review
+  reviewedById          String?
+  reviewedBy            User?            @relation("SoapNoteReviewer", fields: [reviewedById], references: [id])
+  reviewedAt            DateTime?
+  reviewNotes           String?
+
+  // Finalization
+  finalizedById         String?
+  finalizedBy           User?            @relation("SoapNoteFinalizer", fields: [finalizedById], references: [id])
+  finalizedAt           DateTime?
+
+  // Amendment tracking
+  amendedFromId         String?
+  amendmentReason       String?
+
+  // Versioning
+  version               Int              @default(1)
+
+  // AI Model tracking
+  aiModelUsed           String?          // Track which AI model generated this
+
+  // Audit fields
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  deletedAt             DateTime?
+
+  @@index([assessmentId])
+  @@index([patientId])
+  @@index([status])
+  @@index([generatedAt])
+  @@index([deletedAt])
+  @@map("soap_notes")
 }
 
 // ===========================================

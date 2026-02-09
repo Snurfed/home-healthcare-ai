@@ -7,6 +7,8 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 
+import path from 'path';
+
 // Route imports
 import authRoutes from './routes/auth';
 import patientRoutes from './routes/patients';
@@ -15,6 +17,8 @@ import voiceRoutes from './routes/voice';
 import documentRoutes from './routes/documents';
 import oasisRoutes from './routes/oasis';
 import supervisorRoutes from './routes/supervisor';
+import referralDocumentsRoutes from './routes/referralDocuments';
+import soapNotesRoutes from './routes/soapNotes';
 
 // Initialize Express app
 const app: Application = express();
@@ -105,6 +109,13 @@ app.use(morgan(morganFormat, {
 }));
 
 // ===========================================
+// STATIC FILE SERVING (for uploaded files)
+// ===========================================
+
+const UPLOAD_DIR = process.env.DOCUMENT_UPLOAD_DIR || './uploads';
+app.use('/uploads', express.static(path.resolve(UPLOAD_DIR)));
+
+// ===========================================
 // HEALTH CHECK ENDPOINT
 // ===========================================
 app.get('/health', (_req: Request, res: Response) => {
@@ -140,6 +151,12 @@ app.use('/api/oasis', oasisRoutes);
 
 // Supervisor dashboard routes
 app.use('/api/supervisor', supervisorRoutes);
+
+// Referral document routes (includes both /api/patients/:id/referrals and /api/referrals/:id)
+app.use('/api', referralDocumentsRoutes);
+
+// SOAP notes routes (includes /api/assessments/:id/soap-notes, /api/soap-notes/:id, /api/patients/:id/soap-notes)
+app.use('/api', soapNotesRoutes);
 
 // ===========================================
 // 404 HANDLER
