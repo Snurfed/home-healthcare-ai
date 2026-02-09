@@ -3130,6 +3130,688 @@ const additionalMobilityItems: OasisQuestionSeed[] = [
 ];
 
 // ===========================================
+// FINANCIAL ITEMS (M0150)
+// ===========================================
+
+const financialItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'M0150',
+    itemName: 'Current Payment Sources for Home Care',
+    section: 'financial',
+    questionText: 'Current Payment Sources for Home Care (Mark all that apply)',
+    helpText: 'Identify all current payment sources for the home care services provided.',
+    responseType: 'multi_select',
+    responses: [
+      { code: '0', label: 'None; no charge for current services' },
+      { code: '1', label: 'Medicare (traditional fee-for-service)' },
+      { code: '2', label: 'Medicare (HMO/managed care/Advantage plan)' },
+      { code: '3', label: 'Medicaid (traditional fee-for-service)' },
+      { code: '4', label: 'Medicaid (HMO/managed care)' },
+      { code: '5', label: 'Workers\' compensation' },
+      { code: '6', label: 'Title programs (e.g., Title III, V, or XX)' },
+      { code: '7', label: 'Other government (e.g., TriCare, VA)' },
+      { code: '8', label: 'Private insurance' },
+      { code: '9', label: 'Private HMO/managed care' },
+      { code: '10', label: 'Self-pay' },
+      { code: '11', label: 'Other (specify)' },
+      { code: 'UK', label: 'Unknown' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Payment source is required', severity: 'error' },
+    ],
+    assessmentTypes: ALL_ASSESSMENT_TYPES,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 17,
+  },
+];
+
+// ===========================================
+// ADDITIONAL DEMOGRAPHICS (M0102, M0104)
+// ===========================================
+
+const additionalDemographicItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'M0102',
+    itemName: 'Date of Physician-Ordered SOC/ROC',
+    section: 'patient_tracking',
+    questionText: 'Date of Physician-ordered Start of Care (Resumption of Care). Is the date of the physician-ordered Start of Care (or Resumption of Care) the same as M0030/M0032?',
+    responseType: 'single_select',
+    responses: [
+      { code: '1', label: 'Yes' },
+      { code: '2', label: 'No' },
+      { code: 'NA', label: 'Not Applicable' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 17,
+  },
+  {
+    itemCode: 'M0104',
+    itemName: 'Date of Referral',
+    section: 'patient_tracking',
+    questionText: 'Date of Referral',
+    helpText: 'Enter the date the agency received the referral for home health services.',
+    responseType: 'date',
+    assessmentTypes: ALL_ASSESSMENT_TYPES,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 18,
+  },
+];
+
+// ===========================================
+// ADDITIONAL MOOD/PHQ ITEMS (D0700, PHQ-9)
+// ===========================================
+
+const additionalMoodItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'D0150C1',
+    itemName: 'PHQ-9: Trouble falling or staying asleep',
+    section: 'mood',
+    questionText: 'Over the last 2 weeks, have you been bothered by trouble falling or staying asleep, or sleeping too much?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No (not at all)' },
+      { code: '1', label: 'Yes (several days)' },
+      { code: '2', label: 'Yes (more than half the days)' },
+      { code: '3', label: 'Yes (nearly every day)' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2403,
+  },
+  {
+    itemCode: 'D0150D1',
+    itemName: 'PHQ-9: Feeling tired or having little energy',
+    section: 'mood',
+    questionText: 'Over the last 2 weeks, have you been bothered by feeling tired or having little energy?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No (not at all)' },
+      { code: '1', label: 'Yes (several days)' },
+      { code: '2', label: 'Yes (more than half the days)' },
+      { code: '3', label: 'Yes (nearly every day)' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2404,
+  },
+  {
+    itemCode: 'D0150E1',
+    itemName: 'PHQ-9: Poor appetite or overeating',
+    section: 'mood',
+    questionText: 'Over the last 2 weeks, have you been bothered by poor appetite or overeating?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No (not at all)' },
+      { code: '1', label: 'Yes (several days)' },
+      { code: '2', label: 'Yes (more than half the days)' },
+      { code: '3', label: 'Yes (nearly every day)' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2405,
+  },
+  {
+    itemCode: 'D0150F1',
+    itemName: 'PHQ-9: Feeling bad about yourself',
+    section: 'mood',
+    questionText: 'Over the last 2 weeks, have you been bothered by feeling bad about yourself - or that you are a failure or have let yourself or your family down?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No (not at all)' },
+      { code: '1', label: 'Yes (several days)' },
+      { code: '2', label: 'Yes (more than half the days)' },
+      { code: '3', label: 'Yes (nearly every day)' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2406,
+  },
+  {
+    itemCode: 'D0150G1',
+    itemName: 'PHQ-9: Trouble concentrating',
+    section: 'mood',
+    questionText: 'Over the last 2 weeks, have you been bothered by trouble concentrating on things, such as reading the newspaper or watching television?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No (not at all)' },
+      { code: '1', label: 'Yes (several days)' },
+      { code: '2', label: 'Yes (more than half the days)' },
+      { code: '3', label: 'Yes (nearly every day)' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2407,
+  },
+  {
+    itemCode: 'D0150H1',
+    itemName: 'PHQ-9: Moving or speaking slowly or being fidgety',
+    section: 'mood',
+    questionText: 'Over the last 2 weeks, have you been bothered by moving or speaking so slowly that other people could have noticed? Or the opposite - being so fidgety or restless that you have been moving around a lot more than usual?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No (not at all)' },
+      { code: '1', label: 'Yes (several days)' },
+      { code: '2', label: 'Yes (more than half the days)' },
+      { code: '3', label: 'Yes (nearly every day)' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2408,
+  },
+  {
+    itemCode: 'D0150I1',
+    itemName: 'PHQ-9: Thoughts of self-harm',
+    section: 'mood',
+    questionText: 'Over the last 2 weeks, have you been bothered by thoughts that you would be better off dead, or of hurting yourself in some way?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No (not at all)' },
+      { code: '1', label: 'Yes (several days)' },
+      { code: '2', label: 'Yes (more than half the days)' },
+      { code: '3', label: 'Yes (nearly every day)' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2409,
+  },
+  {
+    itemCode: 'D0700',
+    itemName: 'Social Isolation',
+    section: 'mood',
+    questionText: 'How often do you feel lonely or isolated from those around you?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Never' },
+      { code: '1', label: 'Rarely' },
+      { code: '2', label: 'Sometimes' },
+      { code: '3', label: 'Often' },
+      { code: '4', label: 'Always' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2410,
+  },
+];
+
+// ===========================================
+// M18XX FUNCTIONAL STATUS ITEMS
+// ===========================================
+
+const m18FunctionalItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'M1800',
+    itemName: 'Grooming',
+    section: 'functional_status',
+    questionText: 'Current ability to groom self (specifically: washing face and hands, hair care, shaving or make-up, teeth or denture care, fingernail care)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to groom self unaided, with or without the use of assistive devices or adapted methods' },
+      { code: '1', label: 'Grooming utensils must be placed within reach before able to complete grooming activities' },
+      { code: '2', label: 'Someone must assist the patient to groom self' },
+      { code: '3', label: 'Patient depends entirely upon someone else for grooming needs' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Grooming assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2500,
+  },
+  {
+    itemCode: 'M1810',
+    itemName: 'Dress Upper Body',
+    section: 'functional_status',
+    questionText: 'Current ability to dress upper body safely (with or without dressing aids) including undergarments, pullovers, front-opening shirts and blouses, managing zippers, buttons, and snaps',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to get clothes out of closets and drawers, put them on and remove them from the upper body without assistance' },
+      { code: '1', label: 'Able to dress upper body without assistance if clothing is laid out or handed to the patient' },
+      { code: '2', label: 'Someone must help the patient put on upper body clothing' },
+      { code: '3', label: 'Patient depends entirely upon another person to dress the upper body' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Upper body dressing assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2501,
+  },
+  {
+    itemCode: 'M1820',
+    itemName: 'Dress Lower Body',
+    section: 'functional_status',
+    questionText: 'Current ability to dress lower body safely (with or without dressing aids) including undergarments, slacks, socks or nylons, shoes',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to obtain, put on, and remove clothing and shoes without assistance' },
+      { code: '1', label: 'Able to dress lower body without assistance if clothing and shoes are laid out or handed to the patient' },
+      { code: '2', label: 'Someone must help the patient put on undergarments, slacks, socks or nylons, and shoes' },
+      { code: '3', label: 'Patient depends entirely upon another person to dress lower body' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Lower body dressing assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2502,
+  },
+  {
+    itemCode: 'M1830',
+    itemName: 'Bathing',
+    section: 'functional_status',
+    questionText: 'Current ability to wash entire body safely. Excludes grooming (washing face, washing hands, and shampooing hair).',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to bathe self in shower or tub independently, including getting in and out of tub/shower' },
+      { code: '1', label: 'With the use of devices, is able to bathe self in shower or tub independently' },
+      { code: '2', label: 'Able to bathe in shower or tub with the intermittent assistance of another person for supervision or physical assistance' },
+      { code: '3', label: 'Requires presence of another person throughout the bath for assistance or supervision' },
+      { code: '4', label: 'Unable to use the shower or tub, but able to bathe self independently with or without the use of devices at the sink, in chair, or on commode' },
+      { code: '5', label: 'Unable to use the shower or tub, but able to participate in bathing self in bed with the assistance of another person' },
+      { code: '6', label: 'Unable to participate effectively in bathing and is bathed totally by another person' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Bathing assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2503,
+  },
+  {
+    itemCode: 'M1840',
+    itemName: 'Toilet Transferring',
+    section: 'functional_status',
+    questionText: 'Current ability to get to and from the toilet or bedside commode safely and transfer on and off toilet/commode',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to get to and from the toilet and transfer independently with or without a device' },
+      { code: '1', label: 'When reminded, assisted, or supervised by another person, able to get to and from the toilet' },
+      { code: '2', label: 'Unable to get to and from the toilet but is able to use a bedside commode (with or without assistance)' },
+      { code: '3', label: 'Unable to get to and from the toilet or bedside commode but is able to use a bedpan/urinal independently' },
+      { code: '4', label: 'Is totally dependent in toileting' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Toilet transferring assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2504,
+  },
+  {
+    itemCode: 'M1845',
+    itemName: 'Toileting Hygiene',
+    section: 'functional_status',
+    questionText: 'Current ability to maintain perineal hygiene safely, adjust clothes and/or incontinence pads before and after using toilet, commode, bedpan, urinal. If managing ostomy, includes wiping the opening but not managing equipment.',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to manage toileting hygiene and target clothing management without assistance' },
+      { code: '1', label: 'Able to manage toileting hygiene and clothing management without assistance if supplies/implements are laid out for the patient' },
+      { code: '2', label: 'Someone must help the patient to maintain toileting hygiene and/or adjust clothing' },
+      { code: '3', label: 'Patient depends entirely upon another person to maintain toileting hygiene' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Toileting hygiene assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2505,
+  },
+  {
+    itemCode: 'M1850',
+    itemName: 'Transferring',
+    section: 'functional_status',
+    questionText: 'Current ability to move safely from bed to chair, or ability to turn and position self in bed if patient is bedfast',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to independently transfer' },
+      { code: '1', label: 'Able to transfer with minimal human assistance or with use of an assistive device' },
+      { code: '2', label: 'Able to bear weight and pivot during the transfer process but unable to transfer self' },
+      { code: '3', label: 'Unable to transfer self and is unable to bear weight or pivot when transferred by another person' },
+      { code: '4', label: 'Bedfast, unable to transfer but is able to turn and position self in bed' },
+      { code: '5', label: 'Bedfast, unable to transfer and is unable to turn and position self' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Transferring assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2506,
+  },
+  {
+    itemCode: 'M1860',
+    itemName: 'Ambulation/Locomotion',
+    section: 'functional_status',
+    questionText: 'Current ability to walk safely, once in a standing position, or use a wheelchair, once in a seated position, on a variety of surfaces',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to independently walk on even and uneven surfaces and negotiate stairs with or without railings (specifically: needs no human assistance or assistive device)' },
+      { code: '1', label: 'With the use of a one-handed device (e.g., cane, single crutch, hemi-walker), able to independently walk on even and uneven surfaces and negotiate stairs with or without railings' },
+      { code: '2', label: 'Requires use of a two-handed device (e.g., walker or crutches) to walk alone on a level surface and/or requires human supervision or assistance to negotiate stairs or steps or uneven surfaces' },
+      { code: '3', label: 'Able to walk only with the supervision or assistance of another person at all times' },
+      { code: '4', label: 'Chairfast, unable to ambulate but is able to wheel self independently' },
+      { code: '5', label: 'Chairfast, unable to ambulate and is unable to wheel self' },
+      { code: '6', label: 'Bedfast, unable to ambulate or be up in a chair' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Ambulation assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2507,
+  },
+  {
+    itemCode: 'M1870',
+    itemName: 'Feeding or Eating',
+    section: 'functional_status',
+    questionText: 'Current ability to feed self meals and snacks safely. Note: This refers only to the process of eating, chewing, and swallowing, not preparing the food to be eaten.',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to independently feed self' },
+      { code: '1', label: 'Able to feed self independently but requires meal set-up; with or without assistive device' },
+      { code: '2', label: 'Requires meal set-up plus intermittent assistance or supervision during meals' },
+      { code: '3', label: 'Unable to feed self and must be assisted or supervised throughout meal/snack' },
+      { code: '4', label: 'Able to take in nutrients orally and receives supplemental nutrients through a nasogastric tube or gastrostomy' },
+      { code: '5', label: 'Unable to take in nutrients orally and is fed nutrients through a nasogastric tube or gastrostomy' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Feeding/eating assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2508,
+  },
+];
+
+// ===========================================
+// PRIOR FUNCTIONING ITEMS (GG0100, GG0110)
+// ===========================================
+
+const priorFunctioningItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'GG0100A',
+    itemName: 'Prior Functioning: Self-Care',
+    section: 'functional_abilities',
+    questionText: 'Prior Functioning: Everyday Activities - Self-Care. Indicate the patient\'s usual ability with everyday activities prior to this current illness, exacerbation, or injury.',
+    responseType: 'single_select',
+    responses: [
+      { code: '3', label: 'Independent - Patient completed all activities by self, with or without assistive device(s), with no assistance from a helper' },
+      { code: '2', label: 'Needed some help - Patient needed partial assistance from another person for any of the activities' },
+      { code: '1', label: 'Dependent - Patient required maximum assistance from another person for most or all activities' },
+      { code: '8', label: 'Unknown' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2600,
+  },
+  {
+    itemCode: 'GG0100B',
+    itemName: 'Prior Functioning: Indoor Mobility',
+    section: 'functional_abilities',
+    questionText: 'Prior Functioning: Everyday Activities - Indoor Mobility (walking). Indicate the patient\'s usual ability with everyday activities prior to this current illness, exacerbation, or injury.',
+    responseType: 'single_select',
+    responses: [
+      { code: '3', label: 'Independent - Patient completed all activities by self, with or without assistive device(s), with no assistance from a helper' },
+      { code: '2', label: 'Needed some help - Patient needed partial assistance from another person for any of the activities' },
+      { code: '1', label: 'Dependent - Patient required maximum assistance from another person for most or all activities' },
+      { code: '8', label: 'Unknown' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2601,
+  },
+  {
+    itemCode: 'GG0100C',
+    itemName: 'Prior Functioning: Stairs',
+    section: 'functional_abilities',
+    questionText: 'Prior Functioning: Everyday Activities - Stairs. Indicate the patient\'s usual ability with everyday activities prior to this current illness, exacerbation, or injury.',
+    responseType: 'single_select',
+    responses: [
+      { code: '3', label: 'Independent - Patient completed all activities by self, with or without assistive device(s), with no assistance from a helper' },
+      { code: '2', label: 'Needed some help - Patient needed partial assistance from another person for any of the activities' },
+      { code: '1', label: 'Dependent - Patient required maximum assistance from another person for most or all activities' },
+      { code: '8', label: 'Unknown' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2602,
+  },
+  {
+    itemCode: 'GG0100D',
+    itemName: 'Prior Functioning: Functional Cognition',
+    section: 'functional_abilities',
+    questionText: 'Prior Functioning: Everyday Activities - Functional Cognition. Indicate the patient\'s usual ability with everyday activities prior to this current illness, exacerbation, or injury.',
+    responseType: 'single_select',
+    responses: [
+      { code: '3', label: 'Independent - Patient completed all activities by self, with or without assistive device(s), with no assistance from a helper' },
+      { code: '2', label: 'Needed some help - Patient needed partial assistance from another person for any of the activities' },
+      { code: '1', label: 'Dependent - Patient required maximum assistance from another person for most or all activities' },
+      { code: '8', label: 'Unknown' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2603,
+  },
+  {
+    itemCode: 'GG0110',
+    itemName: 'Prior Device Use',
+    section: 'functional_abilities',
+    questionText: 'Indicate devices and aids used by the patient prior to the current illness, exacerbation, or injury. Check all that apply.',
+    responseType: 'multi_select',
+    responses: [
+      { code: 'A', label: 'Manual wheelchair' },
+      { code: 'B', label: 'Motorized wheelchair and/or scooter' },
+      { code: 'C', label: 'Mechanical lift' },
+      { code: 'D', label: 'Walker' },
+      { code: 'E', label: 'Orthotics/Prosthetics' },
+      { code: 'Z', label: 'None of the above' },
+    ],
+    assessmentTypes: SOC_ROC,
+    effectiveDate: EFFECTIVE_DATE_E1,
+    sortOrder: 2604,
+  },
+];
+
+// ===========================================
+// LIVING SITUATION (M1100)
+// ===========================================
+
+const livingSituationItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'M1100',
+    itemName: 'Patient Living Situation',
+    section: 'living_situation',
+    questionText: 'Patient Living Situation: Which of the following best describes the patient\'s residential circumstance and availability of assistance?',
+    responseType: 'single_select',
+    responses: [
+      { code: 'A1', label: 'Patient lives alone - Around the clock assistance available' },
+      { code: 'A2', label: 'Patient lives alone - Regular daytime assistance available' },
+      { code: 'A3', label: 'Patient lives alone - Regular nighttime assistance available' },
+      { code: 'A4', label: 'Patient lives alone - Occasional/short-duration assistance available' },
+      { code: 'A5', label: 'Patient lives alone - No assistance available' },
+      { code: 'B1', label: 'Patient lives with other person(s) - Around the clock assistance available' },
+      { code: 'B2', label: 'Patient lives with other person(s) - Regular daytime assistance available' },
+      { code: 'B3', label: 'Patient lives with other person(s) - Regular nighttime assistance available' },
+      { code: 'B4', label: 'Patient lives with other person(s) - Occasional/short-duration assistance available' },
+      { code: 'B5', label: 'Patient lives with other person(s) - No assistance available' },
+      { code: 'C1', label: 'Patient lives in congregate situation - Around the clock assistance available' },
+      { code: 'C2', label: 'Patient lives in congregate situation - Regular daytime assistance available' },
+      { code: 'C3', label: 'Patient lives in congregate situation - Regular nighttime assistance available' },
+      { code: 'C4', label: 'Patient lives in congregate situation - Occasional/short-duration assistance available' },
+      { code: 'C5', label: 'Patient lives in congregate situation - No assistance available' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Living situation is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2700,
+  },
+];
+
+// ===========================================
+// ADDITIONAL MEDICATION ITEMS (M2010, M2020, M2030)
+// ===========================================
+
+const additionalMedicationItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'M2010',
+    itemName: 'Patient/Caregiver High-Risk Drug Education',
+    section: 'medications',
+    questionText: 'Patient/Caregiver High Risk Drug Education: Has the patient/caregiver received instruction on special precautions for all high-risk medications (such as hypoglycemics, anticoagulants, etc.) that the patient is currently taking?',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No' },
+      { code: '1', label: 'Yes' },
+      { code: 'NA', label: 'Not Applicable: Patient not taking any high-risk drugs OR patient/caregiver fully knowledgeable about special precautions' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2800,
+  },
+  {
+    itemCode: 'M2020',
+    itemName: 'Management of Oral Medications',
+    section: 'medications',
+    questionText: 'Management of Oral Medications: Patient\'s current ability to prepare and take all oral medications reliably and safely, including administration of the correct dosage at the appropriate times/intervals. Excludes injectable and IV medications.',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to independently take the correct oral medication(s) and proper dosage(s) at the correct times' },
+      { code: '1', label: 'Able to take medication(s) at the correct times if individual dosages are prepared in advance by another person; OR able to take medication(s) at the correct times if given daily reminders' },
+      { code: '2', label: 'Able to take medication(s) at the correct times if given reminders and dosages are prepared in advance by another person' },
+      { code: '3', label: 'Unable to take medication unless administered by another person' },
+      { code: 'NA', label: 'Not Applicable: No oral medications prescribed' },
+    ],
+    validationRules: [
+      { ruleType: 'required', errorMessage: 'Oral medication management assessment is required', severity: 'error' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2801,
+  },
+  {
+    itemCode: 'M2030',
+    itemName: 'Management of Injectable Medications',
+    section: 'medications',
+    questionText: 'Management of Injectable Medications: Patient\'s current ability to prepare and take all prescribed injectable medications reliably and safely, including administration of correct dosage at the appropriate times/intervals. Excludes IV medications.',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'Able to independently take the correct medication(s) and proper dosage(s) at the correct times' },
+      { code: '1', label: 'Able to take injectable medication(s) at the correct times if individual syringes are prepared in advance by another person; OR able to take injectable medication(s) at the correct times if given daily reminders' },
+      { code: '2', label: 'Able to take medication(s) at the correct times if given reminders and individual syringes are prepared in advance by another person' },
+      { code: '3', label: 'Unable to take injectable medications unless administered by another person' },
+      { code: 'NA', label: 'Not Applicable: No injectable medications prescribed' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT_FU,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2802,
+  },
+];
+
+// ===========================================
+// CARE MANAGEMENT ITEMS (M2102)
+// ===========================================
+
+const careManagementItems: OasisQuestionSeed[] = [
+  {
+    itemCode: 'M2102A',
+    itemName: 'Types/Sources of Assistance - ADL',
+    section: 'care_management',
+    questionText: 'Types and Sources of Assistance: ADL assistance (e.g., bathing, dressing, toileting, transferring, ambulation, eating)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No assistance needed - patient is independent or does not have needs in this area' },
+      { code: '1', label: 'Non-agency caregiver(s) currently provide assistance' },
+      { code: '2', label: 'Non-agency caregiver(s) needed but not available' },
+      { code: '3', label: 'Assistance needed, but unclear if non-agency caregiver(s) will be available' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2900,
+  },
+  {
+    itemCode: 'M2102B',
+    itemName: 'Types/Sources of Assistance - IADL',
+    section: 'care_management',
+    questionText: 'Types and Sources of Assistance: IADL assistance (e.g., meals, housekeeping, laundry, telephone, shopping, finances)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No assistance needed - patient is independent or does not have needs in this area' },
+      { code: '1', label: 'Non-agency caregiver(s) currently provide assistance' },
+      { code: '2', label: 'Non-agency caregiver(s) needed but not available' },
+      { code: '3', label: 'Assistance needed, but unclear if non-agency caregiver(s) will be available' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2901,
+  },
+  {
+    itemCode: 'M2102C',
+    itemName: 'Types/Sources of Assistance - Medication Administration',
+    section: 'care_management',
+    questionText: 'Types and Sources of Assistance: Medication administration (e.g., oral, inhaler, or injectable medications)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No assistance needed - patient is independent or does not have needs in this area' },
+      { code: '1', label: 'Non-agency caregiver(s) currently provide assistance' },
+      { code: '2', label: 'Non-agency caregiver(s) needed but not available' },
+      { code: '3', label: 'Assistance needed, but unclear if non-agency caregiver(s) will be available' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2902,
+  },
+  {
+    itemCode: 'M2102D',
+    itemName: 'Types/Sources of Assistance - Medical Procedures/Treatments',
+    section: 'care_management',
+    questionText: 'Types and Sources of Assistance: Medical procedures/treatments (e.g., wound care, ostomy care)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No assistance needed - patient is independent or does not have needs in this area' },
+      { code: '1', label: 'Non-agency caregiver(s) currently provide assistance' },
+      { code: '2', label: 'Non-agency caregiver(s) needed but not available' },
+      { code: '3', label: 'Assistance needed, but unclear if non-agency caregiver(s) will be available' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2903,
+  },
+  {
+    itemCode: 'M2102E',
+    itemName: 'Types/Sources of Assistance - Management of Equipment',
+    section: 'care_management',
+    questionText: 'Types and Sources of Assistance: Management of Equipment (e.g., oxygen, IV/infusion equipment, enteral/parenteral nutrition)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No assistance needed - patient is independent or does not have needs in this area' },
+      { code: '1', label: 'Non-agency caregiver(s) currently provide assistance' },
+      { code: '2', label: 'Non-agency caregiver(s) needed but not available' },
+      { code: '3', label: 'Assistance needed, but unclear if non-agency caregiver(s) will be available' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2904,
+  },
+  {
+    itemCode: 'M2102F',
+    itemName: 'Types/Sources of Assistance - Supervision and Safety',
+    section: 'care_management',
+    questionText: 'Types and Sources of Assistance: Supervision and safety (e.g., due to cognitive or behavioral problems)',
+    responseType: 'single_select',
+    responses: [
+      { code: '0', label: 'No assistance needed - patient is independent or does not have needs in this area' },
+      { code: '1', label: 'Non-agency caregiver(s) currently provide assistance' },
+      { code: '2', label: 'Non-agency caregiver(s) needed but not available' },
+      { code: '3', label: 'Assistance needed, but unclear if non-agency caregiver(s) will be available' },
+    ],
+    assessmentTypes: SOC_ROC_RECERT,
+    effectiveDate: new Date('2023-01-01'),
+    sortOrder: 2905,
+  },
+];
+
+// ===========================================
 // EXPORT ALL QUESTIONS
 // ===========================================
 
@@ -3160,6 +3842,15 @@ export const allOasisQuestions: OasisQuestionSeed[] = [
   ...participationItems,
   ...additionalSelfCareItems,
   ...additionalMobilityItems,
+  // Gap analysis additions - SOC document items
+  ...financialItems,
+  ...additionalDemographicItems,
+  ...additionalMoodItems,
+  ...m18FunctionalItems,
+  ...priorFunctioningItems,
+  ...livingSituationItems,
+  ...additionalMedicationItems,
+  ...careManagementItems,
 ];
 
 export default allOasisQuestions;
