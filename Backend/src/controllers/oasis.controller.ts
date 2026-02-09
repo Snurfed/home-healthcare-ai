@@ -836,8 +836,21 @@ export async function updateAssessment(
     }
 
     // Update responses if provided
-    if (items && section) {
-      for (const [itemCode, response] of Object.entries(items)) {
+    if (items) {
+      // Get all item codes to fetch their sections from the question library
+      const itemCodes = Object.keys(items);
+
+      // Fetch sections for all item codes in one query
+      const questions = await prisma.oasisQuestion.findMany({
+        where: { itemCode: { in: itemCodes } },
+        select: { itemCode: true, section: true },
+      });
+      const sectionMap = new Map(questions.map(q => [q.itemCode, q.section]));
+
+      for (const [itemCode, response] of Object.entries(items) as [string, OasisItemResponse][]) {
+        // Get section from: 1) request body, 2) question library, 3) fallback to 'unknown'
+        const itemSection = section || sectionMap.get(itemCode) || 'unknown';
+
         await prisma.oasisResponse.upsert({
           where: {
             assessmentId_itemCode: {
@@ -849,7 +862,7 @@ export async function updateAssessment(
             id: uuidv4(),
             assessmentId: id,
             itemCode,
-            section,
+            section: itemSection,
             responseValue: response.responseValue || null,
             responseCode: response.responseCode || null,
             responseText: response.responseText || null,
