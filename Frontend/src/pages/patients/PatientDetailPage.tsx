@@ -4,11 +4,15 @@
  * Displays detailed patient information, episodes, and assessments
  */
 
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { usePatient, usePatientEpisodes, useAssessments } from '@hooks/index';
 import { Button, Badge, Spinner, Alert } from '@components/common';
 import { STATUS_CONFIG, ASSESSMENT_TYPE_LABELS } from '@typedefs/oasis.types';
 import AssessmentTimeline from '@components/patients/AssessmentTimeline';
+import { ReferralDocumentsList, ReferralUploadButton } from '@components/oasis';
+import { referralService } from '@services/referral.service';
+import type { ReferralListItem, ReferralDocument } from '@typedefs/index';
 
 // Patient status configuration
 const PATIENT_STATUS_CONFIG = {
@@ -63,6 +67,44 @@ export default function PatientDetailPage() {
   const { data: patient, isLoading, error } = usePatient(id);
   const { data: episodes } = usePatientEpisodes(id);
   const { data: assessments } = useAssessments({ patientId: id, limit: 5 });
+
+  // Referral documents state
+  const [referrals, setReferrals] = useState<ReferralListItem[]>([]);
+  const [referralsLoading, setReferralsLoading] = useState(false);
+  const [referralsError, setReferralsError] = useState<string | null>(null);
+
+  // Fetch referrals
+  const fetchReferrals = useCallback(async () => {
+    if (!id) return;
+    setReferralsLoading(true);
+    setReferralsError(null);
+    try {
+      const response = await referralService.listReferrals(id);
+      setReferrals(response.data);
+    } catch (err) {
+      setReferralsError('Failed to load referral documents');
+      console.error('Error fetching referrals:', err);
+    } finally {
+      setReferralsLoading(false);
+    }
+  }, [id]);
+
+  // Load referrals on mount
+  useEffect(() => {
+    fetchReferrals();
+  }, [fetchReferrals]);
+
+  // Handle referral upload complete
+  const handleReferralComplete = (_document: ReferralDocument) => {
+    // Refresh the referrals list
+    fetchReferrals();
+  };
+
+  // Handle apply complete
+  const handleApplyComplete = (appliedFields: number, assessmentId: string) => {
+    // Could show a toast notification here
+    console.log(`Applied ${appliedFields} fields to assessment ${assessmentId}`);
+  };
 
   if (isLoading) {
     return (
@@ -213,6 +255,27 @@ export default function PatientDetailPage() {
             ) : (
               <p className="text-gray-500 text-center py-4">No episodes found</p>
             )}
+          </div>
+
+          {/* Referral Documents */}
+          <div className="bg-white rounded-lg shadow-card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Referral Documents
+              </h2>
+              <ReferralUploadButton
+                patientId={id!}
+                onExtractionComplete={handleReferralComplete}
+              />
+            </div>
+            <ReferralDocumentsList
+              patientId={id!}
+              referrals={referrals}
+              isLoading={referralsLoading}
+              error={referralsError}
+              onRefresh={fetchReferrals}
+              onApplyComplete={handleApplyComplete}
+            />
           </div>
 
           {/* Recent Assessments */}

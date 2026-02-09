@@ -110,3 +110,30 @@ export {
   SUGGESTION_TYPE_CONFIG,
   SUGGESTION_PRIORITY_CONFIG,
 } from './suggestion.types';
+
+// Referral types
+export type {
+  ReferralDocumentType,
+  ExtractionStatus,
+  FieldAcceptanceState,
+  ExtractedOASISField,
+  ExtractedDemographics,
+  ExtractedDiagnosis,
+  ExtractedMedication,
+  ExtractedOrder,
+  ExtractionResult,
+  ReferralDocument,
+  ReferralListItem,
+  UploadReferralRequest,
+  UploadReferralResponse,
+  ExtractionStatusResponse,
+  ApplyExtractionRequest,
+  ApplyExtractionResponse,
+  ReviewFieldState,
+  ExtractionReviewState,
+} from './referral.types';
+
+export {
+  DOCUMENT_TYPE_LABELS,
+  EXTRACTION_STATUS_CONFIG,
+} from './referral.types';

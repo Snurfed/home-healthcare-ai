@@ -20,6 +20,8 @@ import SectionStepper from '@components/oasis/SectionStepper';
 import SectionContent from '@components/oasis/SectionContent';
 import SubmissionValidation from '@components/oasis/SubmissionValidation';
 import ValidationModal from '@components/oasis/ValidationModal';
+import { ReferralUploadButton } from '@components/oasis/ReferralUpload';
+import type { ReferralDocument } from '@typedefs/index';
 
 export default function AssessmentWizardPage() {
   const { id } = useParams<{ id: string }>();
@@ -70,6 +72,13 @@ export default function AssessmentWizardPage() {
     setShowValidationModal(false);
     navigate(`/assessments/${id}`);
   }, [navigate, id]);
+
+  // Handle referral extraction complete - refresh assessment data
+  const handleReferralExtractionComplete = useCallback((document: ReferralDocument) => {
+    // The extraction review component will handle applying fields
+    // After apply, the assessment cache will be invalidated
+    console.log('Referral extraction complete:', document.id);
+  }, []);
 
   // Handle fix error - navigate to the section containing the error
   const handleFixError = useCallback((itemCode: string) => {
@@ -168,6 +177,15 @@ export default function AssessmentWizardPage() {
             <p className="text-sm text-gray-500">
               MRN: {assessment.patient?.mrn} | Episode #{assessment.episode?.episodeNumber}
             </p>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2">
+            <ReferralUploadButton
+              patientId={assessment.patientId}
+              assessmentId={assessment.id}
+              onExtractionComplete={handleReferralExtractionComplete}
+            />
           </div>
 
           <div className="text-right">
