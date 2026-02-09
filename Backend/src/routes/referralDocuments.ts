@@ -135,6 +135,30 @@ router.post(
   controller.triggerExtraction
 );
 
+/**
+ * @route   GET /api/referrals/:id/status
+ * @desc    Get extraction status for polling
+ * @access  Private - Clinical staff
+ */
+router.get(
+  '/referrals/:id/status',
+  authenticate,
+  authorize(CLINICAL_ROLES),
+  controller.getExtractionStatus
+);
+
+/**
+ * @route   POST /api/referrals/:id/apply
+ * @desc    Apply extracted data to an assessment
+ * @access  Private - Clinical staff
+ */
+router.post(
+  '/referrals/:id/apply',
+  authenticate,
+  authorize(CLINICAL_ROLES),
+  controller.applyToAssessment
+);
+
 // ===========================================
 // EXPORTS
 // ===========================================

@@ -345,38 +345,38 @@ export async function uploadReferral(
       },
     });
 
-    // Process extraction if requested (async)
-    if (processExtraction) {
-      // Update status to processing
-      await prisma.referralDocument.update({
-        where: { id: documentId },
-        data: { extractionStatus: ExtractionStatus.PROCESSING },
-      });
+    // Always trigger extraction asynchronously (don't block the upload response)
+    // Update status to processing
+    await prisma.referralDocument.update({
+      where: { id: documentId },
+      data: { extractionStatus: ExtractionStatus.PROCESSING },
+    });
 
-      // Run extraction (fire and forget for now - could be queued)
-      extractFromDocument(filePath, { documentType, mapToOasisCodes: true })
-        .then(async (result) => {
-          await prisma.referralDocument.update({
-            where: { id: documentId },
-            data: {
-              extractionStatus: result.success ? ExtractionStatus.COMPLETED : ExtractionStatus.FAILED,
-              extractedData: result.extractedFields as unknown as Prisma.InputJsonValue,
-              rawText: result.rawText,
-              extractionError: result.error || null,
-              extractedAt: new Date(),
-            },
-          });
-        })
-        .catch(async (error) => {
-          await prisma.referralDocument.update({
-            where: { id: documentId },
-            data: {
-              extractionStatus: ExtractionStatus.FAILED,
-              extractionError: error.message,
-            },
-          });
+    // Run extraction (fire and forget - frontend can poll for status)
+    extractFromDocument(filePath, { documentType, mapToOasisCodes: true })
+      .then(async (result) => {
+        await prisma.referralDocument.update({
+          where: { id: documentId },
+          data: {
+            extractionStatus: result.success ? ExtractionStatus.COMPLETED : ExtractionStatus.FAILED,
+            extractedData: result.extractedData as unknown as Prisma.InputJsonValue,
+            rawText: result.rawText,
+            extractionError: result.error || null,
+            extractedAt: new Date(),
+          },
         });
-    }
+        console.log(`[Referral Upload] Extraction completed for ${documentId}: ${result.extractedFields.length} fields extracted`);
+      })
+      .catch(async (error) => {
+        console.error(`[Referral Upload] Extraction failed for ${documentId}:`, error);
+        await prisma.referralDocument.update({
+          where: { id: documentId },
+          data: {
+            extractionStatus: ExtractionStatus.FAILED,
+            extractionError: error.message,
+          },
+        });
+      });
 
     // Audit log
     await createReferralAuditLog(
@@ -916,14 +916,16 @@ export async function triggerExtraction(
           where: { id },
           data: {
             extractionStatus: result.success ? ExtractionStatus.COMPLETED : ExtractionStatus.FAILED,
-            extractedData: result.extractedFields as unknown as Prisma.InputJsonValue,
+            extractedData: result.extractedData as unknown as Prisma.InputJsonValue,
             rawText: result.rawText,
             extractionError: result.error || null,
             extractedAt: new Date(),
           },
         });
+        console.log(`[Referral Extraction] Completed for document ${id}: ${result.extractedFields.length} fields extracted`);
       })
       .catch(async (error) => {
+        console.error(`[Referral Extraction] Failed for document ${id}:`, error);
         await prisma.referralDocument.update({
           where: { id },
           data: {
@@ -958,6 +960,279 @@ export async function triggerExtraction(
   }
 }
 
+/**
+ * Get extraction status for polling
+ * GET /api/referrals/:id/status
+ */
+export async function getExtractionStatus(
+  req: AuthenticatedRequest & { params: { id: string } },
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+    }
+
+    const { id } = req.params;
+
+    const referral = await prisma.referralDocument.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        patientId: true,
+        extractionStatus: true,
+        extractionError: true,
+        extractedAt: true,
+        extractedData: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!referral || referral.deletedAt) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Referral document not found',
+      });
+    }
+
+    // Check access
+    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, referral.patientId);
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to access this document',
+      });
+    }
+
+    // Calculate extracted field count
+    let extractedFieldCount = 0;
+    if (referral.extractedData && typeof referral.extractedData === 'object') {
+      const data = referral.extractedData as Record<string, unknown>;
+      const mappings = data['oasisMappings'];
+      if (mappings && typeof mappings === 'object') {
+        extractedFieldCount = Object.keys(mappings as object).length;
+      }
+    }
+
+    return res.status(200).json({
+      id: referral.id,
+      extractionStatus: referral.extractionStatus,
+      extractionError: referral.extractionError,
+      extractedAt: referral.extractedAt,
+      extractedFieldCount,
+      isComplete: referral.extractionStatus === ExtractionStatus.COMPLETED,
+      isFailed: referral.extractionStatus === ExtractionStatus.FAILED,
+      isProcessing: referral.extractionStatus === ExtractionStatus.PROCESSING,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Apply extracted data to an assessment
+ * POST /api/referrals/:id/apply
+ */
+export async function applyToAssessment(
+  req: AuthenticatedRequest & {
+    params: { id: string };
+    body: {
+      assessmentId: string;
+      acceptedFields: Record<string, string>;
+    };
+  },
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+    }
+
+    const { id } = req.params;
+    const { assessmentId, acceptedFields } = req.body;
+
+    if (!assessmentId) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Assessment ID is required',
+      });
+    }
+
+    if (!acceptedFields || typeof acceptedFields !== 'object' || Object.keys(acceptedFields).length === 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'At least one accepted field is required',
+      });
+    }
+
+    // Get referral document
+    const referral = await prisma.referralDocument.findUnique({
+      where: { id },
+    });
+
+    if (!referral || referral.deletedAt) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Referral document not found',
+      });
+    }
+
+    if (referral.extractionStatus !== ExtractionStatus.COMPLETED) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Extraction must be completed before applying to assessment',
+      });
+    }
+
+    // Get assessment
+    const assessment = await prisma.oasisAssessment.findUnique({
+      where: { id: assessmentId },
+      select: { id: true, patientId: true, deletedAt: true },
+    });
+
+    if (!assessment || assessment.deletedAt) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Assessment not found',
+      });
+    }
+
+    // Verify patient matches
+    if (assessment.patientId !== referral.patientId) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Assessment patient does not match referral document patient',
+      });
+    }
+
+    // Check access
+    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, referral.patientId);
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to modify this assessment',
+      });
+    }
+
+    // Get extracted data to find source text for each field
+    const extractedData = referral.extractedData as Record<string, unknown> | null;
+    const oasisMappings = extractedData?.['oasisMappings'] as Record<string, { value: string; sourceText?: string; confidence?: number }> | undefined;
+
+    // Create/update OASIS responses using upsert
+    const responsePromises = Object.entries(acceptedFields).map(async ([itemCode, fieldValue]) => {
+      const value = fieldValue as string;
+      // Find the section for this item code
+      let section = 'unknown';
+      if (itemCode.startsWith('GG0130')) section = 'functional_abilities';
+      else if (itemCode.startsWith('GG0170')) section = 'functional_abilities';
+      else if (itemCode.startsWith('GG0100')) section = 'functional_abilities';
+      else if (itemCode.startsWith('GG0110')) section = 'functional_abilities';
+      else if (itemCode.startsWith('M18')) section = 'functional_status';
+      else if (itemCode.startsWith('M1')) section = 'patient_history';
+      else if (itemCode.startsWith('M2')) section = 'care_management';
+      else if (itemCode.startsWith('M0')) section = 'administrative';
+      else if (itemCode.startsWith('A1')) section = 'administrative';
+      else if (itemCode.startsWith('N0')) section = 'medications';
+
+      const sourceMapping = oasisMappings?.[itemCode];
+
+      return prisma.oasisResponse.upsert({
+        where: {
+          assessmentId_itemCode: {
+            assessmentId,
+            itemCode,
+          },
+        },
+        create: {
+          assessmentId,
+          itemCode,
+          section,
+          responseCode: value,
+          responseValue: value,
+          sourceType: 'ocr', // 'ocr' indicates it came from document extraction
+          sourceText: sourceMapping?.sourceText || null,
+          confidence: sourceMapping?.confidence ? new Prisma.Decimal(sourceMapping.confidence) : null,
+          requiresReview: (sourceMapping?.confidence || 0) < 0.8,
+          reviewReason: (sourceMapping?.confidence || 0) < 0.8 ? 'Low confidence extraction from referral document' : null,
+        },
+        update: {
+          responseCode: value,
+          responseValue: value,
+          sourceType: 'ocr',
+          sourceText: sourceMapping?.sourceText || null,
+          confidence: sourceMapping?.confidence ? new Prisma.Decimal(sourceMapping.confidence) : null,
+          requiresReview: (sourceMapping?.confidence || 0) < 0.8,
+          reviewReason: (sourceMapping?.confidence || 0) < 0.8 ? 'Low confidence extraction from referral document' : null,
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    const createdResponses = await Promise.all(responsePromises);
+
+    // Link referral to assessment if not already linked
+    if (!referral.assessmentId) {
+      await prisma.referralDocument.update({
+        where: { id },
+        data: { assessment: { connect: { id: assessmentId } } },
+      });
+    }
+
+    // Update assessment completion percentage (simplified calculation)
+    const totalResponses = await prisma.oasisResponse.count({
+      where: { assessmentId },
+    });
+
+    // Estimate completion based on responses (rough approximation)
+    const estimatedCompletion = Math.min(100, Math.round((totalResponses / 150) * 100));
+
+    await prisma.oasisAssessment.update({
+      where: { id: assessmentId },
+      data: {
+        completionPercentage: estimatedCompletion,
+      },
+    });
+
+    // Audit log
+    await createReferralAuditLog(
+      AuditAction.UPDATE,
+      req.user.id,
+      req.user.email,
+      req.user.role,
+      id,
+      referral.patientId,
+      true,
+      req,
+      {
+        description: `Applied ${createdResponses.length} extracted fields to assessment ${assessmentId}`,
+        newValues: {
+          assessmentId,
+          fieldsApplied: Object.keys(acceptedFields),
+        },
+      }
+    );
+
+    return res.status(200).json({
+      message: 'Extracted data applied to assessment successfully',
+      appliedCount: createdResponses.length,
+      assessmentId,
+      referralDocumentId: id,
+      updatedFields: Object.keys(acceptedFields),
+      assessmentCompletion: estimatedCompletion,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 // ===========================================
 // EXPORTS
 // ===========================================
@@ -969,4 +1244,6 @@ export default {
   updateReferral,
   deleteReferral,
   triggerExtraction,
+  getExtractionStatus,
+  applyToAssessment,
 };
