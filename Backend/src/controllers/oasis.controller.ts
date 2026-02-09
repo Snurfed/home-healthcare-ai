@@ -528,13 +528,10 @@ export async function getAssessment(
     // Get validation errors
     const validationErrors = await validateAssessmentResponses(id);
 
-    // Group responses by section
-    const responsesBySection: Record<string, Array<typeof assessment.responses[0]>> = {};
+    // Index responses by itemCode for easy lookup in frontend
+    const responsesByItemCode: Record<string, typeof assessment.responses[0]> = {};
     for (const response of assessment.responses) {
-      if (!responsesBySection[response.section]) {
-        responsesBySection[response.section] = [];
-      }
-      responsesBySection[response.section].push(response);
+      responsesByItemCode[response.itemCode] = response;
     }
 
     // Audit log
@@ -572,7 +569,7 @@ export async function getAssessment(
       },
       completionPercentage: assessment.completionPercentage,
       voicePopulatedFields: assessment.voicePopulatedFields,
-      responses: responsesBySection,
+      responses: responsesByItemCode,
       validationErrors,
       workflow: {
         submittedAt: assessment.submittedAt,
