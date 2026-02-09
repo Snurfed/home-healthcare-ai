@@ -166,8 +166,18 @@ function ReviewCard({
 
       {/* Source text */}
       <div className="mb-3 p-2 bg-blue-50 rounded border border-blue-100">
-        <div className="text-xs text-blue-600 mb-1">From transcription:</div>
+        <div className="text-xs text-blue-600 mb-1">
+          {field.inferredFrom ? 'Inferred from:' : 'From transcription:'}
+        </div>
         <div className="text-sm text-blue-800 italic">"{field.sourceText}"</div>
+        {field.inferredFrom && (
+          <div className="text-xs text-purple-600 mt-1 flex items-center gap-1">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Part of {field.inferredFrom.itemCount} questions from "{field.inferredFrom.category.replace(/_/g, ' ')}"
+          </div>
+        )}
       </div>
 
       {/* Review reason */}
@@ -242,17 +252,34 @@ export default function VoiceSuggestionReview({
     return { highConfidenceFields: high, lowConfidenceFields: low };
   }, [extractedFields]);
 
-  // Group auto-filled items by section
-  const autoFilledBySection = useMemo(() => {
+  // Group auto-filled items by section and by inference source
+  const { autoFilledBySection, inferenceGroups } = useMemo(() => {
     const grouped: Record<string, OasisFieldMapping[]> = {};
+    const inferences: Record<string, { statement: string; category: string; fields: OasisFieldMapping[] }> = {};
+
     highConfidenceFields
       .filter((f) => autoFilledItems.has(f.itemCode))
       .forEach((field) => {
-        const section = field.section || 'other';
-        if (!grouped[section]) grouped[section] = [];
-        grouped[section].push(field);
+        // Group by inference source if present
+        if (field.inferredFrom) {
+          const key = field.inferredFrom.statement;
+          if (!inferences[key]) {
+            inferences[key] = {
+              statement: field.inferredFrom.statement,
+              category: field.inferredFrom.category,
+              fields: [],
+            };
+          }
+          inferences[key].fields.push(field);
+        } else {
+          // Regular grouping by section
+          const section = field.section || 'other';
+          if (!grouped[section]) grouped[section] = [];
+          grouped[section].push(field);
+        }
       });
-    return grouped;
+
+    return { autoFilledBySection: grouped, inferenceGroups: Object.values(inferences) };
   }, [highConfidenceFields, autoFilledItems]);
 
   // Items still needing review
@@ -437,23 +464,57 @@ export default function VoiceSuggestionReview({
                   <p>No items were auto-filled.</p>
                 </div>
               ) : (
-                Object.entries(autoFilledBySection).map(([sectionId, fields]) => (
-                  <div key={sectionId}>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">
-                      {SECTION_NAMES[sectionId] || sectionId}
-                    </h4>
-                    <div className="space-y-2">
-                      {fields.map((field) => (
-                        <AutoFilledCard
-                          key={field.itemCode}
-                          field={field}
-                          question={questions.find((q) => q.itemCode === field.itemCode)}
-                          onEdit={() => handleEditAutoFilled(field.itemCode)}
-                        />
-                      ))}
+                <>
+                  {/* Inferred groups - items derived from aggregate statements */}
+                  {inferenceGroups.map((group, idx) => (
+                    <div key={`inference-${idx}`} className="border border-purple-200 rounded-lg overflow-hidden">
+                      {/* Inference source header */}
+                      <div className="px-4 py-2 bg-purple-50 border-b border-purple-200">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          <span className="text-sm font-medium text-purple-800">
+                            Inferred from: "{group.statement}"
+                          </span>
+                        </div>
+                        <div className="text-xs text-purple-600 mt-1">
+                          {group.fields.length} questions auto-filled from {group.category.replace(/_/g, ' ')}
+                        </div>
+                      </div>
+                      {/* Inferred items */}
+                      <div className="p-2 space-y-2 bg-purple-25">
+                        {group.fields.map((field) => (
+                          <AutoFilledCard
+                            key={field.itemCode}
+                            field={field}
+                            question={questions.find((q) => q.itemCode === field.itemCode)}
+                            onEdit={() => handleEditAutoFilled(field.itemCode)}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+
+                  {/* Regular auto-filled items by section */}
+                  {Object.entries(autoFilledBySection).map(([sectionId, fields]) => (
+                    <div key={sectionId}>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">
+                        {SECTION_NAMES[sectionId] || sectionId}
+                      </h4>
+                      <div className="space-y-2">
+                        {fields.map((field) => (
+                          <AutoFilledCard
+                            key={field.itemCode}
+                            field={field}
+                            question={questions.find((q) => q.itemCode === field.itemCode)}
+                            onEdit={() => handleEditAutoFilled(field.itemCode)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </>
               )}
             </div>
           )}

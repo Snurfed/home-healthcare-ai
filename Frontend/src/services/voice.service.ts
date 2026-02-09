@@ -51,6 +51,12 @@ export interface OasisFieldMapping {
     responseCode: string;
     confidence: number;
   }>;
+  // Inference tracking - when multiple items are inferred from a single statement
+  inferredFrom?: {
+    statement: string;
+    category: string;
+    itemCount: number;
+  };
 }
 
 export interface MedicalTermExtraction {
