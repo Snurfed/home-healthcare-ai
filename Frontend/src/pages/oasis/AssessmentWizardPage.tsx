@@ -6,7 +6,6 @@
 
 import { useCallback, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useQueryClient } from 'react-query';
 import {
   useAssessment,
   useQuestions,
@@ -15,7 +14,6 @@ import {
   useSubmitForReview,
 } from '@hooks/index';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
-import { queryKeys } from '@context/QueryProvider';
 import { Button, Spinner, Alert, Badge } from '@components/common';
 import { OASIS_SECTIONS, STATUS_CONFIG } from '@typedefs/oasis.types';
 import SectionStepper from '@components/oasis/SectionStepper';
@@ -26,7 +24,6 @@ import ValidationModal from '@components/oasis/ValidationModal';
 export default function AssessmentWizardPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [showReview, setShowReview] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
 
@@ -57,13 +54,11 @@ export default function AssessmentWizardPage() {
     startOfCareDate: assessment?.dates?.m0030_startOfCareDate || undefined,
   });
 
-  // Auto-save with 2 second debounce
+  // Auto-save callback - cache update is handled in useAutoSave
   const handleSaveSuccess = useCallback(() => {
-    // Invalidate assessment query to refresh completion percentage
-    if (id) {
-      queryClient.invalidateQueries(queryKeys.assessments.detail(id));
-    }
-  }, [id, queryClient]);
+    // Cache is already updated in useAutoSave before drafts are cleared.
+    // No query invalidation needed - this was causing stale data to overwrite selections.
+  }, []);
 
   // Handle submission - now opens validation modal instead of direct submit
   const handleSubmit = useCallback(() => {

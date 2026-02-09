@@ -9,15 +9,81 @@
  * Provides real-time smart suggestions for documentation guidance
  */
 
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect, memo } from 'react';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
 import { useSkipLogic, useSectionValidation, useSuggestions } from '@hooks/index';
 import { Button, Alert, Modal } from '@components/common';
 import QuestionRenderer from './QuestionRenderer';
 import { VoiceRecorder, VoiceSuggestionReview } from '@components/voice';
-import type { OASISSection, OASISAssessment, OASISQuestion, DismissalReason } from '@typedefs/index';
+import type { OASISSection, OASISAssessment, OASISQuestion, DismissalReason, OASISResponse, QuestionSuggestion } from '@typedefs/index';
 import { OASIS_SECTIONS } from '@typedefs/oasis.types';
 import type { VoiceProcessingResult, OasisFieldMapping } from '@services/voice.service';
+import type { QuestionValidationError } from '@utils/validation';
+
+/**
+ * Memoized Question Item - only re-renders when its specific data changes
+ * This prevents all questions from re-rendering when one draft changes
+ */
+interface MemoizedQuestionItemProps {
+  question: OASISQuestion;
+  assessmentResponses: Record<string, OASISResponse>;
+  itemCode: string;
+  error?: QuestionValidationError;
+  suggestions: QuestionSuggestion[];
+  suggestionsLoading: boolean;
+  onDismissSuggestion: (suggestionId: string, reason: DismissalReason) => void;
+  onNavigateToQuestion: (questionCode: string) => void;
+  onValueChange: (questionCode: string, value: string | number | null) => void;
+}
+
+const MemoizedQuestionItem = memo(function MemoizedQuestionItem({
+  question,
+  assessmentResponses,
+  itemCode,
+  error,
+  suggestions,
+  suggestionsLoading,
+  onDismissSuggestion,
+  onNavigateToQuestion,
+  onValueChange,
+}: MemoizedQuestionItemProps) {
+  // Subscribe to ONLY this question's draft - prevents re-render when other drafts change
+  const draftResponse = useAssessmentStore(
+    useCallback((state) => state.draftResponses[itemCode], [itemCode])
+  );
+  const updateResponse = useAssessmentStore((state) => state.updateResponse);
+
+  // Merge saved and draft response
+  const value = useMemo(() => {
+    const saved = assessmentResponses?.[itemCode];
+    return draftResponse || saved;
+  }, [draftResponse, assessmentResponses, itemCode]);
+
+  const handleChange = useCallback(
+    (responseValue: Partial<OASISResponse>) => {
+      updateResponse(itemCode, {
+        ...responseValue,
+        itemCode,
+        sourceType: 'manual',
+      });
+    },
+    [updateResponse, itemCode]
+  );
+
+  return (
+    <QuestionRenderer
+      question={question}
+      value={value}
+      onChange={handleChange}
+      error={error}
+      suggestions={suggestions}
+      onDismissSuggestion={onDismissSuggestion}
+      onNavigateToQuestion={onNavigateToQuestion}
+      suggestionsLoading={suggestionsLoading}
+      onValueChange={onValueChange}
+    />
+  );
+});
 
 interface SectionContentProps {
   section: OASISSection;
@@ -30,13 +96,14 @@ export default function SectionContent({
   assessment,
   questions,
 }: SectionContentProps) {
-  const {
-    draftResponses,
-    updateResponse,
-    currentSectionIndex,
-    nextSection,
-    previousSection,
-  } = useAssessmentStore();
+  // Only subscribe to what we need - avoid subscribing to draftResponses directly
+  // Individual questions subscribe to their own drafts via MemoizedQuestionItem
+  const currentSectionIndex = useAssessmentStore((state) => state.currentSectionIndex);
+  const nextSection = useAssessmentStore((state) => state.nextSection);
+  const previousSection = useAssessmentStore((state) => state.previousSection);
+  const updateResponse = useAssessmentStore((state) => state.updateResponse);
+  // Only get draftResponses for skip logic and validation - not for rendering
+  const draftResponses = useAssessmentStore((state) => state.draftResponses);
 
   // Voice recording state
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
@@ -92,13 +159,6 @@ export default function SectionContent({
     clearValidation();
     firstErrorRef.current = null;
   }, [section.id, clearValidation]);
-
-  // Get response value (merged from assessment and draft)
-  const getResponseValue = (itemCode: string) => {
-    const draft = draftResponses[itemCode];
-    const saved = assessment.responses?.[itemCode];
-    return draft || saved;
-  };
 
   // Handle next section with validation
   const handleNextSection = useCallback(() => {
@@ -302,17 +362,11 @@ export default function SectionContent({
           </div>
         ) : (
           visibleQuestions.map((question) => (
-            <QuestionRenderer
+            <MemoizedQuestionItem
               key={question.id}
               question={question}
-              value={getResponseValue(question.itemCode)}
-              onChange={(value) =>
-                updateResponse(question.itemCode, {
-                  ...value,
-                  itemCode: question.itemCode,
-                  sourceType: 'manual',
-                })
-              }
+              assessmentResponses={assessment.responses}
+              itemCode={question.itemCode}
               error={getQuestionError(question.itemCode)}
               suggestions={getSuggestionsForQuestion(question.itemCode)}
               onDismissSuggestion={handleDismissSuggestion}

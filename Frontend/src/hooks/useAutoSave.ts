@@ -5,9 +5,11 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
+import { useQueryClient } from 'react-query';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
 import { oasisService } from '@services/index';
-import type { OASISResponse } from '@typedefs/index';
+import { queryKeys } from '@context/QueryProvider';
+import type { OASISResponse, OASISAssessment } from '@typedefs/index';
 
 interface UseAutoSaveOptions {
   assessmentId: string;
@@ -34,6 +36,7 @@ export function useAutoSave({
   onSaveSuccess,
   onSaveError,
 }: UseAutoSaveOptions): UseAutoSaveReturn {
+  const queryClient = useQueryClient();
   const {
     draftResponses,
     isDirty,
@@ -50,6 +53,10 @@ export function useAutoSave({
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
   const pendingResponsesRef = useRef<Record<string, Partial<OASISResponse>>>({});
+  // Track timestamps when each draft was last modified to detect changes during save
+  const draftTimestampsRef = useRef<Record<string, number>>({});
+  // Track when save started to compare against draft timestamps
+  const saveStartTimeRef = useRef<number>(0);
 
   // Track pending changes count
   const pendingChanges = Object.keys(draftResponses).length;
@@ -59,6 +66,9 @@ export function useAutoSave({
     // Capture exactly what we're saving at this moment (snapshot)
     const responsesToSave = { ...pendingResponsesRef.current };
     const savedItemCodes = Object.keys(responsesToSave);
+    // Record save start time to compare against draft timestamps
+    const saveStartTime = Date.now();
+    saveStartTimeRef.current = saveStartTime;
 
     if (savedItemCodes.length === 0) {
       return;
@@ -68,53 +78,93 @@ export function useAutoSave({
       setSaving(true);
       onSaveStart?.();
 
-      await oasisService.updateAssessment(assessmentId, {
+      const apiResponse = await oasisService.updateAssessment(assessmentId, {
         items: responsesToSave,
       });
 
       if (isMountedRef.current) {
-        // CRITICAL FIX: Only clear drafts that haven't changed since we started saving
-        // This prevents losing changes typed during the save operation
+        // CRITICAL FIX: Only clear drafts that weren't modified AFTER save started
+        // Use timestamps for reliable detection of changes during save
         const currentDrafts = useAssessmentStore.getState().draftResponses;
         const remainingDrafts: Record<string, Partial<OASISResponse>> = {};
 
         for (const [code, response] of Object.entries(currentDrafts)) {
-          const savedResponse = responsesToSave[code];
+          const draftTimestamp = draftTimestampsRef.current[code] || 0;
+          const wasInSaveBatch = savedItemCodes.includes(code);
 
-          if (!savedResponse) {
-            // Item wasn't in our save batch - keep it
+          if (!wasInSaveBatch) {
+            // Item wasn't in our save batch - keep it (new item added during save)
+            remainingDrafts[code] = response;
+          } else if (draftTimestamp > saveStartTime) {
+            // Draft was modified AFTER save started - keep the new value
             remainingDrafts[code] = response;
           } else {
-            // Compare current value with what we saved
-            // If values differ, user changed it during save - keep the new value
-            const currentValue = response.responseValue || response.responseCode || '';
-            const savedValue = savedResponse.responseValue || savedResponse.responseCode || '';
-
-            if (currentValue !== savedValue) {
-              remainingDrafts[code] = response;
-            }
-            // If values match, don't keep it (it was saved successfully)
+            // Draft was saved and not modified since - safe to clear
+            delete draftTimestampsRef.current[code];
           }
         }
 
-        // Clear saved items from pending ref
+        // Clear saved items from pending ref (only those not modified during save)
         for (const code of savedItemCodes) {
-          delete pendingResponsesRef.current[code];
+          const draftTimestamp = draftTimestampsRef.current[code] || 0;
+          if (draftTimestamp <= saveStartTime) {
+            delete pendingResponsesRef.current[code];
+          }
+        }
+
+        // CRITICAL: Update the query cache with saved responses BEFORE clearing drafts
+        const existingData = queryClient.getQueryData<OASISAssessment>(
+          queryKeys.assessments.detail(assessmentId)
+        );
+
+        if (existingData) {
+          // Merge saved responses into the cached assessment
+          const updatedResponses = { ...existingData.responses };
+          for (const [code, response] of Object.entries(responsesToSave)) {
+            // Only update cache if this item wasn't modified during save
+            const draftTimestamp = draftTimestampsRef.current[code] || 0;
+            if (draftTimestamp <= saveStartTime) {
+              updatedResponses[code] = {
+                ...updatedResponses[code],
+                ...response,
+                itemCode: code,
+              } as OASISResponse;
+            }
+          }
+
+          queryClient.setQueryData(
+            queryKeys.assessments.detail(assessmentId),
+            {
+              ...existingData,
+              responses: updatedResponses,
+              completionPercentage: apiResponse.completionPercentage,
+              updatedAt: apiResponse.updatedAt,
+            }
+          );
         }
 
         // Update store with remaining drafts (preserves changes made during save)
         setDraftResponses(remainingDrafts);
-        markSaved();
+
+        // Only mark as fully saved if no remaining drafts
+        if (Object.keys(remainingDrafts).length === 0) {
+          markSaved();
+        } else {
+          // Still have pending changes, just clear saving state
+          setSaving(false);
+        }
+
         onSaveSuccess?.();
       }
     } catch (error) {
+      console.error('[useAutoSave] Save failed:', error);
       if (isMountedRef.current) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to save';
         setSaveError(errorMessage);
         onSaveError?.(error instanceof Error ? error : new Error(errorMessage));
       }
     }
-  }, [assessmentId, setSaving, markSaved, setDraftResponses, setSaveError, onSaveStart, onSaveSuccess, onSaveError]);
+  }, [assessmentId, setSaving, markSaved, setDraftResponses, setSaveError, onSaveStart, onSaveSuccess, onSaveError, queryClient]);
 
   // Debounced save effect
   useEffect(() => {
@@ -122,8 +172,14 @@ export function useAutoSave({
       return;
     }
 
-    // Update pending responses
-    pendingResponsesRef.current = { ...pendingResponsesRef.current, ...draftResponses };
+    const now = Date.now();
+
+    // Update pending responses AND record timestamps for each draft
+    for (const [code, response] of Object.entries(draftResponses)) {
+      pendingResponsesRef.current[code] = response;
+      // Record when this draft was last modified
+      draftTimestampsRef.current[code] = now;
+    }
 
     // Clear existing timeout
     if (timeoutRef.current) {
