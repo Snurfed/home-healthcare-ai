@@ -102,6 +102,7 @@ export default function SectionContent({
   const nextSection = useAssessmentStore((state) => state.nextSection);
   const previousSection = useAssessmentStore((state) => state.previousSection);
   const updateResponse = useAssessmentStore((state) => state.updateResponse);
+  const removeDraftResponse = useAssessmentStore((state) => state.removeDraftResponse);
   // Only get draftResponses for skip logic and validation - not for rendering
   const draftResponses = useAssessmentStore((state) => state.draftResponses);
 
@@ -201,10 +202,11 @@ export default function SectionContent({
     });
   }, [updateResponse, voiceResults?.transcriptionId]);
 
-  // Handle rejecting a voice suggestion (just close, don't update)
-  const handleRejectVoiceSuggestion = useCallback((_itemCode: string) => {
-    // No action needed - just don't update the field
-  }, []);
+  // Handle rejecting/undoing a voice suggestion (remove the draft response)
+  const handleRejectVoiceSuggestion = useCallback((itemCode: string) => {
+    // Remove the draft response to revert to original value
+    removeDraftResponse(itemCode);
+  }, [removeDraftResponse]);
 
   // Handle accepting all high-confidence suggestions
   const handleAcceptAllVoiceSuggestions = useCallback((fields: OasisFieldMapping[]) => {

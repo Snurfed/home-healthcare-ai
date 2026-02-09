@@ -40,6 +40,7 @@ interface AssessmentState {
   updateResponses: (responses: Record<string, Partial<OASISResponse>>) => void;
   setDraftResponses: (responses: Record<string, Partial<OASISResponse>>) => void;
   clearDraftResponses: () => void;
+  removeDraftResponse: (itemCode: string) => void;
   navigateToSection: (index: number) => void;
   nextSection: () => void;
   previousSection: () => void;
@@ -131,6 +132,17 @@ export const useAssessmentStore = create<AssessmentState>()((set, get) => ({
     set({
       draftResponses: {},
       isDirty: false,
+    });
+  },
+
+  // Remove a single draft response (used for undoing voice suggestions)
+  removeDraftResponse: (itemCode: string) => {
+    set((state) => {
+      const { [itemCode]: _, ...remainingDrafts } = state.draftResponses;
+      return {
+        draftResponses: remainingDrafts,
+        isDirty: Object.keys(remainingDrafts).length > 0,
+      };
     });
   },
 

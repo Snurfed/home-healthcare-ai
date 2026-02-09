@@ -1,13 +1,41 @@
 /**
  * Voice Suggestion Review Component
  *
- * Modal for reviewing AI-extracted OASIS fields with accept/reject/modify actions
+ * Redesigned modal for reviewing AI-extracted OASIS fields:
+ * - Auto-accepts high confidence (90%+) answers immediately
+ * - Shows "Auto-Filled" and "Needs Review" sections
+ * - Provides undo functionality
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button, Badge, Modal } from '@components/common';
 import type { OASISQuestion, OASISResponse } from '@typedefs/index';
 import type { OasisFieldMapping } from '@services/voice.service';
+
+// ===========================================
+// CONSTANTS
+// ===========================================
+
+const HIGH_CONFIDENCE_THRESHOLD = 0.9;
+
+// Section display names
+const SECTION_NAMES: Record<string, string> = {
+  clinical_record: 'Clinical Record',
+  patient_tracking: 'Patient Tracking',
+  patient_history: 'Patient History',
+  living_situation: 'Living Situation',
+  sensory_status: 'Sensory Status',
+  pain_assessment: 'Pain Assessment',
+  integumentary_status: 'Skin Conditions',
+  respiratory_status: 'Respiratory',
+  cardiac_status: 'Cardiac',
+  elimination_status: 'Elimination',
+  neuro_emotional: 'Neuro/Emotional',
+  functional_abilities: 'Functional Abilities',
+  medication_management: 'Medications',
+  care_management: 'Care Management',
+  therapy_need: 'Therapy Need',
+};
 
 // ===========================================
 // TYPES
@@ -25,7 +53,7 @@ interface VoiceSuggestionReviewProps {
   onClose: () => void;
 }
 
-type FieldState = 'pending' | 'accepted' | 'rejected';
+type TabType = 'auto-filled' | 'needs-review';
 
 // ===========================================
 // HELPER COMPONENTS
@@ -34,29 +62,68 @@ type FieldState = 'pending' | 'accepted' | 'rejected';
 function ConfidenceBadge({ confidence }: { confidence: number }) {
   const percent = Math.round(confidence * 100);
 
-  if (confidence >= 0.9) {
-    return <Badge variant="success">AI {percent}%</Badge>;
+  if (confidence >= HIGH_CONFIDENCE_THRESHOLD) {
+    return <Badge variant="success">{percent}%</Badge>;
   }
   if (confidence >= 0.7) {
-    return <Badge variant="warning">AI {percent}%</Badge>;
+    return <Badge variant="warning">{percent}%</Badge>;
   }
-  return <Badge variant="error">AI {percent}%</Badge>;
+  return <Badge variant="error">{percent}%</Badge>;
 }
 
-function SuggestionCard({
+/** Compact card for auto-filled items - minimal, just shows what was filled */
+function AutoFilledCard({
+  field,
+  question,
+  onEdit,
+}: {
+  field: OasisFieldMapping;
+  question?: OASISQuestion;
+  onEdit: () => void;
+}) {
+  const getResponseLabel = (code: string) => {
+    if (!question?.responses) return code;
+    const option = question.responses.find((r) => r.code === code);
+    return option ? option.label : code;
+  };
+
+  return (
+    <div className="flex items-center justify-between py-2 px-3 bg-green-50 rounded-lg border border-green-200">
+      <div className="flex items-center gap-3 min-w-0">
+        <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+        <div className="min-w-0">
+          <span className="font-mono text-xs text-gray-500">{field.itemCode}</span>
+          <span className="mx-2 text-gray-300">|</span>
+          <span className="text-sm font-medium text-gray-900 truncate">
+            {getResponseLabel(field.mappedResponseCode)}
+          </span>
+        </div>
+      </div>
+      <button
+        onClick={onEdit}
+        className="text-xs text-gray-500 hover:text-gray-700 flex-shrink-0"
+      >
+        Edit
+      </button>
+    </div>
+  );
+}
+
+/** Detailed card for items needing review */
+function ReviewCard({
   field,
   question,
   existingValue,
-  state,
   onAccept,
-  onReject,
+  onSkip,
 }: {
   field: OasisFieldMapping;
   question?: OASISQuestion;
   existingValue?: OASISResponse;
-  state: FieldState;
   onAccept: () => void;
-  onReject: () => void;
+  onSkip: () => void;
 }) {
   const getResponseLabel = (code: string) => {
     if (!question?.responses) return code;
@@ -67,75 +134,56 @@ function SuggestionCard({
   const hasExisting = existingValue?.responseCode || existingValue?.responseValue;
 
   return (
-    <div
-      className={`border rounded-lg p-4 transition-all ${
-        state === 'accepted'
-          ? 'border-green-300 bg-green-50'
-          : state === 'rejected'
-          ? 'border-red-300 bg-red-50 opacity-60'
-          : 'border-gray-200 bg-white'
-      }`}
-    >
+    <div className="border border-amber-200 rounded-lg p-4 bg-amber-50">
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm text-gray-500">{field.itemCode}</span>
             <ConfidenceBadge confidence={field.confidence} />
-            {field.requiresReview && (
-              <Badge variant="warning">Review</Badge>
-            )}
           </div>
           <h4 className="font-medium text-gray-900">{field.itemName}</h4>
         </div>
-
-        {/* State indicator */}
-        {state === 'accepted' && (
-          <span className="text-green-600">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </span>
-        )}
-        {state === 'rejected' && (
-          <span className="text-red-600">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </span>
-        )}
       </div>
 
       {/* Suggested value */}
       <div className="mb-3">
-        <div className="text-sm text-gray-500 mb-1">Suggested:</div>
-        <div className="font-medium text-gray-900">
+        <div className="text-sm text-gray-500 mb-1">AI Suggestion:</div>
+        <div className="font-medium text-gray-900 bg-white p-2 rounded border">
           {getResponseLabel(field.mappedResponseCode)}
         </div>
       </div>
 
-      {/* Existing value (if different) */}
+      {/* Existing value warning */}
       {hasExisting && (
-        <div className="mb-3 p-2 bg-yellow-50 rounded text-sm">
-          <div className="text-yellow-700">
-            Current value: {getResponseLabel(existingValue.responseCode || existingValue.responseValue || '')}
-          </div>
+        <div className="mb-3 p-2 bg-yellow-100 rounded text-sm border border-yellow-200">
+          <span className="font-medium text-yellow-800">Current value:</span>{' '}
+          <span className="text-yellow-700">
+            {getResponseLabel(existingValue.responseCode || existingValue.responseValue || '')}
+          </span>
         </div>
       )}
 
       {/* Source text */}
-      <div className="mb-4 p-2 bg-blue-50 rounded">
+      <div className="mb-3 p-2 bg-blue-50 rounded border border-blue-100">
         <div className="text-xs text-blue-600 mb-1">From transcription:</div>
         <div className="text-sm text-blue-800 italic">"{field.sourceText}"</div>
       </div>
 
+      {/* Review reason */}
+      {field.reviewReason && (
+        <div className="mb-3 p-2 bg-amber-100 rounded text-sm text-amber-800 border border-amber-200">
+          <span className="font-medium">Why review needed:</span> {field.reviewReason}
+        </div>
+      )}
+
       {/* Alternative values */}
       {field.alternativeValues && field.alternativeValues.length > 0 && (
-        <div className="mb-4">
-          <div className="text-xs text-gray-500 mb-1">Alternative interpretations:</div>
+        <div className="mb-3">
+          <div className="text-xs text-gray-500 mb-1">Other possibilities:</div>
           <div className="flex flex-wrap gap-2">
             {field.alternativeValues.map((alt, idx) => (
-              <span key={idx} className="text-xs px-2 py-1 bg-gray-100 rounded">
+              <span key={idx} className="text-xs px-2 py-1 bg-gray-100 rounded border">
                 {getResponseLabel(alt.responseCode)} ({Math.round(alt.confidence * 100)}%)
               </span>
             ))}
@@ -143,33 +191,15 @@ function SuggestionCard({
         </div>
       )}
 
-      {/* Review reason */}
-      {field.reviewReason && (
-        <div className="mb-4 p-2 bg-amber-50 rounded text-sm text-amber-700">
-          <span className="font-medium">Review reason:</span> {field.reviewReason}
-        </div>
-      )}
-
       {/* Actions */}
-      {state === 'pending' && (
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="primary" onClick={onAccept}>
-            Accept
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onReject}>
-            Reject
-          </Button>
-        </div>
-      )}
-
-      {state !== 'pending' && (
-        <button
-          className="text-sm text-gray-500 hover:text-gray-700"
-          onClick={state === 'accepted' ? onReject : onAccept}
-        >
-          {state === 'accepted' ? 'Undo accept' : 'Undo reject'}
-        </button>
-      )}
+      <div className="flex items-center gap-2 pt-2 border-t border-amber-200">
+        <Button size="sm" variant="primary" onClick={onAccept}>
+          Accept
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onSkip}>
+          Skip
+        </Button>
+      </div>
     </div>
   );
 }
@@ -180,6 +210,7 @@ function SuggestionCard({
 
 export default function VoiceSuggestionReview({
   transcriptionText,
+  transcriptionId: _transcriptionId,
   extractedFields,
   questions,
   existingResponses,
@@ -188,102 +219,248 @@ export default function VoiceSuggestionReview({
   onAcceptAll,
   onClose,
 }: VoiceSuggestionReviewProps) {
-  const [fieldStates, setFieldStates] = useState<Record<string, FieldState>>(
-    Object.fromEntries(extractedFields.map((f) => [f.itemCode, 'pending']))
-  );
+  const [activeTab, setActiveTab] = useState<TabType>('needs-review');
   const [showTranscription, setShowTranscription] = useState(false);
+  const [autoFilledItems, setAutoFilledItems] = useState<Set<string>>(new Set());
+  const [reviewedItems, setReviewedItems] = useState<Set<string>>(new Set());
+  const [skippedItems, setSkippedItems] = useState<Set<string>>(new Set());
+  const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Group fields by status
-  const { reviewFields, highConfidenceFields, pendingCount, acceptedCount, rejectedCount } =
-    useMemo(() => {
-      const review = extractedFields.filter((f) => f.requiresReview);
-      const highConf = extractedFields.filter((f) => !f.requiresReview);
-      const pending = Object.values(fieldStates).filter((s) => s === 'pending').length;
-      const accepted = Object.values(fieldStates).filter((s) => s === 'accepted').length;
-      const rejected = Object.values(fieldStates).filter((s) => s === 'rejected').length;
+  // Separate fields by confidence
+  const { highConfidenceFields, lowConfidenceFields } = useMemo(() => {
+    const high: OasisFieldMapping[] = [];
+    const low: OasisFieldMapping[] = [];
 
-      return {
-        reviewFields: review,
-        highConfidenceFields: highConf,
-        pendingCount: pending,
-        acceptedCount: accepted,
-        rejectedCount: rejected,
-      };
-    }, [extractedFields, fieldStates]);
-
-  const handleAccept = (itemCode: string) => {
-    const field = extractedFields.find((f) => f.itemCode === itemCode);
-    if (field) {
-      setFieldStates((prev) => ({ ...prev, [itemCode]: 'accepted' }));
-      onAccept(itemCode, field);
-    }
-  };
-
-  const handleReject = (itemCode: string) => {
-    setFieldStates((prev) => ({ ...prev, [itemCode]: 'rejected' }));
-    onReject(itemCode);
-  };
-
-  const handleAcceptAllHighConfidence = () => {
-    const fieldsToAccept = highConfidenceFields.filter(
-      (f) => fieldStates[f.itemCode] === 'pending'
-    );
-
-    const newStates = { ...fieldStates };
-    fieldsToAccept.forEach((f) => {
-      newStates[f.itemCode] = 'accepted';
+    extractedFields.forEach((field) => {
+      if (field.confidence >= HIGH_CONFIDENCE_THRESHOLD && !field.requiresReview) {
+        high.push(field);
+      } else {
+        low.push(field);
+      }
     });
-    setFieldStates(newStates);
 
-    onAcceptAll(fieldsToAccept);
-  };
+    return { highConfidenceFields: high, lowConfidenceFields: low };
+  }, [extractedFields]);
 
-  const handleDone = () => {
-    onClose();
-  };
+  // Group auto-filled items by section
+  const autoFilledBySection = useMemo(() => {
+    const grouped: Record<string, OasisFieldMapping[]> = {};
+    highConfidenceFields
+      .filter((f) => autoFilledItems.has(f.itemCode))
+      .forEach((field) => {
+        const section = field.section || 'other';
+        if (!grouped[section]) grouped[section] = [];
+        grouped[section].push(field);
+      });
+    return grouped;
+  }, [highConfidenceFields, autoFilledItems]);
+
+  // Items still needing review
+  const pendingReviewItems = useMemo(() => {
+    return lowConfidenceFields.filter(
+      (f) => !reviewedItems.has(f.itemCode) && !skippedItems.has(f.itemCode)
+    );
+  }, [lowConfidenceFields, reviewedItems, skippedItems]);
+
+  // Auto-accept high confidence items on mount
+  useEffect(() => {
+    if (hasInitialized || highConfidenceFields.length === 0) return;
+
+    // Auto-accept all high confidence fields
+    const itemsToAutoFill = new Set<string>();
+    highConfidenceFields.forEach((field) => {
+      itemsToAutoFill.add(field.itemCode);
+    });
+
+    setAutoFilledItems(itemsToAutoFill);
+    onAcceptAll(highConfidenceFields);
+    setHasInitialized(true);
+
+    // If there are no low confidence items, show the auto-filled tab
+    if (lowConfidenceFields.length === 0) {
+      setActiveTab('auto-filled');
+    }
+  }, [hasInitialized, highConfidenceFields, lowConfidenceFields.length, onAcceptAll]);
+
+  // Handle accepting a review item
+  const handleAcceptReviewItem = useCallback((itemCode: string) => {
+    const field = lowConfidenceFields.find((f) => f.itemCode === itemCode);
+    if (field) {
+      onAccept(itemCode, field);
+      setReviewedItems((prev) => new Set([...prev, itemCode]));
+    }
+  }, [lowConfidenceFields, onAccept]);
+
+  // Handle skipping a review item
+  const handleSkipReviewItem = useCallback((itemCode: string) => {
+    setSkippedItems((prev) => new Set([...prev, itemCode]));
+    onReject(itemCode);
+  }, [onReject]);
+
+  // Handle undo all auto-filled
+  const handleUndoAll = useCallback(() => {
+    autoFilledItems.forEach((itemCode) => {
+      onReject(itemCode);
+    });
+    setAutoFilledItems(new Set());
+    setHasInitialized(false);
+  }, [autoFilledItems, onReject]);
+
+  // Handle editing an auto-filled item (remove from auto-filled, add to review)
+  const handleEditAutoFilled = useCallback((itemCode: string) => {
+    onReject(itemCode);
+    setAutoFilledItems((prev) => {
+      const next = new Set(prev);
+      next.delete(itemCode);
+      return next;
+    });
+  }, [onReject]);
+
+  // Stats
+  const autoFilledCount = autoFilledItems.size;
+  const needsReviewCount = pendingReviewItems.length;
+  const reviewedCount = reviewedItems.size;
+  const skippedCount = skippedItems.size;
 
   return (
     <Modal isOpen={true} size="xl" onClose={onClose} title="Voice Extraction Results">
-      <div className="space-y-6">
-        {/* Header actions */}
-        <div className="flex items-center justify-between pb-4 border-b">
-          <p className="text-sm text-gray-500">
-            {extractedFields.length} fields extracted • {pendingCount} pending review
-          </p>
+      <div className="space-y-4">
+        {/* Summary Bar */}
+        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-green-700">{autoFilledCount}</div>
+                <div className="text-xs text-green-600">Auto-filled</div>
+              </div>
+            </div>
+            {needsReviewCount > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-amber-700">{needsReviewCount}</div>
+                  <div className="text-xs text-amber-600">Need review</div>
+                </div>
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-2">
-            {highConfidenceFields.some((f) => fieldStates[f.itemCode] === 'pending') && (
-              <Button size="sm" variant="secondary" onClick={handleAcceptAllHighConfidence}>
-                Accept All High Confidence ({highConfidenceFields.filter((f) => fieldStates[f.itemCode] === 'pending').length})
+            {autoFilledCount > 0 && (
+              <Button size="sm" variant="ghost" onClick={handleUndoAll}>
+                Undo All
               </Button>
             )}
-            <Button size="sm" variant="primary" onClick={handleDone}>
+            <Button size="sm" variant="primary" onClick={onClose}>
               Done
             </Button>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">{extractedFields.length}</div>
-            <div className="text-xs text-gray-500">Extracted</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">{acceptedCount}</div>
-            <div className="text-xs text-gray-500">Accepted</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-red-600">{rejectedCount}</div>
-            <div className="text-xs text-gray-500">Rejected</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-400">{pendingCount}</div>
-            <div className="text-xs text-gray-500">Pending</div>
-          </div>
+        {/* Tabs */}
+        <div className="flex border-b">
+          <button
+            onClick={() => setActiveTab('needs-review')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'needs-review'
+                ? 'border-amber-500 text-amber-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Needs Review
+            {needsReviewCount > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">
+                {needsReviewCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('auto-filled')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'auto-filled'
+                ? 'border-green-500 text-green-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Auto-Filled
+            {autoFilledCount > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">
+                {autoFilledCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        <div className="max-h-[60vh] overflow-y-auto">
+          {activeTab === 'needs-review' && (
+            <div className="space-y-4">
+              {pendingReviewItems.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <svg className="w-12 h-12 mx-auto mb-4 text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="font-medium text-green-600">All done!</p>
+                  <p className="text-sm mt-1">
+                    {reviewedCount > 0 && `${reviewedCount} accepted. `}
+                    {skippedCount > 0 && `${skippedCount} skipped.`}
+                    {reviewedCount === 0 && skippedCount === 0 && 'No items needed review.'}
+                  </p>
+                </div>
+              ) : (
+                pendingReviewItems.map((field) => (
+                  <ReviewCard
+                    key={field.itemCode}
+                    field={field}
+                    question={questions.find((q) => q.itemCode === field.itemCode)}
+                    existingValue={existingResponses?.[field.itemCode]}
+                    onAccept={() => handleAcceptReviewItem(field.itemCode)}
+                    onSkip={() => handleSkipReviewItem(field.itemCode)}
+                  />
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'auto-filled' && (
+            <div className="space-y-4">
+              {autoFilledCount === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No items were auto-filled.</p>
+                </div>
+              ) : (
+                Object.entries(autoFilledBySection).map(([sectionId, fields]) => (
+                  <div key={sectionId}>
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                      {SECTION_NAMES[sectionId] || sectionId}
+                    </h4>
+                    <div className="space-y-2">
+                      {fields.map((field) => (
+                        <AutoFilledCard
+                          key={field.itemCode}
+                          field={field}
+                          question={questions.find((q) => q.itemCode === field.itemCode)}
+                          onEdit={() => handleEditAutoFilled(field.itemCode)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* Transcription toggle */}
-        <div>
+        <div className="pt-4 border-t">
           <button
             onClick={() => setShowTranscription(!showTranscription)}
             className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
@@ -304,66 +481,6 @@ export default function VoiceSuggestionReview({
             </div>
           )}
         </div>
-
-        {/* Fields needing review */}
-        {reviewFields.length > 0 && (
-          <div>
-            <h3 className="flex items-center gap-2 text-lg font-medium text-amber-700 mb-4">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-              Needs Review ({reviewFields.length})
-            </h3>
-            <div className="space-y-4">
-              {reviewFields.map((field) => (
-                <SuggestionCard
-                  key={field.itemCode}
-                  field={field}
-                  question={questions.find((q) => q.itemCode === field.itemCode)}
-                  existingValue={existingResponses?.[field.itemCode]}
-                  state={fieldStates[field.itemCode] || 'pending'}
-                  onAccept={() => handleAccept(field.itemCode)}
-                  onReject={() => handleReject(field.itemCode)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* High confidence fields */}
-        {highConfidenceFields.length > 0 && (
-          <div>
-            <h3 className="flex items-center gap-2 text-lg font-medium text-green-700 mb-4">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              High Confidence ({highConfidenceFields.length})
-            </h3>
-            <div className="space-y-4 max-h-96 overflow-y-auto">
-              {highConfidenceFields.map((field) => (
-                <SuggestionCard
-                  key={field.itemCode}
-                  field={field}
-                  question={questions.find((q) => q.itemCode === field.itemCode)}
-                  existingValue={existingResponses?.[field.itemCode]}
-                  state={fieldStates[field.itemCode] || 'pending'}
-                  onAccept={() => handleAccept(field.itemCode)}
-                  onReject={() => handleReject(field.itemCode)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* No fields extracted */}
         {extractedFields.length === 0 && (
