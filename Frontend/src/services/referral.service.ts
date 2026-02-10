@@ -18,18 +18,20 @@ import type {
 // Response types
 interface UploadResponse {
   message: string;
-  document: ReferralDocument;
+  referralDocument: ReferralDocument;
 }
 
 interface GetReferralResponse extends ReferralDocument {}
 
 interface ListReferralsResponse {
-  referrals: ReferralListItem[];
+  data: ReferralListItem[];
   pagination: {
     page: number;
     limit: number;
     total: number;
     totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
   };
 }
 
@@ -64,7 +66,7 @@ export const referralService = {
         timeout: 120000, // 2 minutes for file upload
       }
     );
-    return response.data.document;
+    return response.data.referralDocument;
   },
 
   /**
@@ -78,14 +80,9 @@ export const referralService = {
       `/patients/${patientId}/referrals`,
       { params }
     );
-    const { pagination } = response.data;
     return {
-      data: response.data.referrals,
-      pagination: {
-        ...pagination,
-        hasNext: pagination.page < pagination.totalPages,
-        hasPrev: pagination.page > 1,
-      },
+      data: response.data.data,
+      pagination: response.data.pagination,
     };
   },
 
@@ -135,11 +132,11 @@ export const referralService = {
     id: string,
     data: Partial<Pick<ReferralDocument, 'documentType' | 'metadata'>>
   ): Promise<ReferralDocument> {
-    const response = await apiClient.patch<{ referral: ReferralDocument }>(
+    const response = await apiClient.patch<{ message: string; referralDocument: ReferralDocument }>(
       `/referrals/${id}`,
       data
     );
-    return response.data.referral;
+    return response.data.referralDocument;
   },
 
   /**
