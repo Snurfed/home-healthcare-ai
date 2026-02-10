@@ -499,13 +499,15 @@ function cleanExtractedText(text: string): string {
 // ===========================================
 
 /**
- * Process a scanned PDF directly with Claude's vision API
+ * Process a PDF directly with Claude's vision API - extracts AND parses in one call
  * Claude can read PDFs natively - no OCR needed
+ * This is more efficient than extracting text first then parsing
  */
-async function extractTextFromScannedPdfWithClaude(
-  filePath: string
-): Promise<string> {
-  console.log('[Claude Vision] Processing scanned PDF...');
+async function extractFromPdfWithClaudeVision(
+  filePath: string,
+  documentType: ReferralDocumentType
+): Promise<AIExtractionResult> {
+  console.log('[Claude Vision] Processing PDF with vision API...');
   const startTime = Date.now();
 
   try {
@@ -513,11 +515,12 @@ async function extractTextFromScannedPdfWithClaude(
     const buffer = await fs.promises.readFile(filePath);
     const base64Data = buffer.toString('base64');
 
-    console.log(`[Claude Vision] Sending ${buffer.length} bytes as base64 PDF...`);
+    console.log(`[Claude Vision] Sending ${buffer.length} bytes (${(buffer.length / 1024).toFixed(1)} KB) as base64 PDF...`);
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8192,
+      system: EXTRACTION_SYSTEM_PROMPT,
       messages: [
         {
           role: 'user',
@@ -532,7 +535,15 @@ async function extractTextFromScannedPdfWithClaude(
             },
             {
               type: 'text',
-              text: 'Please extract ALL text content from this document. Include every piece of text you can see - patient names, dates, diagnoses, medications, addresses, phone numbers, physician information, orders, and any other clinical information. Return ONLY the extracted text, preserving the document structure as much as possible.',
+              text: `Document Type: ${documentType}
+
+Please extract all clinical information from this referral document and return it as JSON.
+
+Remember to:
+1. Extract all patient demographics, physician info, diagnoses, medications, and functional status
+2. Map clinical findings to specific OASIS item codes with confidence scores
+3. Include the exact source text for each mapping
+4. Only include fields where you found evidence in the document`,
             },
           ],
         },
@@ -544,12 +555,36 @@ async function extractTextFromScannedPdfWithClaude(
       throw new Error('Unexpected response type from Claude');
     }
 
-    const extractedText = (content as { type: 'text'; text: string }).text;
-    const elapsed = Date.now() - startTime;
-    console.log(`[Claude Vision] Extracted ${extractedText.length} chars in ${elapsed}ms`);
-    console.log(`[Claude Vision] First 200 chars: ${extractedText.substring(0, 200)}`);
+    // Parse JSON, handling markdown code blocks
+    const textContent = content as { type: 'text'; text: string };
+    let jsonText = textContent.text.trim();
 
-    return extractedText;
+    // Log raw response for debugging
+    console.log(`[Claude Vision] Raw response length: ${jsonText.length}`);
+    console.log(`[Claude Vision] First 300 chars of response: ${jsonText.substring(0, 300)}`);
+
+    if (jsonText.startsWith('```json')) {
+      jsonText = jsonText.slice(7);
+    }
+    if (jsonText.startsWith('```')) {
+      jsonText = jsonText.slice(3);
+    }
+    if (jsonText.endsWith('```')) {
+      jsonText = jsonText.slice(0, -3);
+    }
+    jsonText = jsonText.trim();
+
+    const parsed = JSON.parse(jsonText) as AIExtractionResult;
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[Claude Vision] Complete in ${elapsed}ms`);
+    console.log(`[Claude Vision] Extracted data summary:`);
+    console.log(`  - Patient: ${parsed.patient?.firstName} ${parsed.patient?.lastName}`);
+    console.log(`  - Primary Dx: ${parsed.diagnoses?.primary?.icd10} - ${parsed.diagnoses?.primary?.description}`);
+    console.log(`  - Medications: ${parsed.medications?.length || 0}`);
+    console.log(`  - OASIS Mappings: ${Object.keys(parsed.oasisMappings || {}).length}`);
+
+    return parsed;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[Claude Vision] Failed: ${errorMsg}`);
@@ -712,52 +747,58 @@ export async function extractFromDocument(
 ): Promise<ExtractionResult> {
   const startTime = Date.now();
   const fileType = path.extname(filePath).replace('.', '').toLowerCase();
+  const documentType = options.documentType || ReferralDocumentType.REFERRAL;
+
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[Referral Extraction] Starting extraction`);
+  console.log(`  File: ${filePath}`);
+  console.log(`  Type: ${fileType}`);
+  console.log(`${'='.repeat(60)}`);
 
   try {
-    // Step 1: Extract raw text
-    console.log(`[Referral Extraction] Extracting text from ${fileType}...`);
-    let rawText: string;
+    let rawText: string = '';
     let pageCount: number | undefined;
+    let aiResult: AIExtractionResult;
 
     if (fileType === 'pdf') {
-      // Special handling for PDFs - may need Claude vision for scanned docs
+      // Step 1: Try fast text extraction with pdfjs-dist
       const pdfResult = await extractTextFromPdf(filePath);
       pageCount = pdfResult.pageCount;
 
       if (pdfResult.isScannedPdf) {
-        // Scanned PDF - use Claude vision to extract text
-        console.log('[Referral Extraction] Scanned PDF detected, using Claude vision...');
-        rawText = await extractTextFromScannedPdfWithClaude(filePath);
+        // Scanned PDF - send directly to Claude vision (one API call)
+        console.log('[Referral Extraction] Scanned PDF - using Claude vision for extraction...');
+        aiResult = await extractFromPdfWithClaudeVision(filePath, documentType);
+        rawText = '[Extracted via Claude Vision - scanned PDF]';
       } else {
+        // Digital PDF - we have good text, send to AI for parsing
         rawText = pdfResult.text;
+        console.log(`[Referral Extraction] Digital PDF - ${rawText.length} chars extracted`);
+        console.log('[Referral Extraction] Processing text with AI...');
+        aiResult = await processReferralWithAI(rawText, documentType);
       }
     } else {
-      // Non-PDF documents
+      // Non-PDF documents - extract text then process
       const result = await extractTextFromDocument(filePath, fileType);
       rawText = result.text;
       pageCount = result.pageCount;
+
+      if (!rawText || rawText.length < 50) {
+        console.log(`[Referral Extraction] Insufficient text: ${rawText?.length || 0} chars`);
+        return {
+          success: false,
+          documentType,
+          rawText: rawText || '',
+          extractedFields: [],
+          processingTimeMs: Date.now() - startTime,
+          error: 'Insufficient text content extracted from document',
+        };
+      }
+
+      console.log(`[Referral Extraction] Extracted ${rawText.length} characters`);
+      console.log('[Referral Extraction] Processing text with AI...');
+      aiResult = await processReferralWithAI(rawText, documentType);
     }
-
-    if (!rawText || rawText.length < 50) {
-      console.log(`[Referral Extraction] Insufficient text: ${rawText?.length || 0} chars`);
-      return {
-        success: false,
-        documentType: options.documentType || ReferralDocumentType.OTHER,
-        rawText: rawText || '',
-        extractedFields: [],
-        processingTimeMs: Date.now() - startTime,
-        error: 'Insufficient text content extracted from document',
-      };
-    }
-
-    console.log(`[Referral Extraction] Extracted ${rawText.length} characters, ${pageCount || 'unknown'} pages`);
-
-    // Step 2: Process with AI
-    console.log('[Referral Extraction] Processing with AI...');
-    const aiResult = await processReferralWithAI(
-      rawText,
-      options.documentType || ReferralDocumentType.REFERRAL
-    );
 
     // Step 3: Validate OASIS mappings
     let validMappings: Record<string, OasisMapping> = {};
@@ -799,11 +840,40 @@ export async function extractFromDocument(
       }
     }
 
-    console.log(`[Referral Extraction] Complete - ${extractedFields.length} fields extracted`);
+    const processingTimeMs = Date.now() - startTime;
+
+    // Log extraction summary
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`[Referral Extraction] COMPLETE`);
+    console.log(`${'='.repeat(60)}`);
+    console.log(`  Processing time: ${processingTimeMs}ms`);
+    console.log(`  OASIS fields extracted: ${extractedFields.length}`);
+    console.log(`  Diagnoses found: ${diagnosisCodes.length}`);
+    console.log(`  Medications found: ${aiResult.medications?.length || 0}`);
+
+    if (aiResult.patient) {
+      console.log(`  Patient: ${aiResult.patient.firstName || '?'} ${aiResult.patient.lastName || '?'}`);
+      console.log(`  DOB: ${aiResult.patient.dob || 'N/A'}`);
+    }
+
+    if (aiResult.diagnoses?.primary) {
+      console.log(`  Primary Dx: ${aiResult.diagnoses.primary.icd10} - ${aiResult.diagnoses.primary.description}`);
+    }
+
+    if (Object.keys(validMappings).length > 0) {
+      console.log(`  OASIS Mappings:`);
+      for (const [code, mapping] of Object.entries(validMappings).slice(0, 5)) {
+        console.log(`    ${code}: ${mapping.value} (${(mapping.confidence * 100).toFixed(0)}% conf)`);
+      }
+      if (Object.keys(validMappings).length > 5) {
+        console.log(`    ... and ${Object.keys(validMappings).length - 5} more`);
+      }
+    }
+    console.log(`${'='.repeat(60)}\n`);
 
     return {
       success: true,
-      documentType: options.documentType || ReferralDocumentType.REFERRAL,
+      documentType,
       rawText,
       extractedFields,
       extractedData: {
@@ -813,16 +883,23 @@ export async function extractFromDocument(
       patientInfo: aiResult.patient,
       diagnosisCodes,
       medications: aiResult.medications,
-      processingTimeMs: Date.now() - startTime,
+      processingTimeMs,
     };
   } catch (error) {
-    console.error('[Referral Extraction Error]', error);
+    const processingTimeMs = Date.now() - startTime;
+    console.error(`\n${'='.repeat(60)}`);
+    console.error('[Referral Extraction] FAILED');
+    console.error(`${'='.repeat(60)}`);
+    console.error(`  Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`  Processing time: ${processingTimeMs}ms`);
+    console.error(`${'='.repeat(60)}\n`);
+
     return {
       success: false,
-      documentType: options.documentType || ReferralDocumentType.OTHER,
+      documentType,
       rawText: '',
       extractedFields: [],
-      processingTimeMs: Date.now() - startTime,
+      processingTimeMs,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
