@@ -336,11 +336,15 @@ export async function extractTextFromDocument(
 
 /**
  * Extract text from PDF using pdfjs-dist
- * Falls back to OCR if no text content (scanned PDF)
+ * Falls back to Claude vision if no text content (scanned PDF)
  */
 async function extractTextFromPdf(
   filePath: string
-): Promise<{ text: string; pageCount?: number }> {
+): Promise<{ text: string; pageCount?: number; isScannedPdf?: boolean }> {
+  // Debug logging
+  const stats = await fs.promises.stat(filePath);
+  console.log(`[PDF] File: ${filePath}`);
+  console.log(`[PDF] File size: ${stats.size} bytes`);
   console.log('[PDF] Starting text extraction with pdfjs-dist...');
   const startTime = Date.now();
 
@@ -372,27 +376,35 @@ async function extractTextFromPdf(
 
     const text = fullText.trim();
     console.log(`[PDF] Extracted ${text.length} characters`);
+    console.log(`[PDF] First 200 chars: ${text.substring(0, 200)}`);
 
-    // If we got some text, use it (even if small - the AI can still work with it)
-    // Only fall back to OCR if we got essentially zero text (truly a scanned image PDF)
-    if (text.length < 10) {
-      console.log('[PDF] No text content detected, this appears to be a scanned PDF. OCR would be needed for images.');
-      // Note: OCR of PDFs requires converting to images first, which is complex
-      // For now, return empty and let the AI handle partial data
+    // If we got some text, use it
+    if (text.length >= 50) {
+      console.log('[PDF] Sufficient text extracted, using pdfjs-dist result');
       return {
-        text: '',
+        text: cleanExtractedText(text),
         pageCount: doc.numPages,
+        isScannedPdf: false,
       };
     }
 
+    // Scanned PDF detected - flag it for Claude vision processing
+    console.log(`[PDF] Insufficient text (${text.length} chars < 50), this is a scanned PDF`);
+    console.log('[PDF] Will use Claude vision API for extraction');
     return {
-      text: cleanExtractedText(text),
+      text: text,
       pageCount: doc.numPages,
+      isScannedPdf: true,
     };
   } catch (pdfError) {
     const errorMsg = pdfError instanceof Error ? pdfError.message : String(pdfError);
-    console.log(`[PDF] Parse failed: ${errorMsg}, attempting OCR...`);
-    return await extractTextWithOcr(filePath);
+    console.log(`[PDF] Parse failed: ${errorMsg}`);
+    // Return as scanned PDF to trigger Claude vision
+    return {
+      text: '',
+      pageCount: undefined,
+      isScannedPdf: true,
+    };
   }
 }
 
@@ -485,6 +497,65 @@ function cleanExtractedText(text: string): string {
 // ===========================================
 // AI EXTRACTION FUNCTIONS
 // ===========================================
+
+/**
+ * Process a scanned PDF directly with Claude's vision API
+ * Claude can read PDFs natively - no OCR needed
+ */
+async function extractTextFromScannedPdfWithClaude(
+  filePath: string
+): Promise<string> {
+  console.log('[Claude Vision] Processing scanned PDF...');
+  const startTime = Date.now();
+
+  try {
+    const client = getAnthropicClient();
+    const buffer = await fs.promises.readFile(filePath);
+    const base64Data = buffer.toString('base64');
+
+    console.log(`[Claude Vision] Sending ${buffer.length} bytes as base64 PDF...`);
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8192,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: base64Data,
+              },
+            },
+            {
+              type: 'text',
+              text: 'Please extract ALL text content from this document. Include every piece of text you can see - patient names, dates, diagnoses, medications, addresses, phone numbers, physician information, orders, and any other clinical information. Return ONLY the extracted text, preserving the document structure as much as possible.',
+            },
+          ],
+        },
+      ],
+    });
+
+    const content = response.content[0];
+    if (!content || content.type !== 'text') {
+      throw new Error('Unexpected response type from Claude');
+    }
+
+    const extractedText = (content as { type: 'text'; text: string }).text;
+    const elapsed = Date.now() - startTime;
+    console.log(`[Claude Vision] Extracted ${extractedText.length} chars in ${elapsed}ms`);
+    console.log(`[Claude Vision] First 200 chars: ${extractedText.substring(0, 200)}`);
+
+    return extractedText;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[Claude Vision] Failed: ${errorMsg}`);
+    throw new Error(`Claude vision extraction failed: ${errorMsg}`);
+  }
+}
 
 /**
  * Process referral text with Claude AI for extraction
@@ -645,9 +716,30 @@ export async function extractFromDocument(
   try {
     // Step 1: Extract raw text
     console.log(`[Referral Extraction] Extracting text from ${fileType}...`);
-    const { text: rawText, pageCount } = await extractTextFromDocument(filePath, fileType);
+    let rawText: string;
+    let pageCount: number | undefined;
+
+    if (fileType === 'pdf') {
+      // Special handling for PDFs - may need Claude vision for scanned docs
+      const pdfResult = await extractTextFromPdf(filePath);
+      pageCount = pdfResult.pageCount;
+
+      if (pdfResult.isScannedPdf) {
+        // Scanned PDF - use Claude vision to extract text
+        console.log('[Referral Extraction] Scanned PDF detected, using Claude vision...');
+        rawText = await extractTextFromScannedPdfWithClaude(filePath);
+      } else {
+        rawText = pdfResult.text;
+      }
+    } else {
+      // Non-PDF documents
+      const result = await extractTextFromDocument(filePath, fileType);
+      rawText = result.text;
+      pageCount = result.pageCount;
+    }
 
     if (!rawText || rawText.length < 50) {
+      console.log(`[Referral Extraction] Insufficient text: ${rawText?.length || 0} chars`);
       return {
         success: false,
         documentType: options.documentType || ReferralDocumentType.OTHER,
