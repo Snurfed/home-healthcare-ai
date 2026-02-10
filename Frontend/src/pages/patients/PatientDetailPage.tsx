@@ -11,6 +11,7 @@ import { Button, Badge, Spinner, Alert } from '@components/common';
 import { STATUS_CONFIG, ASSESSMENT_TYPE_LABELS } from '@typedefs/oasis.types';
 import AssessmentTimeline from '@components/patients/AssessmentTimeline';
 import { ReferralDocumentsList, ReferralUploadButton } from '@components/oasis';
+import SOAPNotesList from '@components/oasis/SOAPNotesList';
 import { referralService } from '@services/referral.service';
 import type { ReferralListItem, ReferralDocument } from '@typedefs/index';
 
@@ -275,6 +276,14 @@ export default function PatientDetailPage() {
               error={referralsError}
               onRefresh={fetchReferrals}
               onApplyComplete={handleApplyComplete}
+            />
+          </div>
+
+          {/* SOAP Notes */}
+          <div className="bg-white rounded-lg shadow-card p-6">
+            <SOAPNotesList
+              patientId={id!}
+              patientName={`${patient.lastName}, ${patient.firstName}`}
             />
           </div>
 

@@ -14,13 +14,14 @@ import {
   useSubmitForReview,
 } from '@hooks/index';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
-import { Button, Spinner, Alert, Badge } from '@components/common';
+import { Button, Spinner, Alert, Badge, Modal } from '@components/common';
 import { OASIS_SECTIONS, STATUS_CONFIG } from '@typedefs/oasis.types';
 import SectionStepper from '@components/oasis/SectionStepper';
 import SectionContent from '@components/oasis/SectionContent';
 import SubmissionValidation from '@components/oasis/SubmissionValidation';
 import ValidationModal from '@components/oasis/ValidationModal';
 import { ReferralUploadButton } from '@components/oasis/ReferralUpload';
+import SOAPNoteView from '@components/oasis/SOAPNoteView';
 import type { ReferralDocument } from '@typedefs/index';
 
 export default function AssessmentWizardPage() {
@@ -28,6 +29,7 @@ export default function AssessmentWizardPage() {
   const navigate = useNavigate();
   const [showReview, setShowReview] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
+  const [showSoapNoteModal, setShowSoapNoteModal] = useState(false);
 
   const { data: assessment, isLoading, error } = useAssessment(id);
   // Fetch questions filtered by assessment type for better performance
@@ -186,6 +188,21 @@ export default function AssessmentWizardPage() {
               assessmentId={assessment.id}
               onExtractionComplete={handleReferralExtractionComplete}
             />
+            <Button
+              variant="secondary"
+              onClick={() => setShowSoapNoteModal(true)}
+              title="Generate SOAP Note"
+            >
+              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              SOAP Note
+            </Button>
           </div>
 
           <div className="text-right">
@@ -365,6 +382,24 @@ export default function AssessmentWizardPage() {
         onFixError={handleFixError}
         onSubmitSuccess={handleSubmitSuccess}
       />
+
+      {/* SOAP Note Modal */}
+      <Modal
+        isOpen={showSoapNoteModal}
+        onClose={() => setShowSoapNoteModal(false)}
+        title="SOAP Note"
+        size="xl"
+        closeOnOverlayClick={false}
+      >
+        <div className="h-[70vh] overflow-y-auto">
+          <SOAPNoteView
+            assessmentId={id || ''}
+            patientId={assessment.patientId}
+            patientName={`${assessment.patient?.lastName}, ${assessment.patient?.firstName}`}
+            onClose={() => setShowSoapNoteModal(false)}
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

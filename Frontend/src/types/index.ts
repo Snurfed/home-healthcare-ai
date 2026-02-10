@@ -137,3 +137,28 @@ export {
   DOCUMENT_TYPE_LABELS,
   EXTRACTION_STATUS_CONFIG,
 } from './referral.types';
+
+// SOAP Note types
+export type {
+  SoapNoteStatus,
+  SoapSection,
+  SoapNotePatient,
+  SoapNoteUser,
+  SoapNoteAssessment,
+  SoapNote,
+  SoapNoteListItem,
+  GenerateSoapNoteRequest,
+  GenerateSoapNoteResponse,
+  UpdateSoapNoteRequest,
+  UpdateSoapNoteStatusRequest,
+  RegenerateSectionRequest,
+  RegenerateSectionResponse,
+  SoapNotesListParams,
+  SoapNotesListResponse,
+  SoapNoteValidation,
+} from './soapNote.types';
+
+export {
+  SOAP_STATUS_CONFIG,
+  SOAP_SECTION_CONFIG,
+} from './soapNote.types';

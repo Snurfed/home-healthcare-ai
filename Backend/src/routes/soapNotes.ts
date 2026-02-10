@@ -57,6 +57,18 @@ router.get(
   controller.getSoapNoteByAssessment
 );
 
+/**
+ * @route   POST /api/assessments/:assessmentId/soap-notes/generate
+ * @desc    Trigger AI generation for a SOAP note
+ * @access  Private - Clinical staff
+ */
+router.post(
+  '/assessments/:assessmentId/soap-notes/generate',
+  authenticate,
+  authorize(CLINICAL_ROLES),
+  controller.triggerGeneration
+);
+
 // ===========================================
 // ROUTES - SOAP Note-scoped
 // ===========================================
@@ -95,6 +107,30 @@ router.patch(
   authenticate,
   authorize(CLINICAL_ROLES),
   controller.updateSoapNoteStatus
+);
+
+/**
+ * @route   POST /api/soap-notes/:id/regenerate
+ * @desc    Regenerate a specific section of a SOAP note with optional instructions
+ * @access  Private - Clinical staff
+ */
+router.post(
+  '/soap-notes/:id/regenerate',
+  authenticate,
+  authorize(CLINICAL_ROLES),
+  controller.regenerateSoapNoteSection
+);
+
+/**
+ * @route   GET /api/soap-notes/:id/pdf
+ * @desc    Export SOAP note as PDF/HTML
+ * @access  Private - Clinical staff
+ */
+router.get(
+  '/soap-notes/:id/pdf',
+  authenticate,
+  authorize(CLINICAL_ROLES),
+  controller.exportPdf
 );
 
 // ===========================================
