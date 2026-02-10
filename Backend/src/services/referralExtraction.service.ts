@@ -735,6 +735,176 @@ export function validateOasisMappings(
 }
 
 // ===========================================
+// DATA TRANSFORMATION FOR FRONTEND
+// ===========================================
+
+/**
+ * Transform AI extraction result to frontend-compatible format
+ */
+interface FrontendExtractedData {
+  demographics?: {
+    firstName?: string;
+    lastName?: string;
+    dateOfBirth?: string;
+    gender?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+    };
+    phone?: string;
+    insurance?: {
+      primary?: string;
+      memberId?: string;
+    };
+    emergencyContact?: {
+      name?: string;
+      phone?: string;
+      relationship?: string;
+    };
+    physician?: {
+      name?: string;
+      npi?: string;
+      phone?: string;
+    };
+  };
+  diagnoses?: Array<{
+    icdCode: string;
+    description: string;
+    isPrimary: boolean;
+    confidence: number;
+    sourceText?: string;
+  }>;
+  medications?: Array<{
+    name: string;
+    dose?: string;
+    frequency?: string;
+    route?: string;
+    indication?: string;
+    confidence: number;
+    sourceText?: string;
+  }>;
+  oasisMappings?: Record<string, {
+    itemCode: string;
+    fieldName: string;
+    value: string;
+    confidence: number;
+    sourceText?: string;
+  }>;
+  orders?: Array<{
+    discipline: string;
+    frequency?: string;
+    duration?: string;
+    specificOrders?: string[];
+  }>;
+  certificationPeriod?: {
+    startDate?: string;
+    endDate?: string;
+  };
+}
+
+function transformForFrontend(aiResult: AIExtractionResult): FrontendExtractedData {
+  const result: FrontendExtractedData = {};
+
+  // Transform patient demographics
+  if (aiResult.patient) {
+    result.demographics = {
+      firstName: aiResult.patient.firstName,
+      lastName: aiResult.patient.lastName,
+      dateOfBirth: aiResult.patient.dob,
+      gender: aiResult.patient.gender,
+      address: aiResult.patient.address ? {
+        street: aiResult.patient.address,
+        city: aiResult.patient.city,
+        state: aiResult.patient.state,
+        zipCode: aiResult.patient.zip,
+      } : undefined,
+      phone: aiResult.patient.phone,
+      insurance: aiResult.patient.insurance?.primary ? {
+        primary: aiResult.patient.insurance.primary.name,
+        memberId: aiResult.patient.insurance.primary.policyNumber,
+      } : undefined,
+      emergencyContact: aiResult.patient.emergencyContact,
+      physician: aiResult.physician?.pcp ? {
+        name: aiResult.physician.pcp.name,
+        npi: aiResult.physician.pcp.npi,
+        phone: aiResult.physician.pcp.phone,
+      } : aiResult.physician?.referringPhysician ? {
+        name: aiResult.physician.referringPhysician.name,
+        npi: aiResult.physician.referringPhysician.npi,
+        phone: aiResult.physician.referringPhysician.phone,
+      } : undefined,
+    };
+  }
+
+  // Transform diagnoses to flat array
+  if (aiResult.diagnoses) {
+    result.diagnoses = [];
+    if (aiResult.diagnoses.primary?.icd10) {
+      result.diagnoses.push({
+        icdCode: aiResult.diagnoses.primary.icd10,
+        description: aiResult.diagnoses.primary.description || '',
+        isPrimary: true,
+        confidence: 0.9, // Primary diagnoses are usually explicit
+        sourceText: aiResult.diagnoses.primary.onsetDate ? `Onset: ${aiResult.diagnoses.primary.onsetDate}` : undefined,
+      });
+    }
+    if (aiResult.diagnoses.secondary) {
+      for (const dx of aiResult.diagnoses.secondary) {
+        if (dx.icd10) {
+          result.diagnoses.push({
+            icdCode: dx.icd10,
+            description: dx.description || '',
+            isPrimary: false,
+            confidence: 0.85,
+          });
+        }
+      }
+    }
+  }
+
+  // Transform medications
+  if (aiResult.medications) {
+    result.medications = aiResult.medications.map(med => ({
+      name: med.name,
+      dose: med.dose,
+      frequency: med.frequency,
+      route: med.route,
+      indication: med.indication,
+      confidence: 0.85,
+    }));
+  }
+
+  // Transform OASIS mappings to include itemCode and fieldName
+  if (aiResult.oasisMappings) {
+    result.oasisMappings = {};
+    for (const [itemCode, mapping] of Object.entries(aiResult.oasisMappings)) {
+      result.oasisMappings[itemCode] = {
+        itemCode,
+        fieldName: mapping.valueText || itemCode, // Use valueText as fieldName, fallback to itemCode
+        value: mapping.value,
+        confidence: mapping.confidence,
+        sourceText: mapping.sourceText,
+      };
+    }
+  }
+
+  // Transform orders
+  if (aiResult.orders?.disciplines) {
+    result.orders = aiResult.orders.disciplines.map(d => ({
+      discipline: d.type,
+      frequency: d.frequency,
+      duration: d.duration,
+      specificOrders: aiResult.orders?.specificOrders,
+    }));
+    result.certificationPeriod = aiResult.orders.certificationPeriod;
+  }
+
+  return result;
+}
+
+// ===========================================
 // MAIN EXTRACTION FUNCTION
 // ===========================================
 
@@ -871,15 +1041,18 @@ export async function extractFromDocument(
     }
     console.log(`${'='.repeat(60)}\n`);
 
+    // Transform to frontend-compatible format
+    const frontendData = transformForFrontend({
+      ...aiResult,
+      oasisMappings: validMappings,
+    });
+
     return {
       success: true,
       documentType,
       rawText,
       extractedFields,
-      extractedData: {
-        ...aiResult,
-        oasisMappings: validMappings,
-      },
+      extractedData: frontendData,
       patientInfo: aiResult.patient,
       diagnosisCodes,
       medications: aiResult.medications,
