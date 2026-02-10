@@ -114,12 +114,12 @@ router.patch(
 /**
  * @route   DELETE /api/referrals/:id
  * @desc    Delete a referral document (soft delete)
- * @access  Private - Uploader, Admin, or Supervisor
+ * @access  Private - Admin or Supervisor only
  */
 router.delete(
   '/referrals/:id',
   authenticate,
-  authorize(CLINICAL_ROLES),
+  authorize([UserRole.ADMIN, UserRole.SUPERVISOR]),
   controller.deleteReferral
 );
 
