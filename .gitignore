@@ -360,3 +360,6 @@ security-scans/
 local-data/
 dev-data/
 Backend/oasis-audit-report.html
+
+# Tesseract OCR training data
+*.traineddata
