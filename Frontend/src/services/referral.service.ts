@@ -55,13 +55,12 @@ export const referralService = {
       formData.append('metadata', JSON.stringify(metadata));
     }
 
+    // Note: Don't set Content-Type header manually for FormData
+    // Axios will set it automatically with the correct boundary parameter
     const response = await apiClient.post<UploadResponse>(
       `/patients/${patientId}/referrals/upload`,
       formData,
       {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
         timeout: 120000, // 2 minutes for file upload
       }
     );
