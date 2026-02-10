@@ -405,7 +405,11 @@ export default function ReferralUpload({
         <Button
           variant="secondary"
           className="mt-3"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent double-trigger from parent div
+            // Use setTimeout to ensure DOM is ready
+            setTimeout(() => fileInputRef.current?.click(), 0);
+          }}
         >
           Browse Files
         </Button>
@@ -445,9 +449,10 @@ export default function ReferralUpload({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => {
-          if (state === 'idle') {
-            fileInputRef.current?.click();
+        onClick={(e) => {
+          // Only trigger if clicking the drop zone directly (not a button inside)
+          if (state === 'idle' && e.target === e.currentTarget) {
+            setTimeout(() => fileInputRef.current?.click(), 0);
           }
         }}
       >

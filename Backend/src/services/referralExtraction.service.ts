@@ -17,17 +17,18 @@ import { ReferralDocumentType } from '../generated/prisma';
 // ===========================================
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let pdfParse: ((buffer: Buffer) => Promise<{ text: string; numpages: number }>) | null = null;
+let PDFParseLib: ((buffer: Buffer) => Promise<{ text: string; numpages: number }>) | null = null;
 let mammoth: typeof import('mammoth') | null = null;
 let Tesseract: typeof import('tesseract.js') | null = null;
 
 async function getPdfParse() {
-  if (!pdfParse) {
-    // pdf-parse has inconsistent exports, use require for compatibility
+  if (!PDFParseLib) {
+    // pdf-parse@2.x exports PDFParse as named export
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    pdfParse = require('pdf-parse') as (buffer: Buffer) => Promise<{ text: string; numpages: number }>;
+    const pdfParseModule = require('pdf-parse');
+    PDFParseLib = pdfParseModule.PDFParse || pdfParseModule.default || pdfParseModule;
   }
-  return pdfParse;
+  return PDFParseLib;
 }
 
 async function getMammoth() {
@@ -342,18 +343,30 @@ export async function extractTextFromDocument(
 async function extractTextFromPdf(
   filePath: string
 ): Promise<{ text: string; pageCount?: number }> {
-  const pdf = await getPdfParse();
-  const buffer = await fs.promises.readFile(filePath);
+  console.log('[PDF] Starting text extraction...');
+  const startTime = Date.now();
 
   try {
-    const data = await pdf(buffer);
+    const pdfParser = await getPdfParse();
+    const buffer = await fs.promises.readFile(filePath);
+
+    // Add timeout for pdf-parse (30 seconds)
+    const parsePromise = pdfParser(buffer);
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('PDF parsing timeout')), 30000)
+    );
+
+    const data = await Promise.race([parsePromise, timeoutPromise]);
+    const parseTime = Date.now() - startTime;
+    console.log(`[PDF] Parsed in ${parseTime}ms`);
 
     // Check if PDF has extractable text
     const text = data.text?.trim() || '';
+    console.log(`[PDF] Extracted ${text.length} characters`);
 
     // If no text or very little text, likely a scanned PDF - use OCR
-    if (text.length < 100) {
-      console.log('[PDF] Low text content detected, attempting OCR...');
+    if (text.length < 50) {
+      console.log('[PDF] Low text content (<50 chars), attempting OCR...');
       return await extractTextWithOcr(filePath);
     }
 
@@ -362,7 +375,8 @@ async function extractTextFromPdf(
       pageCount: data.numpages,
     };
   } catch (pdfError) {
-    console.log('[PDF] Parse failed, attempting OCR...', pdfError);
+    const errorMsg = pdfError instanceof Error ? pdfError.message : String(pdfError);
+    console.log(`[PDF] Parse failed: ${errorMsg}, attempting OCR...`);
     return await extractTextWithOcr(filePath);
   }
 }
@@ -384,32 +398,53 @@ async function extractTextFromDocx(
 
 /**
  * Extract text from images using Tesseract OCR
+ * Note: OCR is slow (30-90 seconds) and should only be used for scanned documents
  */
 async function extractTextWithOcr(
   filePath: string
 ): Promise<{ text: string }> {
   const tesseract = await getTesseract();
+  const startTime = Date.now();
 
-  console.log('[OCR] Starting text recognition...');
+  console.log('[OCR] Starting text recognition (this may take 30-90 seconds)...');
 
-  const worker = await tesseract.createWorker('eng', 1, {
-    logger: (m) => {
-      if (m.status === 'recognizing text') {
-        console.log(`[OCR] Progress: ${Math.round(m.progress * 100)}%`);
-      }
-    },
-  });
+  // Create worker with timeout
+  const OCR_TIMEOUT = 120000; // 2 minutes max
+  let worker: Awaited<ReturnType<typeof tesseract.createWorker>> | null = null;
 
   try {
-    const { data } = await worker.recognize(filePath);
+    worker = await tesseract.createWorker('eng', 1, {
+      logger: (m) => {
+        if (m.status === 'recognizing text' && m.progress > 0) {
+          const elapsed = Math.round((Date.now() - startTime) / 1000);
+          console.log(`[OCR] Progress: ${Math.round(m.progress * 100)}% (${elapsed}s elapsed)`);
+        }
+      },
+    });
+
+    // Add timeout
+    const recognizePromise = worker.recognize(filePath);
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('OCR timeout - took too long')), OCR_TIMEOUT)
+    );
+
+    const { data } = await Promise.race([recognizePromise, timeoutPromise]);
+
+    const totalTime = Math.round((Date.now() - startTime) / 1000);
+    console.log(`[OCR] Completed in ${totalTime}s, extracted ${data.text.length} characters`);
+
     await worker.terminate();
 
     return {
       text: cleanExtractedText(data.text),
     };
   } catch (error) {
-    await worker.terminate();
-    throw error;
+    if (worker) {
+      await worker.terminate();
+    }
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[OCR] Failed: ${errorMsg}`);
+    throw new Error(`Text extraction failed: ${errorMsg}`);
   }
 }
 
