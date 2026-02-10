@@ -13,6 +13,7 @@ import {
 } from '../generated/prisma';
 import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
+import { getPatientAssessmentTimeline as getTimelineFromService } from '../services/oasis.service';
 
 // ===========================================
 // CONFIGURATION
@@ -1228,8 +1229,7 @@ export async function getPatientAssessmentTimeline(
     }
 
     // Get timeline from OASIS service
-    const { getPatientAssessmentTimeline: getTimeline } = await import('../services/oasis.service');
-    const timeline = await getTimeline(id);
+    const timeline = await getTimelineFromService(id);
 
     // Audit log for PHI access
     await createPHIAuditLog(
