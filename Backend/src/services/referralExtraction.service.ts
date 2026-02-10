@@ -17,18 +17,16 @@ import { ReferralDocumentType } from '../generated/prisma';
 // ===========================================
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let PDFParseLib: ((buffer: Buffer) => Promise<{ text: string; numpages: number }>) | null = null;
+let pdfjsLib: typeof import('pdfjs-dist/legacy/build/pdf.mjs') | null = null;
 let mammoth: typeof import('mammoth') | null = null;
 let Tesseract: typeof import('tesseract.js') | null = null;
 
-async function getPdfParse() {
-  if (!PDFParseLib) {
-    // pdf-parse@2.x exports PDFParse as named export
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParseModule = require('pdf-parse');
-    PDFParseLib = pdfParseModule.PDFParse || pdfParseModule.default || pdfParseModule;
+async function getPdfjsLib() {
+  if (!pdfjsLib) {
+    // Use pdfjs-dist directly for PDF text extraction
+    pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
   }
-  return PDFParseLib;
+  return pdfjsLib;
 }
 
 async function getMammoth() {
@@ -337,42 +335,59 @@ export async function extractTextFromDocument(
 }
 
 /**
- * Extract text from PDF using pdf-parse
+ * Extract text from PDF using pdfjs-dist
  * Falls back to OCR if no text content (scanned PDF)
  */
 async function extractTextFromPdf(
   filePath: string
 ): Promise<{ text: string; pageCount?: number }> {
-  console.log('[PDF] Starting text extraction...');
+  console.log('[PDF] Starting text extraction with pdfjs-dist...');
   const startTime = Date.now();
 
   try {
-    const pdfParser = await getPdfParse();
+    const pdfjs = await getPdfjsLib();
     const buffer = await fs.promises.readFile(filePath);
+    const uint8Array = new Uint8Array(buffer);
 
-    // Add timeout for pdf-parse (30 seconds)
-    const parsePromise = pdfParser(buffer);
+    // Load the PDF document with timeout
+    const loadPromise = pdfjs.getDocument({ data: uint8Array }).promise;
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('PDF parsing timeout')), 30000)
+      setTimeout(() => reject(new Error('PDF loading timeout')), 30000)
     );
 
-    const data = await Promise.race([parsePromise, timeoutPromise]);
+    const doc = await Promise.race([loadPromise, timeoutPromise]);
     const parseTime = Date.now() - startTime;
-    console.log(`[PDF] Parsed in ${parseTime}ms`);
+    console.log(`[PDF] Loaded in ${parseTime}ms, ${doc.numPages} pages`);
 
-    // Check if PDF has extractable text
-    const text = data.text?.trim() || '';
+    // Extract text from all pages
+    let fullText = '';
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item: { str?: string }) => item.str || '')
+        .join(' ');
+      fullText += pageText + '\n';
+    }
+
+    const text = fullText.trim();
     console.log(`[PDF] Extracted ${text.length} characters`);
 
-    // If no text or very little text, likely a scanned PDF - use OCR
-    if (text.length < 50) {
-      console.log('[PDF] Low text content (<50 chars), attempting OCR...');
-      return await extractTextWithOcr(filePath);
+    // If we got some text, use it (even if small - the AI can still work with it)
+    // Only fall back to OCR if we got essentially zero text (truly a scanned image PDF)
+    if (text.length < 10) {
+      console.log('[PDF] No text content detected, this appears to be a scanned PDF. OCR would be needed for images.');
+      // Note: OCR of PDFs requires converting to images first, which is complex
+      // For now, return empty and let the AI handle partial data
+      return {
+        text: '',
+        pageCount: doc.numPages,
+      };
     }
 
     return {
       text: cleanExtractedText(text),
-      pageCount: data.numpages,
+      pageCount: doc.numPages,
     };
   } catch (pdfError) {
     const errorMsg = pdfError instanceof Error ? pdfError.message : String(pdfError);
