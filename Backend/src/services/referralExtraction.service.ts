@@ -651,7 +651,28 @@ Remember to:
     jsonText = jsonText.trim();
 
     const parsed = JSON.parse(jsonText) as AIExtractionResult;
-    console.log('[AI Extraction] Successfully parsed response');
+
+    // DETAILED DEBUG LOGGING
+    console.log('\n' + '='.repeat(80));
+    console.log('[AI Extraction] FULL RESPONSE DEBUG');
+    console.log('='.repeat(80));
+    console.log('[AI Extraction] Patient:', JSON.stringify(parsed.patient, null, 2));
+    console.log('[AI Extraction] Diagnoses:', JSON.stringify(parsed.diagnoses, null, 2));
+    console.log('[AI Extraction] Medications count:', parsed.medications?.length || 0);
+    if (parsed.medications?.length) {
+      console.log('[AI Extraction] First 3 medications:', JSON.stringify(parsed.medications.slice(0, 3), null, 2));
+    }
+    console.log('[AI Extraction] OASIS Mappings count:', Object.keys(parsed.oasisMappings || {}).length);
+    if (parsed.oasisMappings && Object.keys(parsed.oasisMappings).length > 0) {
+      console.log('[AI Extraction] OASIS Mappings (first 5):');
+      const mappingEntries = Object.entries(parsed.oasisMappings).slice(0, 5);
+      for (const [code, mapping] of mappingEntries) {
+        console.log(`  ${code}: ${JSON.stringify(mapping)}`);
+      }
+    } else {
+      console.log('[AI Extraction] WARNING: No OASIS mappings extracted!');
+    }
+    console.log('='.repeat(80) + '\n');
 
     return parsed;
   } catch (error) {

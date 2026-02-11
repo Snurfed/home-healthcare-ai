@@ -627,13 +627,37 @@ export async function getReferral(
       }
     );
 
+    // DEBUG: Log extracted data
+    console.log('\n[GetReferral] Returning document:', referral.id);
+    console.log('[GetReferral] extractedData type:', typeof referral.extractedData);
+    if (referral.extractedData && typeof referral.extractedData === 'object') {
+      const data = referral.extractedData as Record<string, unknown>;
+      console.log('[GetReferral] extractedData keys:', Object.keys(data));
+      console.log('[GetReferral] oasisMappings count:', data.oasisMappings ? Object.keys(data.oasisMappings as object).length : 'none');
+      console.log('[GetReferral] diagnoses count:', Array.isArray(data.diagnoses) ? data.diagnoses.length : 'none');
+    }
+
+    // Map backend fields to frontend expected fields
+    const mimeTypeMap: Record<string, string> = {
+      pdf: 'application/pdf',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      tiff: 'image/tiff',
+      doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+
     return res.status(200).json({
       id: referral.id,
       patientId: referral.patientId,
       assessmentId: referral.assessmentId,
       fileName: referral.fileName,
+      originalFileName: referral.fileName, // Frontend expects this
       fileType: referral.fileType,
+      mimeType: mimeTypeMap[referral.fileType] || 'application/octet-stream', // Frontend expects this
       fileSize: referral.fileSize,
+      filePath: referral.fileUrl, // Frontend expects filePath
       documentType: referral.documentType,
       title: referral.title,
       description: referral.description,
@@ -645,9 +669,11 @@ export async function getReferral(
       patient: referral.patient,
       assessment: referral.assessment,
       uploadedBy: referral.uploadedBy,
+      uploadedById: referral.uploadedById,
       uploadedAt: referral.uploadedAt,
       createdAt: referral.createdAt,
       updatedAt: referral.updatedAt,
+      isDeleted: !!referral.deletedAt,
     });
   } catch (error) {
     next(error);
@@ -1059,6 +1085,16 @@ export async function applyToAssessment(
     const { id } = req.params;
     const { assessmentId, acceptedFields } = req.body;
 
+    // DEBUG LOGGING
+    console.log('\n' + '='.repeat(80));
+    console.log('[Apply to Assessment] REQUEST RECEIVED');
+    console.log('='.repeat(80));
+    console.log(`[Apply] Referral ID: ${id}`);
+    console.log(`[Apply] Assessment ID: ${assessmentId}`);
+    console.log(`[Apply] Accepted Fields count: ${Object.keys(acceptedFields || {}).length}`);
+    console.log(`[Apply] Accepted Fields:`, JSON.stringify(acceptedFields, null, 2));
+    console.log('='.repeat(80));
+
     if (!assessmentId) {
       return res.status(400).json({
         error: 'Bad Request',
@@ -1178,6 +1214,16 @@ export async function applyToAssessment(
 
     const createdResponses = await Promise.all(responsePromises);
 
+    // DEBUG: Log what was saved
+    console.log('\n[Apply] RESPONSES SAVED:');
+    console.log(`[Apply] Total responses created/updated: ${createdResponses.length}`);
+    for (const resp of createdResponses.slice(0, 5)) {
+      console.log(`  - ${resp.itemCode}: "${resp.responseValue}" (section: ${resp.section})`);
+    }
+    if (createdResponses.length > 5) {
+      console.log(`  ... and ${createdResponses.length - 5} more`);
+    }
+
     // Link referral to assessment if not already linked
     if (!referral.assessmentId) {
       await prisma.referralDocument.update({
@@ -1201,6 +1247,23 @@ export async function applyToAssessment(
       },
     });
 
+    // DEBUG: Verify database state
+    console.log('\n[Apply] DATABASE STATE AFTER SAVE:');
+    console.log(`[Apply] Total responses for assessment: ${totalResponses}`);
+    console.log(`[Apply] Estimated completion: ${estimatedCompletion}%`);
+
+    // Query actual responses to verify
+    const verifyResponses = await prisma.oasisResponse.findMany({
+      where: { assessmentId },
+      select: { itemCode: true, responseValue: true, sourceType: true },
+      take: 10,
+    });
+    console.log(`[Apply] Sample responses in DB:`);
+    for (const r of verifyResponses) {
+      console.log(`  - ${r.itemCode}: "${r.responseValue}" (source: ${r.sourceType})`);
+    }
+    console.log('='.repeat(80) + '\n');
+
     // Audit log
     await createReferralAuditLog(
       AuditAction.UPDATE,
@@ -1222,7 +1285,8 @@ export async function applyToAssessment(
 
     return res.status(200).json({
       message: 'Extracted data applied to assessment successfully',
-      appliedCount: createdResponses.length,
+      appliedFields: createdResponses.length, // Frontend expects 'appliedFields' not 'appliedCount'
+      appliedCount: createdResponses.length, // Keep for backwards compatibility
       assessmentId,
       referralDocumentId: id,
       updatedFields: Object.keys(acceptedFields),

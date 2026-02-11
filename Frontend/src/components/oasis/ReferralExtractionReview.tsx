@@ -360,18 +360,32 @@ export default function ReferralExtractionReview({
 
   // Convert extracted data to reviewable fields
   const oasisFields = useMemo((): ReviewableField[] => {
-    if (!extractedData?.oasisMappings) return [];
+    // DEBUG: Log extracted data
+    console.log('[ReferralReview] extractedData:', extractedData);
+    console.log('[ReferralReview] oasisMappings:', extractedData?.oasisMappings);
+    console.log('[ReferralReview] oasisMappings count:', Object.keys(extractedData?.oasisMappings || {}).length);
 
-    return Object.entries(extractedData.oasisMappings).map(([itemCode, field]) => ({
-      key: itemCode,
-      label: field.fieldName,
-      value: field.value,
-      confidence: field.confidence,
-      sourceText: field.sourceText,
-      itemCode,
-      status: oasisFieldStates[itemCode] || 'pending',
-      editedValue: oasisEditedValues[itemCode],
-    }));
+    if (!extractedData?.oasisMappings) {
+      console.log('[ReferralReview] WARNING: No oasisMappings found!');
+      return [];
+    }
+
+    const fields = Object.entries(extractedData.oasisMappings).map(([itemCode, field]) => {
+      console.log(`[ReferralReview] Mapping field ${itemCode}:`, field);
+      return {
+        key: itemCode,
+        label: field.fieldName || itemCode,
+        value: field.value,
+        confidence: field.confidence,
+        sourceText: field.sourceText,
+        itemCode,
+        status: oasisFieldStates[itemCode] || 'pending',
+        editedValue: oasisEditedValues[itemCode],
+      };
+    });
+
+    console.log('[ReferralReview] Converted oasisFields:', fields.length);
+    return fields;
   }, [extractedData?.oasisMappings, oasisFieldStates, oasisEditedValues]);
 
   const diagnoses = useMemo((): (ExtractedDiagnosis & { status: FieldAcceptanceState })[] => {
@@ -510,11 +524,18 @@ export default function ReferralExtractionReview({
       // Collect accepted/edited OASIS fields
       const acceptedFields: Record<string, string> = {};
 
+      console.log('[ReferralReview] Apply - oasisFields:', oasisFields);
+      console.log('[ReferralReview] Apply - oasisFieldStates:', oasisFieldStates);
+
       oasisFields.forEach((field) => {
+        console.log(`[ReferralReview] Field ${field.key}: status=${field.status}, value=${field.value}`);
         if (field.status === 'accepted' || field.status === 'edited') {
           acceptedFields[field.key] = field.editedValue || field.value;
         }
       });
+
+      console.log('[ReferralReview] Apply - acceptedFields:', acceptedFields);
+      console.log('[ReferralReview] Apply - acceptedFields count:', Object.keys(acceptedFields).length);
 
       if (Object.keys(acceptedFields).length === 0) {
         setError('No fields have been accepted. Please accept at least one field.');
@@ -522,11 +543,18 @@ export default function ReferralExtractionReview({
         return;
       }
 
+      console.log('[ReferralReview] Calling API with:', {
+        documentId: document.id,
+        assessmentId,
+        acceptedFields,
+      });
+
       const result = await referralService.applyToAssessment(document.id, {
         assessmentId,
         acceptedFields,
       });
 
+      console.log('[ReferralReview] API result:', result);
       onApplyComplete(result.appliedFields, assessmentId);
     } catch (err) {
       console.error('Error applying extraction:', err);
