@@ -63,3 +63,6 @@ export { useProcessVoice } from './useProcessVoice';
 
 // Communication hooks
 export { useCommunicationTriggers } from './useCommunicationTriggers';
+
+// Referral document hooks
+export { useReferralDocuments } from './useReferralDocuments';
