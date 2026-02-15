@@ -19,6 +19,8 @@ import oasisRoutes from './routes/oasis';
 import supervisorRoutes from './routes/supervisor';
 import referralDocumentsRoutes from './routes/referralDocuments';
 import soapNotesRoutes from './routes/soapNotes';
+import agencySettingsRoutes from './routes/agencySettings';
+import communicationRoutes from './routes/communications';
 
 // Initialize Express app
 const app: Application = express();
@@ -157,6 +159,12 @@ app.use('/api', referralDocumentsRoutes);
 
 // SOAP notes routes (includes /api/assessments/:id/soap-notes, /api/soap-notes/:id, /api/patients/:id/soap-notes)
 app.use('/api', soapNotesRoutes);
+
+// Agency settings routes
+app.use('/api/settings/agency', agencySettingsRoutes);
+
+// Physician communication routes
+app.use('/api', communicationRoutes);
 
 // ===========================================
 // 404 HANDLER

@@ -162,3 +162,43 @@ export {
   SOAP_STATUS_CONFIG,
   SOAP_SECTION_CONFIG,
 } from './soapNote.types';
+
+// Settings types
+export type {
+  AgencySettings,
+  AgencySettingsInput,
+  OasisDefaultField,
+  OasisDefaults,
+  SystemAutoFillCode,
+} from './settings.types';
+
+export {
+  SYSTEM_AUTOFILL_CODES,
+  isSystemAutoFillField,
+} from './settings.types';
+
+// Communication types
+export type {
+  CommunicationType,
+  CommunicationUrgency,
+  CommunicationStatus,
+  CommunicationTrigger,
+  CommunicationTriggerWithStatus,
+  TriggerSummary,
+  PhysicianCommunication,
+  GetTriggersResponse,
+  DetectTriggersRequest,
+  DetectTriggersResponse,
+  DismissTriggerRequest,
+  GenerateCommunicationRequest,
+  GenerateCommunicationResponse,
+  UpdateCommunicationRequest,
+  RegenerateCommunicationRequest,
+  ListCommunicationsResponse,
+} from './communication.types';
+
+export {
+  COMMUNICATION_TYPE_CONFIG,
+  COMMUNICATION_URGENCY_CONFIG,
+  COMMUNICATION_STATUS_CONFIG,
+} from './communication.types';

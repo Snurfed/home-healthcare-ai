@@ -8,11 +8,16 @@
  * - Green checkmarks for completed items
  * - AI Explanation sparkle buttons
  * - Filter dropdown (Show all / Required only / Incomplete)
+ * - AI-powered physician communication triggers
  */
 
 import { useState, useCallback } from 'react';
 import { useEpisodeStore } from '@context/stores/episodeStore';
 import QuestionCard from '@components/episode/QuestionCard';
+import { TriggerAlertBanner } from '@components/communication/TriggerAlertBanner';
+import { CommunicationDraftEditor } from '@components/communication/CommunicationDraftEditor';
+import { useCommunicationTriggers } from '@hooks/useCommunicationTriggers';
+import type { CommunicationTriggerWithStatus } from '@typedefs/communication.types';
 
 type FilterOption = 'all' | 'required' | 'incomplete';
 
@@ -94,11 +99,75 @@ function SidebarSection({ section, isActive, onClick }: SidebarSectionProps) {
   );
 }
 
-export default function DocumentationTab() {
+interface DocumentationTabProps {
+  assessmentId?: string;
+  patientId?: string;
+  physicianName?: string;
+  physicianNpi?: string;
+}
+
+export default function DocumentationTab({
+  assessmentId = 'mock-assessment-id',
+  // patientId reserved for future use
+  physicianName = 'Dr. Smith',
+  physicianNpi,
+}: DocumentationTabProps) {
   const [activeSection, setActiveSection] = useState('clinical');
   const [filter, setFilter] = useState<FilterOption>('all');
   const [transferring, setTransferring] = useState(false);
   const { hideCompletedCards, setHideCompletedCards } = useEpisodeStore();
+
+  // Communication triggers state
+  const [showTriggerBanner, setShowTriggerBanner] = useState(true);
+  const [showDraftEditor, setShowDraftEditor] = useState(false);
+  const [selectedTrigger, setSelectedTrigger] = useState<CommunicationTriggerWithStatus | null>(null);
+
+  // Communication triggers hook
+  // Note: detectTriggers is available for calling when OASIS responses change
+  const {
+    activeTriggers,
+    dismissTrigger,
+    hasActiveTriggers,
+  } = useCommunicationTriggers({
+    assessmentId,
+    enabled: !!assessmentId && assessmentId !== 'mock-assessment-id',
+    debounceMs: 500,
+  });
+
+  // Handle opening draft editor for a trigger
+  const handleReviewDraft = useCallback((trigger: CommunicationTriggerWithStatus) => {
+    setSelectedTrigger(trigger);
+    setShowDraftEditor(true);
+  }, []);
+
+  // Handle dismissing a trigger
+  const handleDismissTrigger = useCallback(async (ruleId: string) => {
+    await dismissTrigger(ruleId, 'dismissed');
+  }, [dismissTrigger]);
+
+  // Handle dismissing all triggers
+  const handleDismissAll = useCallback(async () => {
+    for (const trigger of activeTriggers) {
+      await dismissTrigger(trigger.ruleId, 'dismissed');
+    }
+  }, [activeTriggers, dismissTrigger]);
+
+  // Close the banner
+  const handleCloseBanner = useCallback(() => {
+    setShowTriggerBanner(false);
+  }, []);
+
+  // Close draft editor
+  const handleCloseDraftEditor = useCallback(() => {
+    setShowDraftEditor(false);
+    setSelectedTrigger(null);
+  }, []);
+
+  // Handle saved communication
+  const handleCommunicationSaved = useCallback(() => {
+    // Optionally refresh triggers or show success message
+    console.log('Communication saved successfully');
+  }, []);
 
   const handleTransferToEMR = useCallback(() => {
     setTransferring(true);
@@ -204,6 +273,17 @@ export default function DocumentationTab() {
 
       {/* Main Content */}
       <div className="flex-1 min-w-0 space-y-4">
+        {/* Communication Trigger Alert Banner */}
+        {showTriggerBanner && hasActiveTriggers && (
+          <TriggerAlertBanner
+            triggers={activeTriggers}
+            onReviewDraft={handleReviewDraft}
+            onDismiss={handleDismissTrigger}
+            onDismissAll={handleDismissAll}
+            onClose={handleCloseBanner}
+          />
+        )}
+
         {/* Header with filters */}
         <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 p-4">
           <div>
@@ -415,6 +495,17 @@ export default function DocumentationTab() {
           </button>
         </div>
       </div>
+
+      {/* Communication Draft Editor Modal */}
+      <CommunicationDraftEditor
+        isOpen={showDraftEditor}
+        onClose={handleCloseDraftEditor}
+        assessmentId={assessmentId}
+        trigger={selectedTrigger || undefined}
+        physicianName={physicianName}
+        physicianNpi={physicianNpi}
+        onSaved={handleCommunicationSaved}
+      />
     </div>
   );
 }

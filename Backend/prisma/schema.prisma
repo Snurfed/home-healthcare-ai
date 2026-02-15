@@ -391,6 +391,7 @@ model Patient {
   assignments           PatientAssignment[]
   referralDocuments     ReferralDocument[]
   soapNotes             SoapNote[]
+  physicianCommunications PhysicianCommunication[]
 
   @@index([mrn])
   @@index([lastName, firstName])
@@ -535,6 +536,7 @@ model Episode {
   carePlans             CarePlan[]
   visits                Visit[]
   assessments           OasisAssessment[]
+  physicianCommunications PhysicianCommunication[]
 
   @@unique([patientId, episodeNumber])
   @@index([patientId])
@@ -1137,6 +1139,41 @@ model SystemConfig {
   @@map("system_configs")
 }
 
+// ===========================================
+// AGENCY SETTINGS (for OASIS auto-population)
+// ===========================================
+
+model AgencySettings {
+  id                    String   @id @default(uuid())
+
+  // Agency identification
+  agencyName            String   // Display name
+  cmsNumber             String   // M0010 - 6-digit CMS certification number
+  branchState           String   // M0014 - 2-character state code
+  branchId              String?  // M0016 - 10-digit branch ID (optional)
+  facilityNpi           String   // M0030/A0100 - 10-digit facility NPI
+  providerType          String   @default("01") // A0200 - '01' for HHA
+
+  // Contact information
+  agencyAddress         String?
+  agencyCity            String?
+  agencyState           String?
+  agencyZip             String?
+  agencyPhone           String?
+  agencyFax             String?
+
+  // Active flag (for multi-branch support in future)
+  isActive              Boolean  @default(true)
+  isPrimary             Boolean  @default(true) // Primary agency settings
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  createdBy             String?
+  updatedBy             String?
+
+  @@map("agency_settings")
+}
+
 model OasisQuestion {
   id                String   @id @default(uuid())
   itemCode          String   @unique
@@ -1161,4 +1198,123 @@ model OasisQuestion {
   @@index([section])
   @@index([effectiveDate])
   @@map("oasis_questions")
+}
+
+// ===========================================
+// PHYSICIAN COMMUNICATIONS
+// ===========================================
+
+enum CommunicationType {
+  CHANGE_IN_CONDITION
+  REQUEST_NEW_ORDERS
+  REFERRAL_REQUEST
+  HOSPITALIZATION_NOTIFICATION
+  ABNORMAL_FINDING
+  POC_UPDATE_REQUEST
+  RECERTIFICATION_SUMMARY
+  DISCHARGE_RECOMMENDATION
+}
+
+enum CommunicationUrgency {
+  ROUTINE
+  URGENT
+  EMERGENT
+}
+
+enum CommunicationStatus {
+  DRAFT
+  READY_TO_SEND
+  SENDING
+  SENT
+  DELIVERED
+  ACKNOWLEDGED
+  FAILED
+}
+
+model PhysicianCommunication {
+  id                    String                @id @default(uuid())
+  patientId             String
+  episodeId             String
+  assessmentId          String?
+  communicationType     CommunicationType
+  urgency               CommunicationUrgency  @default(ROUTINE)
+  status                CommunicationStatus   @default(DRAFT)
+  physicianName         String
+  physicianNpi          String?
+  physicianFax          String?
+  subject               String
+  summaryContent        String                // Concise 3-5 sentence version
+  detailedContent       String                // Full detailed communication
+  clinicalDataSnapshot  Json?
+  triggeredBy           String?               // Rule ID that triggered this
+  triggerData           Json?
+  aiModelUsed           String?
+  generationTimeMs      Int?
+  sentAt                DateTime?
+  deliveredAt           DateTime?
+  acknowledgedAt        DateTime?
+  createdById           String
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  patient               Patient               @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  episode               Episode               @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  attachments           CommunicationAttachment[]
+  auditTrail            CommunicationAuditLog[]
+
+  @@index([patientId, status])
+  @@index([episodeId])
+  @@index([assessmentId])
+  @@index([createdAt])
+  @@map("physician_communications")
+}
+
+model CommunicationTrigger {
+  id                    String                @id @default(uuid())
+  assessmentId          String
+  ruleId                String
+  triggerType           CommunicationType
+  urgency               CommunicationUrgency
+  triggerData           Json
+  dismissed             Boolean               @default(false)
+  dismissedAt           DateTime?
+  dismissedById         String?
+  dismissReason         String?
+  communicationId       String?
+  createdAt             DateTime              @default(now())
+
+  @@unique([assessmentId, ruleId])
+  @@index([assessmentId])
+  @@index([dismissed])
+  @@map("communication_triggers")
+}
+
+model CommunicationAttachment {
+  id                    String                @id @default(uuid())
+  communicationId       String
+  fileName              String
+  fileType              String
+  fileUrl               String
+  fileSize              Int?
+  createdAt             DateTime              @default(now())
+
+  communication         PhysicianCommunication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+
+  @@index([communicationId])
+  @@map("communication_attachments")
+}
+
+model CommunicationAuditLog {
+  id                    String                @id @default(uuid())
+  communicationId       String
+  action                String                // CREATED, UPDATED, SENT, DELIVERED, etc.
+  performedById         String
+  details               String?
+  createdAt             DateTime              @default(now())
+
+  communication         PhysicianCommunication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+
+  @@index([communicationId])
+  @@index([createdAt])
+  @@map("communication_audit_logs")
 }

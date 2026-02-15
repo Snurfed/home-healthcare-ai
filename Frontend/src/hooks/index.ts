@@ -30,6 +30,7 @@ export {
 // Patient hooks
 export {
   usePatientSearch,
+  usePatients,
   usePatient,
   useCreatePatient,
   usePatientAssessmentTimeline,
@@ -59,3 +60,6 @@ export { useSuggestions } from './useSuggestions';
 // Voice hooks
 export { useVoiceRecording } from './useVoiceRecording';
 export { useProcessVoice } from './useProcessVoice';
+
+// Communication hooks
+export { useCommunicationTriggers } from './useCommunicationTriggers';
