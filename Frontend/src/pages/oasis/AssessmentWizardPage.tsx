@@ -4,7 +4,7 @@
  * Multi-step OASIS assessment form with auto-save and validation
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   useAssessment,
@@ -18,18 +18,23 @@ import { Button, Spinner, Alert, Badge, Modal } from '@components/common';
 import { OASIS_SECTIONS, STATUS_CONFIG } from '@typedefs/oasis.types';
 import SectionStepper from '@components/oasis/SectionStepper';
 import SectionContent from '@components/oasis/SectionContent';
+import StickyProgressBar from '@components/oasis/StickyProgressBar';
 import SubmissionValidation from '@components/oasis/SubmissionValidation';
 import ValidationModal from '@components/oasis/ValidationModal';
 import { ReferralUploadButton } from '@components/oasis/ReferralUpload';
+import ReferralExtractionReview from '@components/oasis/ReferralExtractionReview';
 import SOAPNoteView from '@components/oasis/SOAPNoteView';
 import type { ReferralDocument } from '@typedefs/index';
+import { useQueryClient } from 'react-query';
 
 export default function AssessmentWizardPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [showReview, setShowReview] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showSoapNoteModal, setShowSoapNoteModal] = useState(false);
+  const [extractedDocument, setExtractedDocument] = useState<ReferralDocument | null>(null);
 
   const { data: assessment, isLoading, error } = useAssessment(id);
   // Fetch questions filtered by assessment type for better performance
@@ -75,12 +80,19 @@ export default function AssessmentWizardPage() {
     navigate(`/assessments/${id}`);
   }, [navigate, id]);
 
-  // Handle referral extraction complete - refresh assessment data
+  // Handle referral extraction complete - show review modal
   const handleReferralExtractionComplete = useCallback((document: ReferralDocument) => {
-    // The extraction review component will handle applying fields
-    // After apply, the assessment cache will be invalidated
-    console.log('Referral extraction complete:', document.id);
+    console.log('[AssessmentWizard] Referral extraction complete, showing review modal:', document.id);
+    setExtractedDocument(document);
   }, []);
+
+  // Handle apply complete - close modal and refresh assessment data
+  const handleApplyComplete = useCallback(() => {
+    console.log('[AssessmentWizard] Apply complete, closing modal and invalidating cache');
+    setExtractedDocument(null);
+    // Invalidate assessment query to refresh with applied data
+    queryClient.invalidateQueries({ queryKey: ['assessment', id] });
+  }, [queryClient, id]);
 
   // Handle fix error - navigate to the section containing the error
   const handleFixError = useCallback((itemCode: string) => {
@@ -101,6 +113,87 @@ export default function AssessmentWizardPage() {
       }
     }
   }, [questions, navigateToSection]);
+
+  // Merge responses for calculations
+  const mergedResponses = useMemo(
+    () => ({ ...(assessment?.responses || {}), ...draftResponses }),
+    [assessment?.responses, draftResponses]
+  );
+
+  // Handle next required - find and navigate to next incomplete required question
+  const handleNextRequired = useCallback(() => {
+    if (!questions) return;
+
+    const hasValue = (response: unknown): boolean => {
+      if (!response || typeof response !== 'object') return false;
+      const r = response as Record<string, unknown>;
+      return !!(
+        r.responseValue ||
+        r.responseCode ||
+        r.responseText ||
+        (r.responseNumeric !== undefined && r.responseNumeric !== null) ||
+        r.responseDate
+      );
+    };
+
+    // Find first incomplete required question
+    for (let i = currentSectionIndex; i < OASIS_SECTIONS.length; i++) {
+      const sectionId = OASIS_SECTIONS[i]!.id;
+      const sectionQuestions = questions
+        .filter((q) => q.section === sectionId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      for (const q of sectionQuestions) {
+        const isRequired = q.validationRules?.some((r) => r.ruleType === 'required');
+        if (isRequired && !hasValue(mergedResponses[q.itemCode])) {
+          // Navigate to section if needed
+          if (i !== currentSectionIndex) {
+            navigateToSection(i);
+          }
+          setShowReview(false);
+          // Scroll to question
+          setTimeout(() => {
+            const element = document.getElementById(`question-${q.itemCode}`);
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              element.classList.add('ring-2', 'ring-amber-500', 'ring-offset-2');
+              setTimeout(() => {
+                element.classList.remove('ring-2', 'ring-amber-500', 'ring-offset-2');
+              }, 3000);
+            }
+          }, i !== currentSectionIndex ? 300 : 100);
+          return;
+        }
+      }
+    }
+
+    // Wrap around to beginning
+    for (let i = 0; i < currentSectionIndex; i++) {
+      const sectionId = OASIS_SECTIONS[i]!.id;
+      const sectionQuestions = questions
+        .filter((q) => q.section === sectionId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      for (const q of sectionQuestions) {
+        const isRequired = q.validationRules?.some((r) => r.ruleType === 'required');
+        if (isRequired && !hasValue(mergedResponses[q.itemCode])) {
+          navigateToSection(i);
+          setShowReview(false);
+          setTimeout(() => {
+            const element = document.getElementById(`question-${q.itemCode}`);
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              element.classList.add('ring-2', 'ring-amber-500', 'ring-offset-2');
+              setTimeout(() => {
+                element.classList.remove('ring-2', 'ring-amber-500', 'ring-offset-2');
+              }, 3000);
+            }
+          }, 300);
+          return;
+        }
+      }
+    }
+  }, [questions, currentSectionIndex, mergedResponses, navigateToSection]);
 
   const {
     isSaving,
@@ -356,23 +449,18 @@ export default function AssessmentWizardPage() {
         </div>
       </div>
 
-      {/* Mobile Review Button */}
-      <div className="lg:hidden fixed bottom-4 right-4">
-        <button
-          onClick={() => setShowReview(true)}
-          className="flex items-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>Review</span>
-        </button>
-      </div>
+      {/* Sticky Progress Bar - Always visible at bottom */}
+      {!showReview && (
+        <StickyProgressBar
+          questions={questions || []}
+          responses={assessment.responses}
+          draftResponses={draftResponses}
+          onNextRequired={handleNextRequired}
+          onReview={() => setShowReview(true)}
+          isReviewReady={isReadyForSubmission}
+          currentSectionName={currentSection.name}
+        />
+      )}
 
       {/* Validation Modal */}
       <ValidationModal
@@ -399,6 +487,29 @@ export default function AssessmentWizardPage() {
             onClose={() => setShowSoapNoteModal(false)}
           />
         </div>
+      </Modal>
+
+      {/* Referral Extraction Review Modal */}
+      <Modal
+        isOpen={!!extractedDocument}
+        onClose={() => setExtractedDocument(null)}
+        title="Review Extracted Data"
+        size="xl"
+        closeOnOverlayClick={false}
+      >
+        {extractedDocument && (
+          <div className="h-[70vh] overflow-y-auto">
+            <ReferralExtractionReview
+              document={extractedDocument}
+              assessmentId={id || ''}
+              onApplyComplete={(appliedFields) => {
+                console.log(`[AssessmentWizard] Applied ${appliedFields} fields`);
+                handleApplyComplete();
+              }}
+              onClose={() => setExtractedDocument(null)}
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );

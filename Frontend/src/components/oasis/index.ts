@@ -10,3 +10,5 @@ export { default as HIPPSCalculator, HIPPSCodeBadge } from './HIPPSCalculator';
 export { default as ReferralUpload, ReferralUploadButton } from './ReferralUpload';
 export { default as ReferralExtractionReview } from './ReferralExtractionReview';
 export { default as ReferralDocumentsList } from './ReferralDocumentsList';
+export { default as StickyProgressBar } from './StickyProgressBar';
+export { default as AIAssistActions } from './AIAssistActions';

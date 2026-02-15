@@ -14,9 +14,15 @@ const PatientsListPage = lazy(() => import('@pages/patients/PatientsListPage'));
 const NewPatientPage = lazy(() => import('@pages/patients/NewPatientPage'));
 const PatientDetailPage = lazy(() => import('@pages/patients/PatientDetailPage'));
 const NotFoundPage = lazy(() => import('@pages/NotFoundPage'));
+const AgencySettingsPage = lazy(() => import('@pages/settings/AgencySettingsPage'));
+
+// New clinical workflow pages
+const SchedulePage = lazy(() => import('@pages/schedule/SchedulePage'));
+const EpisodePage = lazy(() => import('@pages/episode/EpisodePage'));
 
 // Layout and auth components
 import AppLayout from '@components/layout/AppLayout';
+import AppShell from '@components/layout/AppShell';
 import ProtectedRoute from '@components/auth/ProtectedRoute';
 import RoleGuard from '@components/auth/RoleGuard';
 import Spinner from '@components/common/Spinner';
@@ -37,7 +43,37 @@ function App() {
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Protected routes */}
+        {/* New Clinical Workflow Routes (minimal AppShell) */}
+        <Route
+          path="/schedule"
+          element={
+            <ProtectedRoute>
+              <AppShell />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<SchedulePage />} />
+        </Route>
+
+        {/* Episode workflow (standalone, no sidebar) */}
+        <Route
+          path="/episode/:patientId"
+          element={
+            <ProtectedRoute>
+              <EpisodePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/episode/:patientId/:episodeId"
+          element={
+            <ProtectedRoute>
+              <EpisodePage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Legacy Protected routes (with sidebar) */}
         <Route
           path="/"
           element={
@@ -46,7 +82,7 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route index element={<Navigate to="/schedule" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
 
           {/* Supervisor Dashboard - role protected */}
@@ -82,6 +118,18 @@ function App() {
             <Route path=":id" element={<PatientDetailPage />} />
             <Route path=":id/edit" element={<NewPatientPage />} />
           </Route>
+
+          {/* Settings routes - Admin/Supervisor only */}
+          <Route
+            path="settings"
+            element={
+              <RoleGuard allowedRoles={['ADMIN', 'SUPERVISOR']}>
+                <AppShell>
+                  <AgencySettingsPage />
+                </AppShell>
+              </RoleGuard>
+            }
+          />
         </Route>
 
         {/* 404 route */}

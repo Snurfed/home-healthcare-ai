@@ -21,6 +21,41 @@ import type { VoiceProcessingResult, OasisFieldMapping } from '@services/voice.s
 import type { QuestionValidationError } from '@utils/validation';
 
 /**
+ * Check if a response has a value
+ */
+function hasResponseValue(response: Partial<OASISResponse> | undefined): boolean {
+  if (!response) return false;
+  return !!(
+    response.responseValue ||
+    response.responseCode ||
+    response.responseText ||
+    (response.responseNumeric !== undefined && response.responseNumeric !== null) ||
+    response.responseDate
+  );
+}
+
+/**
+ * Get the next incomplete required question from a list
+ */
+function getNextIncompleteRequired(
+  questions: OASISQuestion[],
+  mergedResponses: Record<string, Partial<OASISResponse>>
+): OASISQuestion | null {
+  for (const q of questions) {
+    const hasRequiredRule = q.validationRules?.some(
+      (rule) => rule.ruleType === 'required'
+    );
+    if (!hasRequiredRule) continue;
+
+    const response = mergedResponses[q.itemCode];
+    if (!hasResponseValue(response)) {
+      return q;
+    }
+  }
+  return null;
+}
+
+/**
  * Memoized Question Item - only re-renders when its specific data changes
  * This prevents all questions from re-rendering when one draft changes
  */
@@ -34,6 +69,7 @@ interface MemoizedQuestionItemProps {
   onDismissSuggestion: (suggestionId: string, reason: DismissalReason) => void;
   onNavigateToQuestion: (questionCode: string) => void;
   onValueChange: (questionCode: string, value: string | number | null) => void;
+  onVoiceFill?: () => void;
 }
 
 const MemoizedQuestionItem = memo(function MemoizedQuestionItem({
@@ -46,6 +82,7 @@ const MemoizedQuestionItem = memo(function MemoizedQuestionItem({
   onDismissSuggestion,
   onNavigateToQuestion,
   onValueChange,
+  onVoiceFill,
 }: MemoizedQuestionItemProps) {
   // Subscribe to ONLY this question's draft - prevents re-render when other drafts change
   const draftResponse = useAssessmentStore(
@@ -81,6 +118,7 @@ const MemoizedQuestionItem = memo(function MemoizedQuestionItem({
       onNavigateToQuestion={onNavigateToQuestion}
       suggestionsLoading={suggestionsLoading}
       onValueChange={onValueChange}
+      onVoiceFill={onVoiceFill}
     />
   );
 });
@@ -253,6 +291,103 @@ export default function SectionContent({
     }
   }, []);
 
+  // Get navigation function for cross-section navigation
+  const navigateToSection = useAssessmentStore((state) => state.navigateToSection);
+
+  // Merge responses for checking completion
+  const mergedResponses = useMemo(() => {
+    return { ...assessment.responses, ...draftResponses };
+  }, [assessment.responses, draftResponses]);
+
+  // Find next incomplete required question (current section first, then other sections)
+  const nextRequiredInfo = useMemo(() => {
+    // Check current section first
+    const nextInSection = getNextIncompleteRequired(visibleQuestions, mergedResponses);
+    if (nextInSection) {
+      return { question: nextInSection, sectionIndex: currentSectionIndex, isCurrentSection: true };
+    }
+
+    // Check subsequent sections
+    for (let i = currentSectionIndex + 1; i < OASIS_SECTIONS.length; i++) {
+      const sectionId = OASIS_SECTIONS[i]!.id;
+      const sectionQuestions = questions
+        .filter((q) => q.section === sectionId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      // We can't apply skip logic here easily, so check all questions in section
+      const nextInOtherSection = getNextIncompleteRequired(sectionQuestions, mergedResponses);
+      if (nextInOtherSection) {
+        return { question: nextInOtherSection, sectionIndex: i, isCurrentSection: false };
+      }
+    }
+
+    // Check earlier sections (wrap around)
+    for (let i = 0; i < currentSectionIndex; i++) {
+      const sectionId = OASIS_SECTIONS[i]!.id;
+      const sectionQuestions = questions
+        .filter((q) => q.section === sectionId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      const nextInOtherSection = getNextIncompleteRequired(sectionQuestions, mergedResponses);
+      if (nextInOtherSection) {
+        return { question: nextInOtherSection, sectionIndex: i, isCurrentSection: false };
+      }
+    }
+
+    return null;
+  }, [visibleQuestions, mergedResponses, currentSectionIndex, questions]);
+
+  // Handle clicking "Next Required Question"
+  const handleNextRequired = useCallback(() => {
+    if (!nextRequiredInfo) return;
+
+    if (nextRequiredInfo.isCurrentSection) {
+      // Scroll to question in current section
+      const element = document.getElementById(`question-${nextRequiredInfo.question.itemCode}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.classList.add('ring-2', 'ring-amber-500', 'ring-offset-2');
+        setTimeout(() => {
+          element.classList.remove('ring-2', 'ring-amber-500', 'ring-offset-2');
+        }, 3000);
+      }
+    } else {
+      // Navigate to other section, then scroll to question
+      navigateToSection(nextRequiredInfo.sectionIndex);
+      // Wait for section render, then scroll
+      setTimeout(() => {
+        const element = document.getElementById(`question-${nextRequiredInfo.question.itemCode}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.classList.add('ring-2', 'ring-amber-500', 'ring-offset-2');
+          setTimeout(() => {
+            element.classList.remove('ring-2', 'ring-amber-500', 'ring-offset-2');
+          }, 3000);
+        }
+      }, 300);
+    }
+  }, [nextRequiredInfo, navigateToSection]);
+
+  // Count total remaining required questions
+  const remainingRequiredCount = useMemo(() => {
+    let count = 0;
+    for (const section of OASIS_SECTIONS) {
+      const sectionQuestions = questions
+        .filter((q) => q.section === section.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      for (const q of sectionQuestions) {
+        const hasRequiredRule = q.validationRules?.some(
+          (rule) => rule.ruleType === 'required'
+        );
+        if (hasRequiredRule && !hasResponseValue(mergedResponses[q.itemCode])) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }, [questions, mergedResponses]);
+
   return (
     <div className="bg-white rounded-lg shadow-card">
       {/* Section Header */}
@@ -344,8 +479,8 @@ export default function SectionContent({
         </div>
       )}
 
-      {/* Questions */}
-      <div className="p-6 space-y-8">
+      {/* Questions - with bottom padding for sticky bar */}
+      <div className="p-6 space-y-6 pb-32">
         {visibleQuestions.length === 0 ? (
           <div className="text-center py-8">
             <div className="text-gray-400 mb-4">
@@ -375,32 +510,66 @@ export default function SectionContent({
               onNavigateToQuestion={handleNavigateToQuestion}
               suggestionsLoading={suggestionsLoading}
               onValueChange={handleValueChangeForSuggestions}
+              onVoiceFill={() => setShowVoiceRecorder(true)}
             />
           ))
         )}
       </div>
 
       {/* Navigation - Auto-save handles saving automatically */}
-      <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-        <Button
-          variant="secondary"
-          onClick={previousSection}
-          disabled={isFirstSection}
-        >
-          Previous Section
-        </Button>
+      <div className="px-6 py-4 border-t border-gray-200">
+        {/* Next Required Question Button - Persistent at top */}
+        {remainingRequiredCount > 0 && (
+          <div className="mb-4 flex justify-center">
+            <button
+              onClick={handleNextRequired}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-200 transition-colors font-medium"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+              <span>Next Required</span>
+              <span className="ml-1 px-2 py-0.5 text-xs bg-amber-200 text-amber-900 rounded-full">
+                {remainingRequiredCount} left
+              </span>
+            </button>
+          </div>
+        )}
 
-        <div className="text-sm text-gray-500">
-          Section {currentSectionIndex + 1} of {OASIS_SECTIONS.length}
+        {/* All required complete message */}
+        {remainingRequiredCount === 0 && (
+          <div className="mb-4 flex justify-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg border border-green-200">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-medium">All required questions complete!</span>
+            </div>
+          </div>
+        )}
+
+        {/* Section Navigation */}
+        <div className="flex items-center justify-between">
+          <Button
+            variant="secondary"
+            onClick={previousSection}
+            disabled={isFirstSection}
+          >
+            Previous Section
+          </Button>
+
+          <div className="text-sm text-gray-500">
+            Section {currentSectionIndex + 1} of {OASIS_SECTIONS.length}
+          </div>
+
+          <Button
+            variant="primary"
+            onClick={handleNextSection}
+            disabled={isLastSection}
+          >
+            {isLastSection ? 'Last Section' : 'Next Section'}
+          </Button>
         </div>
-
-        <Button
-          variant="primary"
-          onClick={handleNextSection}
-          disabled={isLastSection}
-        >
-          {isLastSection ? 'Last Section' : 'Next Section'}
-        </Button>
       </div>
 
       {/* Voice Recorder Modal */}

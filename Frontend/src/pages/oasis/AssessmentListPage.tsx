@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAssessments } from '@hooks/index';
 import { Button, Badge, Spinner, Alert, Select } from '@components/common';
 import { STATUS_CONFIG, ASSESSMENT_TYPE_LABELS } from '@typedefs/oasis.types';
@@ -12,6 +12,7 @@ import type { AssessmentStatus, AssessmentType } from '@typedefs/index';
 export default function AssessmentListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
+  const navigate = useNavigate();
 
   const status = searchParams.get('status') as AssessmentStatus | null;
   const assessmentType = searchParams.get('type') as AssessmentType | null;
@@ -156,7 +157,17 @@ export default function AssessmentListPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {data.data.map((assessment) => (
-                    <tr key={assessment.id} className="hover:bg-gray-50">
+                    <tr
+                      key={assessment.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() =>
+                        navigate(
+                          assessment.status === 'LOCKED'
+                            ? `/assessments/${assessment.id}`
+                            : `/assessments/${assessment.id}/edit`
+                        )
+                      }
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <p className="text-sm font-medium text-gray-900">
