@@ -144,11 +144,7 @@ export default function AssessmentTimeline({ patientId }: AssessmentTimelineProp
                     {episode.assessments.map((assessment) => (
                       <Link
                         key={assessment.id}
-                        to={
-                          assessment.status === 'LOCKED'
-                            ? `/assessments/${assessment.id}`
-                            : `/assessments/${assessment.id}/edit`
-                        }
+                        to={`/episode/${patientId}/${episode.id}`}
                         className="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                       >
                         <div className="flex items-center justify-between flex-wrap gap-2">

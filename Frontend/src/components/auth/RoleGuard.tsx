@@ -18,7 +18,7 @@ interface RoleGuardProps {
 export default function RoleGuard({
   children,
   allowedRoles,
-  fallbackPath = '/dashboard',
+  fallbackPath = '/schedule',
 }: RoleGuardProps) {
   const { hasRole } = useAuthStore();
 

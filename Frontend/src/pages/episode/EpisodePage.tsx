@@ -89,7 +89,13 @@ export default function EpisodePage() {
 
         {activeTab === 'visit' && <VisitTab />}
 
-        {activeTab === 'documentation' && <DocumentationTab />}
+        {activeTab === 'documentation' && (
+          <DocumentationTab
+            assessmentId={assessment?.id}
+            patientId={patientId}
+            physicianName={patient.primaryPhysicianName || 'Dr. Smith'}
+          />
+        )}
       </EpisodeShell>
 
       {/* Uploads Modal */}

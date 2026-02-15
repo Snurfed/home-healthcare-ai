@@ -17,8 +17,8 @@ export default function NotFoundPage() {
           The page you're looking for doesn't exist or has been moved.
         </p>
         <div className="mt-6">
-          <Link to="/dashboard">
-            <Button variant="primary">Go to Dashboard</Button>
+          <Link to="/schedule">
+            <Button variant="primary">Go to Schedule</Button>
           </Link>
         </div>
       </div>

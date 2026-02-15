@@ -11,7 +11,7 @@
  * - AI-powered physician communication triggers
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useEpisodeStore } from '@context/stores/episodeStore';
 import QuestionCard from '@components/episode/QuestionCard';
 import { TriggerAlertBanner } from '@components/communication/TriggerAlertBanner';
@@ -128,11 +128,20 @@ export default function DocumentationTab({
     activeTriggers,
     dismissTrigger,
     hasActiveTriggers,
+    detectTriggers,
   } = useCommunicationTriggers({
     assessmentId,
     enabled: !!assessmentId && assessmentId !== 'mock-assessment-id',
     debounceMs: 500,
   });
+
+  // For testing: simulate trigger detection when assessment loads
+  useEffect(() => {
+    if (assessmentId && assessmentId !== 'mock-assessment-id') {
+      // Simulate a high pain value trigger detection
+      detectTriggers('J0520', { 'J0520': '8' });
+    }
+  }, [assessmentId, detectTriggers]);
 
   // Handle opening draft editor for a trigger
   const handleReviewDraft = useCallback((trigger: CommunicationTriggerWithStatus) => {

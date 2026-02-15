@@ -13,12 +13,12 @@ export default function LoginPage() {
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    const from = (location.state as { from?: Location })?.from?.pathname || '/dashboard';
+    const from = (location.state as { from?: Location })?.from?.pathname || '/schedule';
     return <Navigate to={from} replace />;
   }
 
   const handleLoginSuccess = () => {
-    const from = (location.state as { from?: Location })?.from?.pathname || '/dashboard';
+    const from = (location.state as { from?: Location })?.from?.pathname || '/schedule';
     navigate(from, { replace: true });
   };
 

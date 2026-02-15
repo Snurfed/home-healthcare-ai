@@ -3,25 +3,12 @@ import { Suspense, lazy } from 'react';
 
 // Lazy-loaded pages
 const LoginPage = lazy(() => import('@pages/auth/LoginPage'));
-const DashboardPage = lazy(() => import('@pages/dashboard/DashboardPage'));
-const SupervisorDashboardPage = lazy(() => import('@pages/supervisor/SupervisorDashboardPage'));
-const AssessmentListPage = lazy(() => import('@pages/oasis/AssessmentListPage'));
-const CreateAssessmentPage = lazy(() => import('@pages/oasis/CreateAssessmentPage'));
-const AssessmentWizardPage = lazy(() => import('@pages/oasis/AssessmentWizardPage'));
-const AssessmentViewPage = lazy(() => import('@pages/oasis/AssessmentViewPage'));
-const AssessmentReviewPage = lazy(() => import('@pages/oasis/AssessmentReviewPage'));
-const PatientsListPage = lazy(() => import('@pages/patients/PatientsListPage'));
-const NewPatientPage = lazy(() => import('@pages/patients/NewPatientPage'));
-const PatientDetailPage = lazy(() => import('@pages/patients/PatientDetailPage'));
-const NotFoundPage = lazy(() => import('@pages/NotFoundPage'));
-const AgencySettingsPage = lazy(() => import('@pages/settings/AgencySettingsPage'));
-
-// New clinical workflow pages
 const SchedulePage = lazy(() => import('@pages/schedule/SchedulePage'));
 const EpisodePage = lazy(() => import('@pages/episode/EpisodePage'));
+const AgencySettingsPage = lazy(() => import('@pages/settings/AgencySettingsPage'));
+const NotFoundPage = lazy(() => import('@pages/NotFoundPage'));
 
 // Layout and auth components
-import AppLayout from '@components/layout/AppLayout';
 import AppShell from '@components/layout/AppShell';
 import ProtectedRoute from '@components/auth/ProtectedRoute';
 import RoleGuard from '@components/auth/RoleGuard';
@@ -43,7 +30,7 @@ function App() {
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* New Clinical Workflow Routes (minimal AppShell) */}
+        {/* Schedule (Home) */}
         <Route
           path="/schedule"
           element={
@@ -55,7 +42,7 @@ function App() {
           <Route index element={<SchedulePage />} />
         </Route>
 
-        {/* Episode workflow (standalone, no sidebar) */}
+        {/* Episode workflow (standalone) */}
         <Route
           path="/episode/:patientId"
           element={
@@ -73,64 +60,22 @@ function App() {
           }
         />
 
-        {/* Legacy Protected routes (with sidebar) */}
+        {/* Settings - Admin/Supervisor only */}
         <Route
-          path="/"
+          path="/settings"
           element={
             <ProtectedRoute>
-              <AppLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="/schedule" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-
-          {/* Supervisor Dashboard - role protected */}
-          <Route
-            path="supervisor"
-            element={
-              <RoleGuard allowedRoles={['ADMIN', 'SUPERVISOR']}>
-                <SupervisorDashboardPage />
-              </RoleGuard>
-            }
-          />
-
-          {/* OASIS Assessment routes */}
-          <Route path="assessments">
-            <Route index element={<AssessmentListPage />} />
-            <Route path="new" element={<CreateAssessmentPage />} />
-            <Route path=":id" element={<AssessmentViewPage />} />
-            <Route path=":id/edit" element={<AssessmentWizardPage />} />
-            <Route
-              path=":id/review"
-              element={
-                <RoleGuard allowedRoles={['ADMIN', 'SUPERVISOR']}>
-                  <AssessmentReviewPage />
-                </RoleGuard>
-              }
-            />
-          </Route>
-
-          {/* Patient routes */}
-          <Route path="patients">
-            <Route index element={<PatientsListPage />} />
-            <Route path="new" element={<NewPatientPage />} />
-            <Route path=":id" element={<PatientDetailPage />} />
-            <Route path=":id/edit" element={<NewPatientPage />} />
-          </Route>
-
-          {/* Settings routes - Admin/Supervisor only */}
-          <Route
-            path="settings"
-            element={
               <RoleGuard allowedRoles={['ADMIN', 'SUPERVISOR']}>
                 <AppShell>
                   <AgencySettingsPage />
                 </AppShell>
               </RoleGuard>
-            }
-          />
-        </Route>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Root redirect to schedule */}
+        <Route path="/" element={<Navigate to="/schedule" replace />} />
 
         {/* 404 route */}
         <Route path="*" element={<NotFoundPage />} />
