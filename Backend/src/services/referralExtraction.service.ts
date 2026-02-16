@@ -130,7 +130,13 @@ export interface FunctionalStatus {
 }
 
 export interface OrdersInfo {
-  disciplines?: Array<{ type: string; frequency?: string; duration?: string }>;
+  disciplines?: Array<{
+    type: string;
+    frequency?: string;
+    duration?: string;
+    goals?: string[];
+    interventions?: string[];
+  }>;
   certificationPeriod?: { startDate?: string; endDate?: string };
   specificOrders?: string[];
   labOrders?: string[];
@@ -199,18 +205,53 @@ function getAnthropicClient(): Anthropic {
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a clinical data extraction specialist for home health care. Extract all relevant clinical information from this referral document and map it to OASIS-E assessment fields. Return ONLY valid JSON with no other text.
 
-IMPORTANT DISTINCTIONS:
-1. ORDERS vs MEDICATIONS:
-   - "orders.disciplines" = HOME HEALTH SERVICE ORDERS (PT, OT, ST, SN, MSW, HHA visits with frequency like "2x/week for 4 weeks")
-   - "medications" = PRESCRIPTION DRUGS the patient takes (aspirin, metoprolol, lisinopril, etc.)
-   - NEVER put medications in the orders section. Ibuprofen, aspirin, iron supplements, etc. are MEDICATIONS, not orders.
+═══════════════════════════════════════════════════════════════════════════════
+CRITICAL: HOME HEALTH ORDERS vs OTHER ITEMS - READ CAREFULLY
+═══════════════════════════════════════════════════════════════════════════════
 
-2. HOSPITALIZATION:
+The "orders.disciplines" field is EXCLUSIVELY for HOME HEALTH SERVICE VISIT ORDERS.
+These are orders for healthcare professionals to visit the patient at home.
+
+✅ VALID HOME HEALTH ORDERS (put in orders.disciplines):
+   - PT (Physical Therapy) visits - e.g., "PT 2x/week for 4 weeks"
+   - OT (Occupational Therapy) visits - e.g., "OT 3x/week for 2 weeks"
+   - ST (Speech Therapy) visits - e.g., "ST 1x/week for 6 weeks"
+   - SN (Skilled Nursing) visits - e.g., "SN 3x/week x 4 weeks"
+   - MSW (Medical Social Worker) visits - e.g., "MSW 1x/week PRN"
+   - HHA (Home Health Aide) visits - e.g., "HHA 3x/week for personal care"
+
+❌ NOT HOME HEALTH ORDERS (do NOT put in orders.disciplines):
+   - Medications (aspirin, metoprolol, lisinopril, etc.) → put in "medications" array
+   - Specialist referrals (cardiology consult, ortho follow-up) → omit or put in notes
+   - Lab orders (CBC, BMP, PT/INR) → put in "orders.labOrders" if needed
+   - Diagnostic imaging (X-ray, MRI, CT) → omit
+   - DME prescriptions (wheelchair, walker, hospital bed) → put in functionalStatus.dmeNeeded
+   - Wound care supplies → omit
+   - Diet orders → omit
+
+THERAPY-SPECIFIC CONTENT - Keep disciplines separate:
+   - PT content: gait training, strengthening, balance, transfers, stairs, ROM, pain management
+   - OT content: ADLs (dressing, bathing, grooming), fine motor, home safety, adaptive equipment
+   - ST content: swallowing, speech/language, cognitive-linguistic therapy
+   - Each discipline should have ITS OWN specific goals, not copy from another discipline
+
+═══════════════════════════════════════════════════════════════════════════════
+OTHER IMPORTANT DISTINCTIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+MEDICATIONS:
+   - "medications" array = PRESCRIPTION AND OTC DRUGS the patient takes
+   - Include: drug name, dose, frequency, route
+   - Examples: aspirin 81mg daily, metoprolol 25mg BID, lisinopril 10mg daily
+
+HOSPITALIZATION:
    - If the patient has a fracture, surgical procedure, or acute diagnosis, they were likely hospitalized
    - Look for discharge dates, facility names, admission reasons
    - Infer hospitalization from context (e.g., "s/p hip replacement" = hospitalized for surgery)
 
-3. Do NOT duplicate data - each piece of information should appear only once
+Do NOT duplicate data - each piece of information should appear only once.
+
+═══════════════════════════════════════════════════════════════════════════════
 
 Extract and return this JSON structure:
 {
@@ -261,10 +302,18 @@ Extract and return this JSON structure:
     "assistiveDevices": ["string"]
   },
   "orders": {
-    "disciplines": [{ "type": "SN/PT/OT/ST/MSW/HHA", "frequency": "string", "duration": "string" }],
+    "disciplines": [
+      {
+        "type": "PT/OT/ST/SN/MSW/HHA only",
+        "frequency": "e.g., 2x/week",
+        "duration": "e.g., 4 weeks",
+        "goals": ["therapy-specific goals for THIS discipline only"],
+        "interventions": ["therapy-specific interventions for THIS discipline"]
+      }
+    ],
     "certificationPeriod": { "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD" },
-    "specificOrders": ["string - clinical orders like wound care, vital sign monitoring, etc."],
-    "labOrders": ["string"]
+    "specificOrders": ["clinical nursing orders like wound care, vital signs, etc."],
+    "labOrders": ["lab tests only - CBC, BMP, etc."]
   },
   "homeboundReason": "string",
   "oasisMappings": {
@@ -272,10 +321,22 @@ Extract and return this JSON structure:
   }
 }
 
-REMEMBER:
-- disciplines = PT, OT, ST, SN, MSW, HHA service visits ONLY
-- medications = drugs/pills/injections the patient takes
-- If you see a fracture or surgery diagnosis, set clinicalFindings.hospitalization.wasHospitalized = true
+═══════════════════════════════════════════════════════════════════════════════
+FINAL REMINDERS - VERY IMPORTANT
+═══════════════════════════════════════════════════════════════════════════════
+
+1. orders.disciplines = ONLY home health visit orders (PT, OT, ST, SN, MSW, HHA)
+   - If you see "aspirin", "lisinopril", "metoprolol" → these are MEDICATIONS, not orders
+   - If you see "cardiology consult", "ortho follow-up" → these are NOT home health orders
+
+2. Keep therapy disciplines separate with discipline-specific content:
+   - PT goals should be about mobility, gait, strength, balance
+   - OT goals should be about ADLs, self-care, home safety, fine motor
+   - Do NOT copy PT goals into OT section or vice versa
+
+3. medications = drugs/pills/injections the patient takes (put ALL medications here)
+
+4. If you see a fracture or surgery diagnosis, set clinicalFindings.hospitalization.wasHospitalized = true
 
 For the oasisMappings field, map clinical information to these OASIS items when evidence exists:
 - M0100 (reason for assessment), M0150 (payment sources)
@@ -837,6 +898,8 @@ interface FrontendExtractedData {
     frequency?: string;
     duration?: string;
     specificOrders?: string[];
+    goals?: string[];
+    interventions?: string[];
   }>;
   certificationPeriod?: {
     startDate?: string;
@@ -937,6 +1000,8 @@ function transformForFrontend(aiResult: AIExtractionResult): FrontendExtractedDa
       frequency: d.frequency,
       duration: d.duration,
       specificOrders: aiResult.orders?.specificOrders,
+      goals: d.goals,
+      interventions: d.interventions,
     }));
     result.certificationPeriod = aiResult.orders.certificationPeriod;
   }

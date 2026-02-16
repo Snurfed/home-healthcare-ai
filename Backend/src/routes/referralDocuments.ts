@@ -159,6 +159,18 @@ router.post(
   controller.applyToAssessment
 );
 
+/**
+ * @route   GET /api/referrals/:id/download
+ * @desc    Download the original referral document file
+ * @access  Private - Clinical staff
+ */
+router.get(
+  '/referrals/:id/download',
+  authenticate,
+  authorize(CLINICAL_ROLES),
+  controller.downloadReferral
+);
+
 // ===========================================
 // EXPORTS
 // ===========================================

@@ -108,6 +108,8 @@ export interface ExtractedOrder {
   frequency?: string;
   duration?: string;
   specificOrders?: string[];
+  goals?: string[];
+  interventions?: string[];
 }
 
 // Full extraction result from AI

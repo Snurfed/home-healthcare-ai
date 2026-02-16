@@ -14,6 +14,7 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { useReferralDocuments } from '@hooks/index';
 import { Spinner, Alert } from '@components/common';
+import { tokenStorage } from '@services/api/client';
 import type {
   ReferralListItem,
   ReferralDocument,
@@ -291,8 +292,95 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
   }, [documents, getDocument]);
 
   // Aggregate extraction data from all loaded documents
+  // Helper function to normalize discipline names
+  const normalizeDiscipline = (discipline: string): string => {
+    const d = discipline.toUpperCase().trim();
+    if (d.includes('PHYSICAL THERAPY') || d === 'PT') return 'PT';
+    if (d.includes('OCCUPATIONAL THERAPY') || d === 'OT') return 'OT';
+    if (d.includes('SPEECH THERAPY') || d === 'ST') return 'ST';
+    if (d.includes('SKILLED NURSING') || d === 'SN') return 'SN';
+    if (d.includes('MEDICAL SOCIAL') || d === 'MSW') return 'MSW';
+    if (d.includes('HOME HEALTH AIDE') || d === 'HHA') return 'HHA';
+    return d;
+  };
+
+  // Helper function to merge orders by discipline
+  const mergeOrdersByDiscipline = (ordersList: ExtractedOrder[]): ExtractedOrder[] => {
+    const disciplineMap = new Map<string, ExtractedOrder>();
+    const seenGoals = new Map<string, Set<string>>();
+    const seenInterventions = new Map<string, Set<string>>();
+
+    for (const order of ordersList) {
+      const normalizedDiscipline = normalizeDiscipline(order.discipline || '');
+
+      // Skip invalid disciplines
+      const validDisciplines = ['PT', 'OT', 'ST', 'SN', 'MSW', 'HHA'];
+      if (!validDisciplines.includes(normalizedDiscipline)) continue;
+
+      if (!disciplineMap.has(normalizedDiscipline)) {
+        // First entry for this discipline
+        disciplineMap.set(normalizedDiscipline, {
+          ...order,
+          discipline: normalizedDiscipline,
+          goals: [],
+          interventions: [],
+        });
+        seenGoals.set(normalizedDiscipline, new Set());
+        seenInterventions.set(normalizedDiscipline, new Set());
+      }
+
+      const merged = disciplineMap.get(normalizedDiscipline)!;
+      const goalSet = seenGoals.get(normalizedDiscipline)!;
+      const interventionSet = seenInterventions.get(normalizedDiscipline)!;
+
+      // Keep the most detailed frequency/duration
+      if (order.frequency && (!merged.frequency || order.frequency.length > merged.frequency.length)) {
+        merged.frequency = order.frequency;
+      }
+      if (order.duration && (!merged.duration || order.duration.length > merged.duration.length)) {
+        merged.duration = order.duration;
+      }
+
+      // Merge goals (deduplicated)
+      if (Array.isArray(order.goals)) {
+        for (const goal of order.goals) {
+          const normalizedGoal = goal.toLowerCase().trim();
+          if (!goalSet.has(normalizedGoal)) {
+            goalSet.add(normalizedGoal);
+            merged.goals = merged.goals || [];
+            merged.goals.push(goal);
+          }
+        }
+      }
+
+      // Merge interventions (deduplicated)
+      if (Array.isArray(order.interventions)) {
+        for (const intervention of order.interventions) {
+          const normalizedIntervention = intervention.toLowerCase().trim();
+          if (!interventionSet.has(normalizedIntervention)) {
+            interventionSet.add(normalizedIntervention);
+            merged.interventions = merged.interventions || [];
+            merged.interventions.push(intervention);
+          }
+        }
+      }
+
+      // Merge specificOrders if present
+      if (Array.isArray(order.specificOrders)) {
+        merged.specificOrders = merged.specificOrders || [];
+        for (const so of order.specificOrders) {
+          if (!merged.specificOrders.includes(so)) {
+            merged.specificOrders.push(so);
+          }
+        }
+      }
+    }
+
+    return Array.from(disciplineMap.values());
+  };
+
   const aggregatedData = useMemo((): AggregatedExtractionData => {
-    const orders: ExtractedOrder[] = [];
+    const rawOrders: ExtractedOrder[] = [];
     const diagnoses: ExtractedDiagnosis[] = [];
     const medications: ExtractedMedication[] = [];
     const surgicalHistory: string[] = [];
@@ -300,7 +388,6 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
     let hospitalization: AggregatedExtractionData['hospitalization'] = null;
 
     // Track seen items to avoid duplicates
-    const seenOrders = new Set<string>();
     const seenDiagnoses = new Set<string>();
     const seenMedications = new Set<string>();
     const seenSymptoms = new Set<string>();
@@ -311,20 +398,15 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
       const rawData = doc.extractedData as Record<string, unknown> | null;
       if (!rawData) continue;
 
-      // Aggregate orders (only PT/OT/SN/ST/MSW/HHA disciplines, not medications)
+      // Collect all orders (will merge later)
       const ordersArray = rawData.orders as ExtractedOrder[] | undefined;
       if (Array.isArray(ordersArray)) {
         for (const order of ordersArray) {
-          // Filter out medication-like entries
+          // Pre-filter out obviously non-order items
           const discipline = order.discipline?.toUpperCase() || '';
           const validDisciplines = ['PT', 'OT', 'ST', 'SN', 'MSW', 'HHA', 'PHYSICAL THERAPY', 'OCCUPATIONAL THERAPY', 'SPEECH THERAPY', 'SKILLED NURSING', 'MEDICAL SOCIAL WORK', 'HOME HEALTH AIDE'];
           if (!validDisciplines.some(d => discipline.includes(d))) continue;
-
-          const key = `${order.discipline}-${order.frequency}`;
-          if (!seenOrders.has(key)) {
-            seenOrders.add(key);
-            orders.push(order);
-          }
+          rawOrders.push(order);
         }
       }
 
@@ -466,8 +548,11 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
     // Sort medications alphabetically
     medications.sort((a, b) => a.name.localeCompare(b.name));
 
+    // Merge orders by discipline to consolidate duplicate PT/OT/etc entries
+    const mergedOrders = mergeOrdersByDiscipline(rawOrders);
+
     return {
-      orders,
+      orders: mergedOrders,
       diagnoses,
       medications,
       hospitalization,
@@ -497,10 +582,38 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
   };
 
   // Handle document click - open actual file
-  const handleDocumentClick = (doc: ReferralListItem) => {
-    // Open the raw file in a new tab
-    const downloadUrl = `/api/referrals/${doc.id}/download`;
-    window.open(downloadUrl, '_blank');
+  const handleDocumentClick = async (doc: ReferralListItem) => {
+    try {
+      // Fetch the file with authentication
+      const token = tokenStorage.getAccessToken();
+      if (!token) {
+        console.error('No access token available');
+        return;
+      }
+
+      const response = await fetch(`/api/referrals/${doc.id}/download`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.error('Failed to download document:', response.status, response.statusText);
+        return;
+      }
+
+      // Get the blob and create an object URL
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      // Open in a new tab
+      window.open(url, '_blank');
+
+      // Clean up the object URL after a delay
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      console.error('Error opening document:', error);
+    }
   };
 
   // Filter and deduplicate documents

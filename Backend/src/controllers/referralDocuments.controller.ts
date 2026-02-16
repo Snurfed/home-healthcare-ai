@@ -1297,6 +1297,116 @@ export async function applyToAssessment(
   }
 }
 
+/**
+ * Download the original referral document file
+ * GET /api/referrals/:id/download
+ */
+export async function downloadReferral(
+  req: AuthenticatedRequest & { params: { id: string } },
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+    }
+
+    const { id } = req.params;
+
+    const referral = await prisma.referralDocument.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        patientId: true,
+        fileName: true,
+        fileType: true,
+        fileUrl: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!referral || referral.deletedAt) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Referral document not found',
+      });
+    }
+
+    // Check access
+    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, referral.patientId);
+    if (!hasAccess) {
+      await createReferralAuditLog(
+        AuditAction.READ,
+        req.user.id,
+        req.user.email,
+        req.user.role,
+        id,
+        referral.patientId,
+        false,
+        req,
+        { errorMessage: 'Access denied for file download' }
+      );
+
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to download this document',
+      });
+    }
+
+    // Resolve the file path
+    const filePath = path.resolve(referral.fileUrl);
+
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      console.error(`[Download] File not found at path: ${filePath}`);
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Document file not found on server',
+      });
+    }
+
+    // Determine content type
+    const mimeTypes: Record<string, string> = {
+      pdf: 'application/pdf',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      tiff: 'image/tiff',
+      doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+    const contentType = mimeTypes[referral.fileType] || 'application/octet-stream';
+
+    // Audit log
+    await createReferralAuditLog(
+      AuditAction.READ,
+      req.user.id,
+      req.user.email,
+      req.user.role,
+      id,
+      referral.patientId,
+      true,
+      req,
+      {
+        description: `Downloaded referral document: ${referral.fileName}`,
+      }
+    );
+
+    // Set headers for file download/viewing
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${referral.fileName}"`);
+
+    // Stream the file
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+  } catch (error) {
+    next(error);
+  }
+}
+
 // ===========================================
 // EXPORTS
 // ===========================================
@@ -1310,4 +1420,5 @@ export default {
   triggerExtraction,
   getExtractionStatus,
   applyToAssessment,
+  downloadReferral,
 };
