@@ -11,43 +11,38 @@
  * - AI-powered physician communication triggers
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useEpisodeStore } from '@context/stores/episodeStore';
-import QuestionCard from '@components/episode/QuestionCard';
+import { useAssessmentStore } from '@context/stores/assessmentStore';
+import { useQuestions, useAssessment } from '@hooks/queries/useAssessments';
+import { useAutoSave } from '@hooks/useAutoSave';
+import QuestionRenderer from '@components/oasis/QuestionRenderer';
 import { TriggerAlertBanner } from '@components/communication/TriggerAlertBanner';
 import { CommunicationDraftEditor } from '@components/communication/CommunicationDraftEditor';
 import { useCommunicationTriggers } from '@hooks/useCommunicationTriggers';
+import { Spinner } from '@components/common';
+import { OASIS_SECTIONS } from '@typedefs/oasis.types';
+import type { OASISSectionId, OASISQuestion, OASISResponse } from '@typedefs/index';
 import type { CommunicationTriggerWithStatus } from '@typedefs/communication.types';
 
 type FilterOption = 'all' | 'required' | 'incomplete';
 
-interface OasisSection {
-  id: string;
-  title: string;
-  shortTitle: string;
+interface SectionInfo {
+  id: OASISSectionId;
+  name: string;
+  shortName: string;
   completedCount: number;
   totalCount: number;
 }
 
-const MOCK_SECTIONS: OasisSection[] = [
-  { id: 'admin', title: 'Administrative Information', shortTitle: 'Admin', completedCount: 5, totalCount: 5 },
-  { id: 'clinical', title: 'Clinical Record Items', shortTitle: 'Clinical', completedCount: 3, totalCount: 8 },
-  { id: 'living', title: 'Living Situation', shortTitle: 'Living', completedCount: 2, totalCount: 4 },
-  { id: 'sensory', title: 'Sensory Status', shortTitle: 'Sensory', completedCount: 0, totalCount: 6 },
-  { id: 'neuro', title: 'Neurological Status', shortTitle: 'Neuro', completedCount: 0, totalCount: 5 },
-  { id: 'functional', title: 'Functional Status', shortTitle: 'Functional', completedCount: 1, totalCount: 12 },
-  { id: 'medication', title: 'Medications', shortTitle: 'Meds', completedCount: 0, totalCount: 4 },
-  { id: 'skin', title: 'Skin Conditions', shortTitle: 'Skin', completedCount: 0, totalCount: 8 },
-];
-
 interface SidebarSectionProps {
-  section: OasisSection;
+  section: SectionInfo;
   isActive: boolean;
   onClick: () => void;
 }
 
 function SidebarSection({ section, isActive, onClick }: SidebarSectionProps) {
-  const isComplete = section.completedCount === section.totalCount;
+  const isComplete = section.completedCount === section.totalCount && section.totalCount > 0;
   const hasProgress = section.completedCount > 0;
 
   return (
@@ -89,7 +84,7 @@ function SidebarSection({ section, isActive, onClick }: SidebarSectionProps) {
       {/* Title and count */}
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium truncate ${isActive ? 'text-green-700' : 'text-gray-900'}`}>
-          {section.shortTitle}
+          {section.shortName}
         </p>
         <p className="text-xs text-gray-500">
           {section.completedCount}/{section.totalCount}
@@ -107,15 +102,39 @@ interface DocumentationTabProps {
 }
 
 export default function DocumentationTab({
-  assessmentId = 'mock-assessment-id',
-  // patientId reserved for future use
+  assessmentId,
+  patientId: _patientId,
   physicianName = 'Dr. Smith',
   physicianNpi,
 }: DocumentationTabProps) {
-  const [activeSection, setActiveSection] = useState('clinical');
+  const [activeSection, setActiveSection] = useState<OASISSectionId>('clinical_record');
   const [filter, setFilter] = useState<FilterOption>('all');
   const [transferring, setTransferring] = useState(false);
   const { hideCompletedCards, setHideCompletedCards } = useEpisodeStore();
+
+  // Assessment store for managing responses
+  const {
+    currentAssessment,
+    draftResponses,
+    updateResponse,
+    getResponseValue,
+    isDirty,
+  } = useAssessmentStore();
+
+  // Fetch assessment data
+  const { isLoading: assessmentLoading } = useAssessment(assessmentId);
+
+  // Fetch questions for the active section
+  const { data: questions = [], isLoading: questionsLoading } = useQuestions({
+    section: activeSection,
+  });
+
+  // Auto-save draft responses
+  useAutoSave({
+    assessmentId: assessmentId || '',
+    debounceMs: 2000,
+    enabled: !!assessmentId && isDirty,
+  });
 
   // Communication triggers state
   const [showTriggerBanner, setShowTriggerBanner] = useState(true);
@@ -123,25 +142,101 @@ export default function DocumentationTab({
   const [selectedTrigger, setSelectedTrigger] = useState<CommunicationTriggerWithStatus | null>(null);
 
   // Communication triggers hook
-  // Note: detectTriggers is available for calling when OASIS responses change
   const {
     activeTriggers,
     dismissTrigger,
     hasActiveTriggers,
     detectTriggers,
   } = useCommunicationTriggers({
-    assessmentId,
-    enabled: !!assessmentId && assessmentId !== 'mock-assessment-id',
+    assessmentId: assessmentId || '',
+    enabled: !!assessmentId,
     debounceMs: 500,
   });
 
-  // For testing: simulate trigger detection when assessment loads
+  // Detect triggers when responses change
   useEffect(() => {
-    if (assessmentId && assessmentId !== 'mock-assessment-id') {
-      // Simulate a high pain value trigger detection
-      detectTriggers('J0520', { 'J0520': '8' });
+    if (assessmentId && Object.keys(draftResponses).length > 0) {
+      const lastChange = Object.entries(draftResponses).pop();
+      if (lastChange) {
+        const [itemCode, response] = lastChange;
+        detectTriggers(itemCode, { [itemCode]: response.responseValue || '' });
+      }
     }
-  }, [assessmentId, detectTriggers]);
+  }, [assessmentId, draftResponses, detectTriggers]);
+
+  // Calculate section completion counts
+  const sectionInfo = useMemo((): SectionInfo[] => {
+    const responses = currentAssessment?.responses || {};
+    const allResponses = { ...responses, ...draftResponses };
+
+    return OASIS_SECTIONS.map((section) => {
+      // Get short name from section name
+      const shortName = section.name.includes('.')
+        ? section.name.split('.')[1]?.trim().split(' ').slice(0, 2).join(' ') || section.name
+        : section.name.split(' ').slice(0, 2).join(' ');
+
+      // Count completed questions for this section
+      // We need to know which item codes belong to which section
+      // For now, we'll estimate based on the section's requiredItems
+      const sectionResponses = Object.values(allResponses).filter((r) => {
+        // Match responses to sections based on item code patterns
+        const code = (r as OASISResponse).itemCode || '';
+        if (section.id === 'administrative' && code.match(/^M00/)) return true;
+        if (section.id === 'clinical_record' && code.match(/^M10/)) return true;
+        if (section.id === 'functional_abilities' && code.match(/^GG/)) return true;
+        if (section.id === 'functional_status' && code.match(/^M18/)) return true;
+        if (section.id === 'medications' && code.match(/^M20/)) return true;
+        if (section.id === 'skin_conditions' && code.match(/^M13/)) return true;
+        if (section.id === 'cognitive' && code.match(/^C\d|^M17/)) return true;
+        if (section.id === 'mood' && code.match(/^D\d/)) return true;
+        return false;
+      });
+
+      const completedCount = sectionResponses.filter((r) => {
+        const resp = r as OASISResponse;
+        return !!(resp.responseValue || resp.responseCode || resp.responseNumeric !== undefined);
+      }).length;
+
+      return {
+        id: section.id,
+        name: section.name,
+        shortName,
+        completedCount: Math.min(completedCount, section.requiredItems),
+        totalCount: section.requiredItems,
+      };
+    });
+  }, [currentAssessment?.responses, draftResponses]);
+
+  // Filter questions based on filter option
+  const filteredQuestions = useMemo(() => {
+    if (!questions) return [];
+
+    return questions.filter((q: OASISQuestion) => {
+      const response = getResponseValue(q.itemCode);
+      const hasValue = !!(response?.responseValue || response?.responseCode || response?.responseNumeric !== undefined);
+      const isRequired = q.validationRules?.some((r) => r.ruleType === 'required') ?? false;
+
+      // Apply hide completed filter
+      if (hideCompletedCards && hasValue) return false;
+
+      switch (filter) {
+        case 'required':
+          return isRequired;
+        case 'incomplete':
+          return !hasValue;
+        default:
+          return true;
+      }
+    });
+  }, [questions, filter, hideCompletedCards, getResponseValue]);
+
+  // Handle response change
+  const handleResponseChange = useCallback(
+    (itemCode: string, response: Partial<OASISResponse>) => {
+      updateResponse(itemCode, response);
+    },
+    [updateResponse]
+  );
 
   // Handle opening draft editor for a trigger
   const handleReviewDraft = useCallback((trigger: CommunicationTriggerWithStatus) => {
@@ -174,23 +269,39 @@ export default function DocumentationTab({
 
   // Handle saved communication
   const handleCommunicationSaved = useCallback(() => {
-    // Optionally refresh triggers or show success message
     console.log('Communication saved successfully');
   }, []);
 
   const handleTransferToEMR = useCallback(() => {
     setTransferring(true);
-    // Simulate transfer
     setTimeout(() => {
       setTransferring(false);
       alert('Results transferred to EMR successfully!');
     }, 1500);
   }, []);
 
+  // Navigate to previous/next section
+  const navigateSection = useCallback((direction: 'prev' | 'next') => {
+    const currentIndex = OASIS_SECTIONS.findIndex((s) => s.id === activeSection);
+    const newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+    const newSection = OASIS_SECTIONS[newIndex];
+    if (newIndex >= 0 && newIndex < OASIS_SECTIONS.length && newSection) {
+      setActiveSection(newSection.id);
+    }
+  }, [activeSection]);
+
   // Calculate overall progress
-  const totalItems = MOCK_SECTIONS.reduce((sum, s) => sum + s.totalCount, 0);
-  const completedItems = MOCK_SECTIONS.reduce((sum, s) => sum + s.completedCount, 0);
-  const progressPercent = Math.round((completedItems / totalItems) * 100);
+  const totalItems = sectionInfo.reduce((sum, s) => sum + s.totalCount, 0);
+  const completedItems = sectionInfo.reduce((sum, s) => sum + s.completedCount, 0);
+  const progressPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+
+  // Get current section info
+  const currentSectionInfo = sectionInfo.find((s) => s.id === activeSection);
+  const currentIndex = OASIS_SECTIONS.findIndex((s) => s.id === activeSection);
+  const hasPrevSection = currentIndex > 0;
+  const hasNextSection = currentIndex < OASIS_SECTIONS.length - 1;
+
+  const isLoading = assessmentLoading || questionsLoading;
 
   return (
     <div className="flex gap-6 min-h-[calc(100vh-200px)]">
@@ -212,15 +323,21 @@ export default function DocumentationTab({
             <p className="text-xs text-gray-500 mt-2">
               {completedItems} of {totalItems} items
             </p>
+            {isDirty && (
+              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                Unsaved changes
+              </p>
+            )}
           </div>
 
           {/* Sections List */}
-          <div className="bg-white rounded-xl border border-gray-200 p-3">
+          <div className="bg-white rounded-xl border border-gray-200 p-3 max-h-[50vh] overflow-y-auto">
             <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider px-3 mb-2">
               Sections
             </h3>
             <div className="space-y-1">
-              {MOCK_SECTIONS.map((section) => (
+              {sectionInfo.map((section) => (
                 <SidebarSection
                   key={section.id}
                   section={section}
@@ -246,21 +363,7 @@ export default function DocumentationTab({
           >
             {transferring ? (
               <>
-                <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
+                <Spinner size="sm" />
                 <span>Transferring...</span>
               </>
             ) : (
@@ -297,10 +400,11 @@ export default function DocumentationTab({
         <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 p-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
-              {MOCK_SECTIONS.find((s) => s.id === activeSection)?.title || 'Documentation'}
+              {currentSectionInfo?.name || 'Documentation'}
             </h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              Complete all required fields for this section
+              {filteredQuestions.length} items
+              {filter !== 'all' && ` (${filter})`}
             </p>
           </div>
 
@@ -343,160 +447,82 @@ export default function DocumentationTab({
           </div>
         </div>
 
+        {/* Loading State */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-12 bg-white rounded-xl border border-gray-200">
+            <Spinner size="lg" />
+            <span className="ml-3 text-gray-500">Loading questions...</span>
+          </div>
+        )}
+
+        {/* No Questions Message */}
+        {!isLoading && filteredQuestions.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">No questions found</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              {filter !== 'all'
+                ? 'Try changing the filter to see more questions.'
+                : 'No questions available for this section.'}
+            </p>
+          </div>
+        )}
+
         {/* Question Cards */}
-        <div className="space-y-4">
-          <QuestionCard
-            id="m1021"
-            title="M1021 - Primary Diagnosis"
-            helperText="Enter the ICD-10 code for the primary diagnosis"
-            required
-            isCompleted={true}
-          >
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1.5 bg-gray-100 rounded-lg font-mono text-sm text-gray-900">
-                I50.9
-              </span>
-              <span className="text-sm text-gray-700">Heart failure, unspecified</span>
-            </div>
-          </QuestionCard>
-
-          <QuestionCard
-            id="m1023"
-            title="M1023 - Other Diagnoses"
-            helperText="List other diagnoses requiring or affecting patient care"
-            isCompleted={true}
-          >
-            <div className="space-y-2">
-              {[
-                { code: 'E11.9', desc: 'Type 2 diabetes mellitus' },
-                { code: 'I10', desc: 'Essential hypertension' },
-                { code: 'N18.3', desc: 'CKD Stage 3' },
-              ].map((dx) => (
-                <div key={dx.code} className="flex items-center gap-3">
-                  <span className="px-2 py-1 bg-gray-100 rounded font-mono text-xs text-gray-700">
-                    {dx.code}
-                  </span>
-                  <span className="text-sm text-gray-600">{dx.desc}</span>
-                </div>
-              ))}
-            </div>
-          </QuestionCard>
-
-          <QuestionCard
-            id="m1033"
-            title="M1033 - Risk for Hospitalization"
-            helperText="Identify risk factors that indicate patient may be at risk for hospitalization"
-            required
-            isCompleted={false}
-            aiExplanation="Based on the patient's history of CHF exacerbation requiring hospitalization and multiple comorbidities, consider checking 'History of falls', 'Multiple hospitalizations', and 'Polypharmacy'."
-          >
-            <div className="space-y-2">
-              {[
-                'History of falls (2+ in past 12 months)',
-                'Unintentional weight loss',
-                'Multiple hospitalizations (2+ in past 6 months)',
-                'History of emergency department use',
-                'Decline in mental/emotional/behavioral status',
-                'Difficulty with compliance with medical instructions',
-                'Taking 5 or more medications',
-                'Currently seeing 2 or more physicians',
-                'Frailty indicators',
-                'None of the above',
-              ].map((option) => (
-                <label key={option} className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                  />
-                  <span className="text-sm text-gray-700">{option}</span>
-                </label>
-              ))}
-            </div>
-          </QuestionCard>
-
-          <QuestionCard
-            id="m1800"
-            title="M1800 - Grooming"
-            helperText="Current ability to dress upper body"
-            isCompleted={false}
-          >
-            <div className="space-y-2">
-              {[
-                { value: '0', label: 'Able to groom self unaided' },
-                { value: '1', label: 'Grooming utensils must be placed within reach' },
-                { value: '2', label: 'Needs someone to assist with some grooming activities' },
-                { value: '3', label: 'Needs total assistance with grooming' },
-              ].map((option) => (
-                <label key={option.value} className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="m1800"
-                    value={option.value}
-                    className="w-4 h-4 border-gray-300 text-green-600 focus:ring-green-500"
-                  />
-                  <span className="text-sm text-gray-700">
-                    <span className="font-medium">{option.value}.</span> {option.label}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </QuestionCard>
-
-          <QuestionCard
-            id="m1810"
-            title="M1810 - Dress Upper Body"
-            helperText="Current ability to dress upper body safely"
-            required
-            isCompleted={true}
-          >
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg font-medium text-sm">
-                1 - Able to dress upper body but needs minor assistance
-              </span>
-            </div>
-          </QuestionCard>
-
-          <QuestionCard
-            id="m1820"
-            title="M1820 - Dress Lower Body"
-            helperText="Current ability to dress lower body safely"
-            required
-            isCompleted={false}
-            aiExplanation="The patient mentioned difficulty bending to put on shoes and socks. This typically correlates with response option 2 or 3."
-          >
-            <div className="space-y-2">
-              {[
-                { value: '0', label: 'Able to obtain, put on, and remove clothing and shoes' },
-                { value: '1', label: 'Able to dress lower body but needs minor assistance' },
-                { value: '2', label: 'Needs someone to help with putting on undergarments, slacks, socks/shoes' },
-                { value: '3', label: 'Patient depends entirely upon another person' },
-              ].map((option) => (
-                <label key={option.value} className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="m1820"
-                    value={option.value}
-                    className="w-4 h-4 border-gray-300 text-green-600 focus:ring-green-500"
-                  />
-                  <span className="text-sm text-gray-700">
-                    <span className="font-medium">{option.value}.</span> {option.label}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </QuestionCard>
-        </div>
+        {!isLoading && filteredQuestions.length > 0 && (
+          <div className="space-y-4">
+            {filteredQuestions.map((question: OASISQuestion) => {
+              const response = getResponseValue(question.itemCode);
+              return (
+                <QuestionRenderer
+                  key={question.itemCode}
+                  question={question}
+                  value={response}
+                  onChange={(resp) => handleResponseChange(question.itemCode, resp)}
+                />
+              );
+            })}
+          </div>
+        )}
 
         {/* Bottom navigation */}
         <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-          <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors min-h-[44px]">
+          <button
+            onClick={() => navigateSection('prev')}
+            disabled={!hasPrevSection}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+              hasPrevSection
+                ? 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                : 'text-gray-300 cursor-not-allowed'
+            }`}
+          >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             Previous Section
           </button>
 
-          <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-green-500 text-white hover:bg-green-600 rounded-lg transition-colors min-h-[44px]">
+          <button
+            onClick={() => navigateSection('next')}
+            disabled={!hasNextSection}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+              hasNextSection
+                ? 'bg-green-500 text-white hover:bg-green-600'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
+          >
             Next Section
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -509,7 +535,7 @@ export default function DocumentationTab({
       <CommunicationDraftEditor
         isOpen={showDraftEditor}
         onClose={handleCloseDraftEditor}
-        assessmentId={assessmentId}
+        assessmentId={assessmentId || ''}
         trigger={selectedTrigger || undefined}
         physicianName={physicianName}
         physicianNpi={physicianNpi}
