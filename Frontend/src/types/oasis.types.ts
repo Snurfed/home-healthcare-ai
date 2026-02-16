@@ -34,7 +34,7 @@ export type ResponseType =
   | 'icd10';
 
 // Source of response data
-export type SourceType = 'manual' | 'voice' | 'ocr' | 'emr';
+export type SourceType = 'manual' | 'voice' | 'ocr' | 'emr' | 'system';
 
 // OASIS-E1 section identifiers (matches database section values)
 export type OASISSectionId =

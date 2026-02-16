@@ -11,7 +11,7 @@ import type { PatientSearchParams, PatientListItem, CreatePatientRequest } from 
 import type { PaginatedResponse } from '@typedefs/api.types';
 
 /**
- * Hook to search patients
+ * Hook to search/list patients
  */
 export function usePatientSearch(params?: PatientSearchParams) {
   return useQuery<PaginatedResponse<PatientListItem>, Error>(
@@ -23,6 +23,11 @@ export function usePatientSearch(params?: PatientSearchParams) {
     }
   );
 }
+
+/**
+ * Alias for usePatientSearch for cleaner API
+ */
+export const usePatients = usePatientSearch;
 
 /**
  * Hook to get a single patient

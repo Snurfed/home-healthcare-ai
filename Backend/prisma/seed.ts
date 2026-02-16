@@ -256,6 +256,42 @@ async function seedPatientAssignments() {
   console.log(`Patient Assignments: ${created} created, ${skipped} skipped`);
 }
 
+async function seedAgencySettings() {
+  console.log('Seeding agency settings...');
+
+  // Check if agency settings already exist
+  const existing = await prisma.agencySettings.findFirst({
+    where: { isPrimary: true },
+  });
+
+  if (existing) {
+    console.log('Agency Settings: already exists, skipping');
+    return;
+  }
+
+  // Create default agency settings
+  await prisma.agencySettings.create({
+    data: {
+      agencyName: 'HomeHealth AI Demo Agency',
+      cmsNumber: '123456',        // M0010 - 6-digit CMS certification number
+      branchState: 'CA',          // M0014 - 2-character state code
+      branchId: '1234567890',     // M0016 - 10-digit branch ID
+      facilityNpi: '1234567890',  // M0030/A0100 - 10-digit facility NPI
+      providerType: '01',         // A0200 - Home Health Agency
+      agencyAddress: '123 Healthcare Drive',
+      agencyCity: 'Los Angeles',
+      agencyState: 'CA',
+      agencyZip: '90001',
+      agencyPhone: '(555) 123-4567',
+      agencyFax: '(555) 123-4568',
+      isActive: true,
+      isPrimary: true,
+    },
+  });
+
+  console.log('Agency Settings: created default settings');
+}
+
 async function main() {
   console.log('Starting database seed...\n');
 
@@ -263,6 +299,7 @@ async function main() {
     await seedOasisQuestions();
     await seedDefaultUsers();
     await seedPatientAssignments();
+    await seedAgencySettings();
 
     console.log('\nDatabase seed completed successfully!');
   } catch (error) {

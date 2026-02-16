@@ -8,11 +8,13 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Button, Alert, Badge, Modal } from '@components/common';
 import { referralService } from '@services/referral.service';
+import { useAssessmentStore } from '@context/stores/assessmentStore';
 import type {
   ReferralDocument,
   ExtractedDiagnosis,
   ExtractedMedication,
   FieldAcceptanceState,
+  OASISResponse,
 } from '@typedefs/index';
 
 // ===========================================
@@ -521,41 +523,53 @@ export default function ReferralExtractionReview({
     setError(null);
 
     try {
+      // Get the updateResponses method from the store
+      const { updateResponses } = useAssessmentStore.getState();
+
       // Collect accepted/edited OASIS fields
-      const acceptedFields: Record<string, string> = {};
+      const acceptedFields: Record<string, Partial<OASISResponse>> = {};
+      const extractedData = document.extractedData;
+      const oasisMappings = extractedData?.oasisMappings || {};
 
       console.log('[ReferralReview] Apply - oasisFields:', oasisFields);
-      console.log('[ReferralReview] Apply - oasisFieldStates:', oasisFieldStates);
+      console.log('[ReferralReview] Apply - oasisMappings:', oasisMappings);
 
       oasisFields.forEach((field) => {
         console.log(`[ReferralReview] Field ${field.key}: status=${field.status}, value=${field.value}`);
         if (field.status === 'accepted' || field.status === 'edited') {
-          acceptedFields[field.key] = field.editedValue || field.value;
+          const value = field.editedValue || field.value;
+          const mapping = oasisMappings[field.key];
+
+          // Build the response object matching what manual entry and voice use
+          acceptedFields[field.key] = {
+            itemCode: field.key,
+            responseCode: value,
+            responseValue: value,
+            confidence: field.confidence || mapping?.confidence || 0.9,
+            sourceType: 'ocr', // Mark as referral/OCR source
+            sourceText: field.sourceText || mapping?.sourceText,
+          };
+
+          console.log(`[ReferralReview] Adding to store: ${field.key} =`, acceptedFields[field.key]);
         }
       });
 
-      console.log('[ReferralReview] Apply - acceptedFields:', acceptedFields);
-      console.log('[ReferralReview] Apply - acceptedFields count:', Object.keys(acceptedFields).length);
+      const fieldCount = Object.keys(acceptedFields).length;
+      console.log('[ReferralReview] Apply - acceptedFields count:', fieldCount);
 
-      if (Object.keys(acceptedFields).length === 0) {
+      if (fieldCount === 0) {
         setError('No fields have been accepted. Please accept at least one field.');
         setIsApplying(false);
         return;
       }
 
-      console.log('[ReferralReview] Calling API with:', {
-        documentId: document.id,
-        assessmentId,
-        acceptedFields,
-      });
+      // Update the assessment store - this triggers UI update immediately
+      // and the autosave mechanism will persist to database
+      console.log('[ReferralReview] Updating assessment store with fields:', Object.keys(acceptedFields));
+      updateResponses(acceptedFields);
 
-      const result = await referralService.applyToAssessment(document.id, {
-        assessmentId,
-        acceptedFields,
-      });
-
-      console.log('[ReferralReview] API result:', result);
-      onApplyComplete(result.appliedFields, assessmentId);
+      console.log('[ReferralReview] Store updated, calling onApplyComplete');
+      onApplyComplete(fieldCount, assessmentId);
     } catch (err) {
       console.error('Error applying extraction:', err);
       setError(err instanceof Error ? err.message : 'Failed to apply extraction. Please try again.');

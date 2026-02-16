@@ -212,6 +212,150 @@ async function checkAssessmentAccess(
 /**
  * Calculate completion percentage based on responses
  */
+/**
+ * Auto-populate system-level fields (agency settings, patient info)
+ * These fields are marked with sourceType: 'system' and are read-only
+ */
+async function autoPopulateSystemFields(
+  assessmentId: string,
+  patientId: string
+): Promise<void> {
+  // Fetch agency settings
+  const agencySettings = await prisma.agencySettings.findFirst({
+    where: { isPrimary: true, isActive: true },
+  });
+
+  // Fetch patient info for MRN and physician NPI
+  const patient = await prisma.patient.findUnique({
+    where: { id: patientId },
+    select: {
+      mrn: true,
+      primaryPhysicianNpi: true,
+      primaryPhysicianName: true,
+    },
+  });
+
+  if (!patient) return;
+
+  const systemResponses: Array<{
+    id: string;
+    assessmentId: string;
+    itemCode: string;
+    section: string;
+    responseValue: string;
+    responseCode: string;
+    responseText: string | null;
+    sourceType: string;
+    isValid: boolean;
+  }> = [];
+
+  // Add agency-level fields if settings exist
+  if (agencySettings) {
+    // M0010 - CMS Certification Number
+    systemResponses.push({
+      id: uuidv4(),
+      assessmentId,
+      itemCode: 'M0010',
+      section: 'clinical_record',
+      responseValue: agencySettings.cmsNumber,
+      responseCode: agencySettings.cmsNumber,
+      responseText: 'CMS Certification Number',
+      sourceType: 'system',
+      isValid: true,
+    });
+
+    // M0014 - Branch State
+    systemResponses.push({
+      id: uuidv4(),
+      assessmentId,
+      itemCode: 'M0014',
+      section: 'clinical_record',
+      responseValue: agencySettings.branchState,
+      responseCode: agencySettings.branchState,
+      responseText: 'Branch State',
+      sourceType: 'system',
+      isValid: true,
+    });
+
+    // M0016 - Branch ID (optional)
+    if (agencySettings.branchId) {
+      systemResponses.push({
+        id: uuidv4(),
+        assessmentId,
+        itemCode: 'M0016',
+        section: 'clinical_record',
+        responseValue: agencySettings.branchId,
+        responseCode: agencySettings.branchId,
+        responseText: 'Branch ID',
+        sourceType: 'system',
+        isValid: true,
+      });
+    }
+
+    // A0100 - Facility NPI
+    systemResponses.push({
+      id: uuidv4(),
+      assessmentId,
+      itemCode: 'A0100',
+      section: 'clinical_record',
+      responseValue: agencySettings.facilityNpi,
+      responseCode: agencySettings.facilityNpi,
+      responseText: 'Facility NPI',
+      sourceType: 'system',
+      isValid: true,
+    });
+
+    // A0200 - Provider Type (Home Health Agency)
+    systemResponses.push({
+      id: uuidv4(),
+      assessmentId,
+      itemCode: 'A0200',
+      section: 'clinical_record',
+      responseValue: agencySettings.providerType,
+      responseCode: agencySettings.providerType,
+      responseText: 'Home Health Agency',
+      sourceType: 'system',
+      isValid: true,
+    });
+  }
+
+  // M0020 - Patient ID Number (MRN)
+  systemResponses.push({
+    id: uuidv4(),
+    assessmentId,
+    itemCode: 'M0020',
+    section: 'clinical_record',
+    responseValue: patient.mrn,
+    responseCode: patient.mrn,
+    responseText: 'Patient MRN',
+    sourceType: 'system',
+    isValid: true,
+  });
+
+  // M0018 - Attending Physician NPI (if available)
+  if (patient.primaryPhysicianNpi) {
+    systemResponses.push({
+      id: uuidv4(),
+      assessmentId,
+      itemCode: 'M0018',
+      section: 'clinical_record',
+      responseValue: patient.primaryPhysicianNpi,
+      responseCode: patient.primaryPhysicianNpi,
+      responseText: patient.primaryPhysicianName || 'Attending Physician',
+      sourceType: 'system',
+      isValid: true,
+    });
+  }
+
+  // Create all system responses
+  if (systemResponses.length > 0) {
+    await prisma.oasisResponse.createMany({
+      data: systemResponses,
+      skipDuplicates: true,
+    });
+  }
+}
+
 async function calculateCompletionPercentage(assessmentId: string): Promise<number> {
   const responses = await prisma.oasisResponse.findMany({
     where: { assessmentId },
@@ -726,15 +870,18 @@ export async function createAssessment(
             sourceType: 'manual',
           })),
         });
-
-        // Recalculate completion
-        const completion = await calculateCompletionPercentage(assessmentId);
-        await prisma.oasisAssessment.update({
-          where: { id: assessmentId },
-          data: { completionPercentage: completion },
-        });
       }
     }
+
+    // Auto-populate agency-level and patient-level fields
+    await autoPopulateSystemFields(assessmentId, patientId);
+
+    // Recalculate completion (after auto-population)
+    const completion = await calculateCompletionPercentage(assessmentId);
+    await prisma.oasisAssessment.update({
+      where: { id: assessmentId },
+      data: { completionPercentage: completion },
+    });
 
     // Audit log
     await createOasisAuditLog(
