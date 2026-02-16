@@ -199,6 +199,19 @@ function getAnthropicClient(): Anthropic {
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a clinical data extraction specialist for home health care. Extract all relevant clinical information from this referral document and map it to OASIS-E assessment fields. Return ONLY valid JSON with no other text.
 
+IMPORTANT DISTINCTIONS:
+1. ORDERS vs MEDICATIONS:
+   - "orders.disciplines" = HOME HEALTH SERVICE ORDERS (PT, OT, ST, SN, MSW, HHA visits with frequency like "2x/week for 4 weeks")
+   - "medications" = PRESCRIPTION DRUGS the patient takes (aspirin, metoprolol, lisinopril, etc.)
+   - NEVER put medications in the orders section. Ibuprofen, aspirin, iron supplements, etc. are MEDICATIONS, not orders.
+
+2. HOSPITALIZATION:
+   - If the patient has a fracture, surgical procedure, or acute diagnosis, they were likely hospitalized
+   - Look for discharge dates, facility names, admission reasons
+   - Infer hospitalization from context (e.g., "s/p hip replacement" = hospitalized for surgery)
+
+3. Do NOT duplicate data - each piece of information should appear only once
+
 Extract and return this JSON structure:
 {
   "patient": {
@@ -234,7 +247,8 @@ Extract and return this JSON structure:
     "allergies": ["string"],
     "precautions": ["string"],
     "weightBearingStatus": "string",
-    "activityRestrictions": ["string"]
+    "activityRestrictions": ["string"],
+    "currentSymptoms": ["string describing actual current symptoms like pain level, shortness of breath, etc."]
   },
   "medications": [{ "name": "string", "dose": "string", "frequency": "string", "route": "string", "indication": "string" }],
   "functionalStatus": {
@@ -249,7 +263,7 @@ Extract and return this JSON structure:
   "orders": {
     "disciplines": [{ "type": "SN/PT/OT/ST/MSW/HHA", "frequency": "string", "duration": "string" }],
     "certificationPeriod": { "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD" },
-    "specificOrders": ["string"],
+    "specificOrders": ["string - clinical orders like wound care, vital sign monitoring, etc."],
     "labOrders": ["string"]
   },
   "homeboundReason": "string",
@@ -257,6 +271,11 @@ Extract and return this JSON structure:
     "ITEM_CODE": { "value": "code", "valueText": "description", "confidence": 0.0-1.0, "sourceText": "exact quote from document" }
   }
 }
+
+REMEMBER:
+- disciplines = PT, OT, ST, SN, MSW, HHA service visits ONLY
+- medications = drugs/pills/injections the patient takes
+- If you see a fracture or surgery diagnosis, set clinicalFindings.hospitalization.wasHospitalized = true
 
 For the oasisMappings field, map clinical information to these OASIS items when evidence exists:
 - M0100 (reason for assessment), M0150 (payment sources)

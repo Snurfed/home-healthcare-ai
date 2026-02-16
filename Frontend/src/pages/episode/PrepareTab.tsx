@@ -22,7 +22,6 @@ import type {
   ExtractedOrder,
   ExtractedDiagnosis,
   ExtractedMedication,
-  ExtractionResult,
 } from '@typedefs/index';
 import { DOCUMENT_TYPE_LABELS } from '@typedefs/referral.types';
 
@@ -219,16 +218,16 @@ interface AggregatedExtractionData {
     primaryDx: string;
     primaryDxCode: string;
     admissionType?: string;
+    reason?: string;
   } | null;
   surgicalHistory: string[];
-  reviewOfSystems: string[];
+  currentSymptoms: string[];
 }
 
 export default function PrepareTab({ patientId }: PrepareTabProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [showTypeModal, setShowTypeModal] = useState(false);
-  const [selectedDocument, setSelectedDocument] = useState<ReferralDocument | null>(null);
   const [loadedDocuments, setLoadedDocuments] = useState<ReferralDocument[]>([]);
   const [isLoadingFullDocs, setIsLoadingFullDocs] = useState(false);
 
@@ -242,42 +241,53 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
     hasProcessingDocuments,
   } = useReferralDocuments({ patientId });
 
+  // Track which document IDs we've already loaded
+  const loadedIdsRef = useRef<Set<string>>(new Set());
+  const isLoadingRef = useRef(false);
+
   // Load full document data for all completed documents
   useEffect(() => {
-    const loadCompletedDocuments = async () => {
-      const completedDocs = documents.filter(d => d.extractionStatus === 'COMPLETED');
-      if (completedDocs.length === 0) {
+    // Prevent concurrent loads
+    if (isLoadingRef.current) return;
+
+    const completedDocs = documents.filter(d => d.extractionStatus === 'COMPLETED');
+
+    // If no completed docs, clear state only if needed
+    if (completedDocs.length === 0) {
+      if (loadedIdsRef.current.size > 0) {
+        loadedIdsRef.current.clear();
         setLoadedDocuments([]);
-        return;
       }
+      return;
+    }
 
-      // Check if we already have all completed docs loaded
-      const loadedIds = new Set(loadedDocuments.map(d => d.id));
-      const needToLoad = completedDocs.filter(d => !loadedIds.has(d.id));
+    // Find docs we haven't loaded yet
+    const needToLoad = completedDocs.filter(d => !loadedIdsRef.current.has(d.id));
 
-      if (needToLoad.length === 0) {
-        return;
-      }
+    if (needToLoad.length === 0) {
+      return;
+    }
 
-      setIsLoadingFullDocs(true);
-      try {
-        const fullDocs = await Promise.all(
-          needToLoad.map(doc => getDocument(doc.id))
-        );
+    // Mark as loading
+    isLoadingRef.current = true;
+    setIsLoadingFullDocs(true);
+
+    // Load documents
+    Promise.all(needToLoad.map(doc => getDocument(doc.id)))
+      .then(fullDocs => {
         const validDocs = fullDocs.filter((d): d is ReferralDocument => d !== null);
 
-        // Merge with existing loaded docs, removing any that are no longer in documents list
-        setLoadedDocuments(prev => {
-          const currentIds = new Set(documents.map(d => d.id));
-          const filtered = prev.filter(d => currentIds.has(d.id));
-          return [...filtered, ...validDocs];
-        });
-      } finally {
-        setIsLoadingFullDocs(false);
-      }
-    };
+        // Update ref with newly loaded IDs
+        validDocs.forEach(d => loadedIdsRef.current.add(d.id));
 
-    loadCompletedDocuments();
+        if (validDocs.length > 0) {
+          setLoadedDocuments(prev => [...prev, ...validDocs]);
+        }
+      })
+      .finally(() => {
+        isLoadingRef.current = false;
+        setIsLoadingFullDocs(false);
+      });
   }, [documents, getDocument]);
 
   // Aggregate extraction data from all loaded documents
@@ -286,21 +296,30 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
     const diagnoses: ExtractedDiagnosis[] = [];
     const medications: ExtractedMedication[] = [];
     const surgicalHistory: string[] = [];
-    const reviewOfSystems: string[] = [];
+    const currentSymptoms: string[] = [];
     let hospitalization: AggregatedExtractionData['hospitalization'] = null;
 
     // Track seen items to avoid duplicates
     const seenOrders = new Set<string>();
     const seenDiagnoses = new Set<string>();
     const seenMedications = new Set<string>();
+    const seenSymptoms = new Set<string>();
+    const seenSurgeries = new Set<string>();
 
     for (const doc of loadedDocuments) {
-      const data = doc.extractedData as ExtractionResult | null;
-      if (!data) continue;
+      // Access raw extractedData which may have clinicalFindings
+      const rawData = doc.extractedData as Record<string, unknown> | null;
+      if (!rawData) continue;
 
-      // Aggregate orders
-      if (data.orders) {
-        for (const order of data.orders) {
+      // Aggregate orders (only PT/OT/SN/ST/MSW/HHA disciplines, not medications)
+      const ordersArray = rawData.orders as ExtractedOrder[] | undefined;
+      if (Array.isArray(ordersArray)) {
+        for (const order of ordersArray) {
+          // Filter out medication-like entries
+          const discipline = order.discipline?.toUpperCase() || '';
+          const validDisciplines = ['PT', 'OT', 'ST', 'SN', 'MSW', 'HHA', 'PHYSICAL THERAPY', 'OCCUPATIONAL THERAPY', 'SPEECH THERAPY', 'SKILLED NURSING', 'MEDICAL SOCIAL WORK', 'HOME HEALTH AIDE'];
+          if (!validDisciplines.some(d => discipline.includes(d))) continue;
+
           const key = `${order.discipline}-${order.frequency}`;
           if (!seenOrders.has(key)) {
             seenOrders.add(key);
@@ -310,8 +329,9 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
       }
 
       // Aggregate diagnoses
-      if (data.diagnoses) {
-        for (const dx of data.diagnoses) {
+      const diagnosesArray = rawData.diagnoses as ExtractedDiagnosis[] | undefined;
+      if (Array.isArray(diagnosesArray)) {
+        for (const dx of diagnosesArray) {
           if (!seenDiagnoses.has(dx.icdCode)) {
             seenDiagnoses.add(dx.icdCode);
             diagnoses.push(dx);
@@ -324,15 +344,37 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
                 dxLower.includes('arthroplasty') || dxLower.includes('amputation') ||
                 dxLower.includes('ectomy') || dxLower.includes('otomy') ||
                 dxLower.includes('plasty') || dxLower.includes('replacement')) {
-              surgicalHistory.push(`${dx.icdCode} - ${dx.description}`);
+              const surgeryKey = dx.description.toLowerCase();
+              if (!seenSurgeries.has(surgeryKey)) {
+                seenSurgeries.add(surgeryKey);
+                surgicalHistory.push(`${dx.icdCode} - ${dx.description}`);
+              }
+            }
+
+            // Infer hospitalization from fractures/surgeries
+            if (!hospitalization && (
+              dxLower.includes('fracture') ||
+              dxLower.includes('surgery') ||
+              dxLower.includes('replacement') ||
+              dxLower.includes('arthroplasty')
+            )) {
+              hospitalization = {
+                hospital: 'Hospital (inferred from diagnosis)',
+                dates: 'Recent',
+                primaryDx: dx.description,
+                primaryDxCode: dx.icdCode,
+                admissionType: 'Inpatient',
+                reason: dx.description,
+              };
             }
           }
         }
       }
 
       // Aggregate medications
-      if (data.medications) {
-        for (const med of data.medications) {
+      const medicationsArray = rawData.medications as ExtractedMedication[] | undefined;
+      if (Array.isArray(medicationsArray)) {
+        for (const med of medicationsArray) {
           const key = med.name.toLowerCase();
           if (!seenMedications.has(key)) {
             seenMedications.add(key);
@@ -341,18 +383,76 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
         }
       }
 
-      // Get hospitalization from discharge summary or first available
-      if (!hospitalization && data.certificationPeriod?.startDate) {
-        const primaryDx = data.diagnoses?.find(d => d.isPrimary) || data.diagnoses?.[0];
-        hospitalization = {
-          hospital: data.demographics?.address?.city ? `${data.demographics.address.city} Hospital` : 'Recent Hospital',
-          dates: data.certificationPeriod.startDate
-            ? new Date(data.certificationPeriod.startDate).toLocaleDateString()
-            : 'N/A',
-          primaryDx: primaryDx?.description || 'N/A',
-          primaryDxCode: primaryDx?.icdCode || '',
-          admissionType: doc.documentType === 'DISCHARGE_SUMMARY' ? 'Inpatient' : undefined,
+      // Extract hospitalization from clinicalFindings if available
+      const clinicalFindings = rawData.clinicalFindings as {
+        hospitalization?: {
+          wasHospitalized?: boolean;
+          facilityName?: string;
+          admitDate?: string;
+          dischargeDate?: string;
+          reason?: string;
         };
+        currentSymptoms?: string[];
+        surgeries?: Array<{ procedure?: string; date?: string }>;
+      } | undefined;
+
+      if (clinicalFindings?.hospitalization?.wasHospitalized && !hospitalization) {
+        const hospData = clinicalFindings.hospitalization;
+        const dxArray = Array.isArray(diagnosesArray) ? diagnosesArray : [];
+        const primaryDx = dxArray.find(d => d.isPrimary) || dxArray[0];
+        hospitalization = {
+          hospital: hospData.facilityName || 'Recent Hospital',
+          dates: hospData.dischargeDate
+            ? new Date(hospData.dischargeDate).toLocaleDateString()
+            : hospData.admitDate
+            ? new Date(hospData.admitDate).toLocaleDateString()
+            : 'Recent',
+          primaryDx: hospData.reason || primaryDx?.description || 'N/A',
+          primaryDxCode: primaryDx?.icdCode || '',
+          admissionType: 'Inpatient',
+          reason: hospData.reason,
+        };
+      }
+
+      // Extract current symptoms for Review of Systems
+      if (Array.isArray(clinicalFindings?.currentSymptoms)) {
+        for (const symptom of clinicalFindings.currentSymptoms) {
+          if (typeof symptom === 'string' && !seenSymptoms.has(symptom.toLowerCase())) {
+            seenSymptoms.add(symptom.toLowerCase());
+            currentSymptoms.push(symptom);
+          }
+        }
+      }
+
+      // Extract surgeries
+      if (Array.isArray(clinicalFindings?.surgeries)) {
+        for (const surgery of clinicalFindings.surgeries) {
+          if (surgery.procedure) {
+            const key = surgery.procedure.toLowerCase();
+            if (!seenSurgeries.has(key)) {
+              seenSurgeries.add(key);
+              const dateStr = surgery.date ? ` (${surgery.date})` : '';
+              surgicalHistory.push(`${surgery.procedure}${dateStr}`);
+            }
+          }
+        }
+      }
+
+      // Fallback: get hospitalization from certification period
+      if (!hospitalization && rawData.certificationPeriod) {
+        const certPeriod = rawData.certificationPeriod as { startDate?: string; endDate?: string };
+        if (certPeriod.startDate) {
+          const dxArray = Array.isArray(diagnosesArray) ? diagnosesArray : [];
+          const primaryDx = dxArray.find(d => d.isPrimary) || dxArray[0];
+          const demographics = rawData.demographics as { address?: { city?: string } } | undefined;
+          hospitalization = {
+            hospital: demographics?.address?.city ? `${demographics.address.city} Hospital` : 'Recent Hospital',
+            dates: new Date(certPeriod.startDate).toLocaleDateString(),
+            primaryDx: primaryDx?.description || 'N/A',
+            primaryDxCode: primaryDx?.icdCode || '',
+            admissionType: doc.documentType === 'DISCHARGE_SUMMARY' ? 'Inpatient' : undefined,
+          };
+        }
       }
     }
 
@@ -372,7 +472,7 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
       medications,
       hospitalization,
       surgicalHistory,
-      reviewOfSystems,
+      currentSymptoms,
     };
   }, [loadedDocuments]);
 
@@ -396,24 +496,30 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
     setShowTypeModal(false);
   };
 
-  // Handle document click - fetch full document with extracted data
-  const handleDocumentClick = async (doc: ReferralListItem) => {
-    if (doc.extractionStatus === 'COMPLETED') {
-      const fullDoc = await getDocument(doc.id);
-      if (fullDoc) {
-        setSelectedDocument(fullDoc);
-      }
-    }
+  // Handle document click - open actual file
+  const handleDocumentClick = (doc: ReferralListItem) => {
+    // Open the raw file in a new tab
+    const downloadUrl = `/api/referrals/${doc.id}/download`;
+    window.open(downloadUrl, '_blank');
   };
 
-  // Convenience accessors
-  const { orders, diagnoses, medications, hospitalization, surgicalHistory } = aggregatedData;
+  // Filter and deduplicate documents
+  const visibleDocuments = useMemo(() => {
+    // Filter out failed uploads
+    const nonFailed = documents.filter(d => d.extractionStatus !== 'FAILED');
 
-  // For the details modal
-  const selectedExtractedData = selectedDocument?.extractedData as ExtractionResult | null;
-  const selectedDemographics = selectedExtractedData?.demographics;
-  const selectedDiagnoses = selectedExtractedData?.diagnoses || [];
-  const selectedOrders = selectedExtractedData?.orders || [];
+    // Deduplicate by original filename - keep the most recent (first in list)
+    const seen = new Set<string>();
+    return nonFailed.filter(d => {
+      const key = d.originalFileName || d.fileName;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [documents]);
+
+  // Convenience accessors
+  const { orders, diagnoses, medications, hospitalization, surgicalHistory, currentSymptoms } = aggregatedData;
 
   return (
     <div className="space-y-6 pb-8">
@@ -476,8 +582,8 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
             </div>
           )}
 
-          {/* Document cards */}
-          {!isLoading && documents.map((doc) => (
+          {/* Document cards - filtered and deduplicated */}
+          {!isLoading && visibleDocuments.map((doc) => (
             <DocumentCard
               key={doc.id}
               document={doc}
@@ -509,7 +615,7 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
         </div>
 
         {/* No documents message */}
-        {!isLoading && documents.length === 0 && !uploadState.isUploading && (
+        {!isLoading && visibleDocuments.length === 0 && !uploadState.isUploading && (
           <p className="text-sm text-gray-500 text-center py-4">
             Upload referral documents to auto-populate patient data
           </p>
@@ -731,208 +837,32 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
         </div>
       </section>
 
-      {/* Latest Review of Systems */}
+      {/* Latest Review of Systems - Current Symptoms */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Latest Review of Systems</h2>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            {/* Show relevant system findings based on diagnoses */}
-            {diagnoses.length > 0 ? (
-              <>
-                <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Cardiovascular</h4>
-                  <ul className="text-gray-600 space-y-1">
-                    {diagnoses.filter(dx =>
-                      dx.icdCode.startsWith('I') ||
-                      dx.description.toLowerCase().includes('heart') ||
-                      dx.description.toLowerCase().includes('hypertension') ||
-                      dx.description.toLowerCase().includes('chf')
-                    ).slice(0, 3).map((dx, i) => (
-                      <li key={i} className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
-                        {dx.description}
-                      </li>
-                    ))}
-                    {diagnoses.filter(dx =>
-                      dx.icdCode.startsWith('I') ||
-                      dx.description.toLowerCase().includes('heart')
-                    ).length === 0 && (
-                      <li className="text-gray-400">No findings</li>
-                    )}
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Respiratory</h4>
-                  <ul className="text-gray-600 space-y-1">
-                    {diagnoses.filter(dx =>
-                      dx.icdCode.startsWith('J') ||
-                      dx.description.toLowerCase().includes('copd') ||
-                      dx.description.toLowerCase().includes('asthma') ||
-                      dx.description.toLowerCase().includes('pneumonia')
-                    ).slice(0, 3).map((dx, i) => (
-                      <li key={i} className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
-                        {dx.description}
-                      </li>
-                    ))}
-                    {diagnoses.filter(dx =>
-                      dx.icdCode.startsWith('J')
-                    ).length === 0 && (
-                      <li className="text-gray-400">No findings</li>
-                    )}
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Endocrine</h4>
-                  <ul className="text-gray-600 space-y-1">
-                    {diagnoses.filter(dx =>
-                      dx.icdCode.startsWith('E') ||
-                      dx.description.toLowerCase().includes('diabetes') ||
-                      dx.description.toLowerCase().includes('thyroid')
-                    ).slice(0, 3).map((dx, i) => (
-                      <li key={i} className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
-                        {dx.description}
-                      </li>
-                    ))}
-                    {diagnoses.filter(dx =>
-                      dx.icdCode.startsWith('E')
-                    ).length === 0 && (
-                      <li className="text-gray-400">No findings</li>
-                    )}
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Musculoskeletal</h4>
-                  <ul className="text-gray-600 space-y-1">
-                    {diagnoses.filter(dx =>
-                      dx.icdCode.startsWith('M') ||
-                      dx.description.toLowerCase().includes('arthritis') ||
-                      dx.description.toLowerCase().includes('fracture') ||
-                      dx.description.toLowerCase().includes('pain')
-                    ).slice(0, 3).map((dx, i) => (
-                      <li key={i} className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
-                        {dx.description}
-                      </li>
-                    ))}
-                    {diagnoses.filter(dx =>
-                      dx.icdCode.startsWith('M')
-                    ).length === 0 && (
-                      <li className="text-gray-400">No findings</li>
-                    )}
-                  </ul>
-                </div>
-              </>
-            ) : (
-              <div className="col-span-2">
-                <EmptySection
-                  icon={
-                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                    </svg>
-                  }
-                  message="Upload documents to populate review of systems"
-                />
-              </div>
-            )}
-          </div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Review of Systems</h2>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {currentSymptoms.length > 0 ? (
+            <ul className="divide-y divide-gray-100">
+              {currentSymptoms.map((symptom, index) => (
+                <li key={index} className="px-4 py-3 text-sm text-gray-700 flex items-start gap-2">
+                  <span className="w-1.5 h-1.5 bg-blue-400 rounded-full mt-1.5 flex-shrink-0" />
+                  {symptom}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptySection
+              icon={
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+              }
+              message="No current symptoms documented in referral"
+            />
+          )}
         </div>
       </section>
 
-      {/* Selected document details modal */}
-      {selectedDocument && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {selectedDocument.originalFileName || selectedDocument.fileName}
-                </h3>
-                <p className="text-sm text-gray-500">{DOCUMENT_TYPE_LABELS[selectedDocument.documentType]}</p>
-              </div>
-              <button
-                onClick={() => setSelectedDocument(null)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {selectedExtractedData?.extractionSummary && (
-                <div className="mb-4 p-3 bg-green-50 rounded-lg">
-                  <p className="text-sm text-green-800">
-                    <span className="font-medium">AI Extraction Complete:</span>{' '}
-                    {selectedExtractedData.extractionSummary.totalFieldsExtracted} fields extracted
-                    ({selectedExtractedData.extractionSummary.highConfidenceCount} high confidence)
-                  </p>
-                </div>
-              )}
-
-              {/* Demographics */}
-              {selectedDemographics && (
-                <div className="mb-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Patient Demographics</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    {selectedDemographics.firstName && (
-                      <div><span className="text-gray-500">Name:</span> {selectedDemographics.firstName} {selectedDemographics.lastName}</div>
-                    )}
-                    {selectedDemographics.dateOfBirth && (
-                      <div><span className="text-gray-500">DOB:</span> {selectedDemographics.dateOfBirth}</div>
-                    )}
-                    {selectedDemographics.phone && (
-                      <div><span className="text-gray-500">Phone:</span> {selectedDemographics.phone}</div>
-                    )}
-                    {selectedDemographics.physician?.name && (
-                      <div><span className="text-gray-500">Physician:</span> {selectedDemographics.physician.name}</div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Diagnoses */}
-              {selectedDiagnoses.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Diagnoses</h4>
-                  <ul className="space-y-1">
-                    {selectedDiagnoses.map((dx: ExtractedDiagnosis, i: number) => (
-                      <li key={i} className="text-sm">
-                        <span className="font-mono text-gray-500">{dx.icdCode}</span> - {dx.description}
-                        {dx.isPrimary && <span className="ml-2 text-xs text-green-600">(Primary)</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Orders */}
-              {selectedOrders.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Orders</h4>
-                  <ul className="space-y-1">
-                    {selectedOrders.map((order: ExtractedOrder, i: number) => (
-                      <li key={i} className="text-sm">
-                        <span className="font-medium">{order.discipline}</span>
-                        {order.frequency && ` - ${order.frequency}`}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-              <button
-                onClick={() => setSelectedDocument(null)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
