@@ -20,8 +20,7 @@ import { useClinicalEventAlerts } from '@hooks/useClinicalEvents';
 import QuestionRenderer from '@components/oasis/QuestionRenderer';
 import { TriggerAlertBanner } from '@components/communication/TriggerAlertBanner';
 import { CommunicationDraftEditor } from '@components/communication/CommunicationDraftEditor';
-import { EventAlertBanner } from '@components/clinical-events/EventAlertBanner';
-import { EventDetailsModal } from '@components/clinical-events/EventDetailsModal';
+import { EventAlertBanner, EventDetailsModal, QuickEmailDraftModal } from '@components/clinical-events';
 import { useCommunicationTriggers } from '@hooks/useCommunicationTriggers';
 import { Spinner } from '@components/common';
 import { OASIS_SECTIONS } from '@typedefs/oasis.types';
@@ -170,6 +169,8 @@ export default function DocumentationTab({
   const [showClinicalEventsBanner, setShowClinicalEventsBanner] = useState(true);
   const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<KeywordMatch | DetectedClinicalEvent | null>(null);
+  const [showQuickEmailDraft, setShowQuickEmailDraft] = useState(false);
+  const [draftCommunicationEvent, setDraftCommunicationEvent] = useState<KeywordMatch | DetectedClinicalEvent | null>(null);
 
   // Clinical events detection hook
   const {
@@ -340,11 +341,16 @@ export default function DocumentationTab({
   }, [dismissEvent]);
 
   const handleDraftCommunicationFromEvent = useCallback((event: KeywordMatch | DetectedClinicalEvent) => {
-    // Close the event modal and open the communication draft editor
+    // Close the event modal and open the quick email draft modal
     setShowEventDetailsModal(false);
-    // Convert clinical event to communication trigger format if needed
-    console.log('Draft communication for event:', event.eventType);
-    // TODO: Integrate with communication draft system
+    setSelectedEvent(null);
+    setDraftCommunicationEvent(event);
+    setShowQuickEmailDraft(true);
+  }, []);
+
+  const handleCloseQuickEmailDraft = useCallback(() => {
+    setShowQuickEmailDraft(false);
+    setDraftCommunicationEvent(null);
   }, []);
 
   const handleTransferToEMR = useCallback(() => {
@@ -637,6 +643,15 @@ export default function DocumentationTab({
         onAcknowledge={handleAcknowledgeClinicalEvent}
         onDismiss={handleDismissClinicalEvent}
         onDraftCommunication={handleDraftCommunicationFromEvent}
+      />
+
+      {/* Quick Email Draft Modal (for clinical events) */}
+      <QuickEmailDraftModal
+        event={draftCommunicationEvent}
+        isOpen={showQuickEmailDraft}
+        onClose={handleCloseQuickEmailDraft}
+        patientName={currentAssessment?.patient?.lastName ? `${currentAssessment.patient.firstName} ${currentAssessment.patient.lastName}` : 'Patient'}
+        physicianName={physicianName}
       />
     </div>
   );

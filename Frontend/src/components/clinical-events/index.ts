@@ -4,3 +4,4 @@
 
 export { EventAlertBanner } from './EventAlertBanner';
 export { EventDetailsModal } from './EventDetailsModal';
+export { QuickEmailDraftModal } from './QuickEmailDraftModal';
