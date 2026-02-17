@@ -18,6 +18,10 @@ import {
   getPatientCommunications,
   getEpisodeCommunications,
 } from '../controllers/communication.controller';
+import {
+  sendNotification,
+  getCommunicationSendHistory,
+} from '../controllers/integrations.controller';
 
 const router = Router();
 
@@ -111,6 +115,26 @@ router.post(
   '/communications/:id/regenerate',
   authenticate,
   regenerateCommunicationDraft
+);
+
+/**
+ * POST /api/communications/:id/send
+ * Send a communication via email/fax
+ */
+router.post(
+  '/communications/:id/send',
+  authenticate,
+  sendNotification
+);
+
+/**
+ * GET /api/communications/:id/send-history
+ * Get send history for a communication
+ */
+router.get(
+  '/communications/:id/send-history',
+  authenticate,
+  getCommunicationSendHistory
 );
 
 // =============================================================================

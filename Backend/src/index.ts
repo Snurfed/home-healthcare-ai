@@ -22,6 +22,7 @@ import soapNotesRoutes from './routes/soapNotes';
 import agencySettingsRoutes from './routes/agencySettings';
 import communicationRoutes from './routes/communications';
 import clinicalEventsRoutes from './routes/clinicalEvents';
+import integrationsRoutes from './routes/integrations';
 
 // Initialize Express app
 const app: Application = express();
@@ -169,6 +170,9 @@ app.use('/api', communicationRoutes);
 
 // Clinical event detection and notification routes
 app.use('/api/clinical-events', clinicalEventsRoutes);
+
+// Email/Fax integration management routes
+app.use('/api/integrations', integrationsRoutes);
 
 // ===========================================
 // 404 HANDLER

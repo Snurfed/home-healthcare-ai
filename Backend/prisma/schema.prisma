@@ -1354,6 +1354,7 @@ enum IntegrationProvider {
   MICROSOFT_365
   GOOGLE_WORKSPACE
   SMTP
+  MAILTO           // Browser-based mailto: fallback (no server config needed)
   PHAXIO
   SRFAX
   TWILIO_FAX

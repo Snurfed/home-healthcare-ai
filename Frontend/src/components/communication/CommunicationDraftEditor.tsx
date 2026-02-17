@@ -15,6 +15,9 @@ import {
   COMMUNICATION_URGENCY_CONFIG,
 } from '../../types/communication.types';
 import { communicationService } from '../../services/communication.service';
+import * as integrationService from '../../services/integration.service';
+import type { SendMethod } from '../../types/integration.types';
+import { PROVIDER_CONFIG } from '../../types/integration.types';
 
 // Inline SVG icons
 const XIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -60,6 +63,24 @@ const EditIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const SendIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+  </svg>
+);
+
+const MailIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+  </svg>
+);
+
+const ShieldIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+  </svg>
+);
+
 interface CommunicationDraftEditorProps {
   isOpen: boolean;
   onClose: () => void;
@@ -98,6 +119,14 @@ export const CommunicationDraftEditor: React.FC<CommunicationDraftEditorProps> =
   const [error, setError] = useState<string | null>(null);
   const [regenerateInstructions, setRegenerateInstructions] = useState('');
   const [showRegenerateForm, setShowRegenerateForm] = useState(false);
+
+  // Send-related state
+  const [showSendForm, setShowSendForm] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [sendMethod, setSendMethod] = useState<SendMethod>('mailto');
+  const [isSending, setIsSending] = useState(false);
+  const [sendSuccess, setSendSuccess] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   /**
    * Generate initial draft from trigger
@@ -230,6 +259,64 @@ export const CommunicationDraftEditor: React.FC<CommunicationDraftEditorProps> =
       setError(err instanceof Error ? err.message : 'Failed to update communication');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  /**
+   * Send communication
+   */
+  const handleSend = async () => {
+    if (!communication || !recipientEmail) return;
+
+    setIsSending(true);
+    setSendError(null);
+    setSendSuccess(false);
+
+    try {
+      // First save any pending changes
+      if (subject !== communication.subject ||
+          summaryContent !== communication.summaryContent ||
+          detailedContent !== communication.detailedContent) {
+        await communicationService.updateCommunication(communication.id, {
+          subject,
+          summaryContent,
+          detailedContent,
+        });
+      }
+
+      // Send the communication
+      const result = await integrationService.sendCommunication(communication.id, {
+        method: sendMethod,
+        recipientEmail,
+        recipientName: physicianName,
+      });
+
+      if (result.success) {
+        if (result.method === 'mailto' && result.mailtoUrl) {
+          // Open the mailto URL in a new window/tab
+          integrationService.openMailtoUrl(result.mailtoUrl);
+          setSendSuccess(true);
+          // Close after a short delay
+          setTimeout(() => {
+            onSaved?.(communication);
+            onClose();
+          }, 1500);
+        } else {
+          // Server-side send was successful
+          setSendSuccess(true);
+          setTimeout(() => {
+            onSaved?.(communication);
+            onClose();
+          }, 1500);
+        }
+      } else {
+        setSendError(result.error || 'Failed to send communication');
+      }
+    } catch (err) {
+      console.error('[Draft Editor] Send error:', err);
+      setSendError(err instanceof Error ? err.message : 'Failed to send communication');
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -415,6 +502,126 @@ export const CommunicationDraftEditor: React.FC<CommunicationDraftEditorProps> =
                 </div>
               )}
 
+              {/* Send Form */}
+              {showSendForm && (
+                <div className="bg-green-50 rounded-lg p-4 border border-green-200 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <ShieldIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">PHI Warning</p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        This communication may contain Protected Health Information (PHI).
+                        Ensure you are sending to an authorized recipient via a secure channel.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Recipient Email
+                    </label>
+                    <input
+                      type="email"
+                      value={recipientEmail}
+                      onChange={(e) => setRecipientEmail(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                      placeholder="physician@clinic.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Send Method
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSendMethod('mailto')}
+                        className={`p-3 border rounded-lg text-left transition-colors ${
+                          sendMethod === 'mailto'
+                            ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{PROVIDER_CONFIG.MAILTO.icon}</span>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {PROVIDER_CONFIG.MAILTO.label}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {PROVIDER_CONFIG.MAILTO.description}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSendMethod('smtp')}
+                        className={`p-3 border rounded-lg text-left transition-colors ${
+                          sendMethod === 'smtp'
+                            ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{PROVIDER_CONFIG.SMTP.icon}</span>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {PROVIDER_CONFIG.SMTP.label}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {PROVIDER_CONFIG.SMTP.description}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {sendError && (
+                    <div className="flex items-center gap-2 text-red-600 text-sm">
+                      <AlertTriangleIcon className="h-4 w-4" />
+                      {sendError}
+                    </div>
+                  )}
+
+                  {sendSuccess && (
+                    <div className="flex items-center gap-2 text-green-600 text-sm">
+                      <CheckCircleIcon className="h-4 w-4" />
+                      {sendMethod === 'mailto'
+                        ? 'Opening your email client...'
+                        : 'Email sent successfully!'}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSend}
+                      disabled={isSending || !recipientEmail || sendSuccess}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {isSending ? (
+                        <LoaderIcon className="h-4 w-4" />
+                      ) : (
+                        <SendIcon className="h-4 w-4" />
+                      )}
+                      {sendMethod === 'mailto' ? 'Open in Mail App' : 'Send Email'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowSendForm(false);
+                        setSendError(null);
+                        setSendSuccess(false);
+                      }}
+                      className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Generation Info */}
               {communication.aiModelUsed && (
                 <p className="text-xs text-gray-500">
@@ -485,15 +692,23 @@ export const CommunicationDraftEditor: React.FC<CommunicationDraftEditorProps> =
               )}
               <button
                 onClick={handleMarkReady}
-                disabled={isSaving || isEditing}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                disabled={isSaving || isEditing || showSendForm}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {isSaving ? (
                   <LoaderIcon className="h-4 w-4" />
                 ) : (
                   <CheckCircleIcon className="h-4 w-4" />
                 )}
-                Mark Ready to Send
+                Save & Close
+              </button>
+              <button
+                onClick={() => setShowSendForm(true)}
+                disabled={isSaving || isEditing || showSendForm}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                <MailIcon className="h-4 w-4" />
+                Send to Physician
               </button>
             </div>
           </div>

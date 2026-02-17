@@ -225,3 +225,17 @@ export {
   PRIORITY_CONFIG,
   EVENT_TYPE_CONFIG,
 } from './clinicalEvents.types';
+
+// Integration types
+export type {
+  IntegrationProvider,
+  NotificationChannel,
+  SendMethod,
+  IntegrationStatus,
+  SMTPConfigRequest,
+  SendNotificationRequest,
+  SendNotificationResponse,
+  SendLogEntry,
+} from './integration.types';
+
+export { PROVIDER_CONFIG } from './integration.types';
