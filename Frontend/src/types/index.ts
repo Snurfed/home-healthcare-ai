@@ -202,3 +202,26 @@ export {
   COMMUNICATION_URGENCY_CONFIG,
   COMMUNICATION_STATUS_CONFIG,
 } from './communication.types';
+
+// Clinical Events types
+export type {
+  ClinicalEventType,
+  TriggerPriority,
+  DetectionMethod,
+  KeywordMatch,
+  AIDetection,
+  CombinedDetection,
+  DetectedClinicalEvent,
+  KeywordDetectionRequest,
+  KeywordDetectionResponse,
+  FullDetectionRequest,
+  FullDetectionResponse,
+  PendingEventsResponse,
+  TriggerConfig,
+  ClinicalEventAlert,
+} from './clinicalEvents.types';
+
+export {
+  PRIORITY_CONFIG,
+  EVENT_TYPE_CONFIG,
+} from './clinicalEvents.types';

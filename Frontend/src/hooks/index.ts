@@ -66,3 +66,16 @@ export { useCommunicationTriggers } from './useCommunicationTriggers';
 
 // Referral document hooks
 export { useReferralDocuments } from './useReferralDocuments';
+
+// Clinical events hooks
+export {
+  useRealtimeDetection,
+  useFullDetection,
+  usePendingEvents,
+  useAcknowledgeEvent,
+  useDismissEvent,
+  useClinicalEventAlerts,
+  useTriggerConfigs,
+  useUpdateTriggerConfig,
+  clinicalEventsKeys,
+} from './useClinicalEvents';
