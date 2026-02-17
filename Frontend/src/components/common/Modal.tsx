@@ -81,7 +81,7 @@ export default function Modal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto"
+      className="fixed inset-0 z-[60] overflow-y-auto"
       aria-labelledby={title ? 'modal-title' : undefined}
       aria-modal="true"
       role="dialog"
