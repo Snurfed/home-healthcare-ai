@@ -583,11 +583,15 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
 
   // Handle document click - open actual file
   const handleDocumentClick = async (doc: ReferralListItem) => {
+    // Open window immediately (before async) to avoid popup blocker
+    const newWindow = window.open('about:blank', '_blank');
+
     try {
       // Fetch the file with authentication
       const token = tokenStorage.getAccessToken();
       if (!token) {
         console.error('No access token available');
+        newWindow?.close();
         return;
       }
 
@@ -599,6 +603,7 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
 
       if (!response.ok) {
         console.error('Failed to download document:', response.status, response.statusText);
+        newWindow?.document.write('<h1>Failed to load document</h1>');
         return;
       }
 
@@ -606,13 +611,16 @@ export default function PrepareTab({ patientId }: PrepareTabProps) {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
 
-      // Open in a new tab
-      window.open(url, '_blank');
+      // Navigate the already-open window to the blob URL
+      if (newWindow) {
+        newWindow.location.href = url;
+      }
 
       // Clean up the object URL after a delay
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (error) {
       console.error('Error opening document:', error);
+      newWindow?.document.write('<h1>Error loading document</h1>');
     }
   };
 
