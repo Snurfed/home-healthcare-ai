@@ -16,14 +16,18 @@ import { useEpisodeStore } from '@context/stores/episodeStore';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
 import { useQuestions, useAssessment } from '@hooks/queries/useAssessments';
 import { useAutoSave } from '@hooks/useAutoSave';
+import { useClinicalEventAlerts } from '@hooks/useClinicalEvents';
 import QuestionRenderer from '@components/oasis/QuestionRenderer';
 import { TriggerAlertBanner } from '@components/communication/TriggerAlertBanner';
 import { CommunicationDraftEditor } from '@components/communication/CommunicationDraftEditor';
+import { EventAlertBanner } from '@components/clinical-events/EventAlertBanner';
+import { EventDetailsModal } from '@components/clinical-events/EventDetailsModal';
 import { useCommunicationTriggers } from '@hooks/useCommunicationTriggers';
 import { Spinner } from '@components/common';
 import { OASIS_SECTIONS } from '@typedefs/oasis.types';
 import type { OASISSectionId, OASISQuestion, OASISResponse } from '@typedefs/index';
 import type { CommunicationTriggerWithStatus } from '@typedefs/communication.types';
+import type { KeywordMatch, DetectedClinicalEvent } from '@typedefs/clinicalEvents.types';
 
 type FilterOption = 'all' | 'required' | 'incomplete';
 
@@ -103,14 +107,23 @@ interface DocumentationTabProps {
 
 export default function DocumentationTab({
   assessmentId,
-  patientId: _patientId,
+  patientId: propPatientId,
   physicianName = 'Dr. Smith',
   physicianNpi,
 }: DocumentationTabProps) {
   const [activeSection, setActiveSection] = useState<OASISSectionId>('clinical_record');
   const [filter, setFilter] = useState<FilterOption>('all');
   const [transferring, setTransferring] = useState(false);
-  const { hideCompletedCards, setHideCompletedCards } = useEpisodeStore();
+  const {
+    hideCompletedCards,
+    setHideCompletedCards,
+    currentPatientId,
+    currentEpisodeId,
+  } = useEpisodeStore();
+
+  // Use prop or store for patient/episode IDs
+  const patientId = propPatientId || currentPatientId || '';
+  const episodeId = currentEpisodeId || '';
 
   // Assessment store for managing responses
   const {
@@ -152,6 +165,27 @@ export default function DocumentationTab({
     enabled: !!assessmentId,
     debounceMs: 500,
   });
+
+  // Clinical events detection state
+  const [showClinicalEventsBanner, setShowClinicalEventsBanner] = useState(true);
+  const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<KeywordMatch | DetectedClinicalEvent | null>(null);
+
+  // Clinical events detection hook
+  const {
+    realtimeMatches,
+    pendingEvents,
+    isDetecting: isDetectingEvents,
+    acknowledge: acknowledgeEvent,
+    dismiss: dismissEvent,
+  } = useClinicalEventAlerts(patientId, episodeId, {
+    enableRealtime: true,
+    enablePolling: true,
+    pollingInterval: 60000, // Check every minute
+  });
+
+  // Combined events for display
+  const hasClinicalEvents = realtimeMatches.length > 0 || pendingEvents.length > 0;
 
   // Detect triggers when responses change
   useEffect(() => {
@@ -272,6 +306,47 @@ export default function DocumentationTab({
     console.log('Communication saved successfully');
   }, []);
 
+  // Clinical event handlers
+  const handleReviewClinicalEvent = useCallback((event: KeywordMatch | DetectedClinicalEvent) => {
+    setSelectedEvent(event);
+    setShowEventDetailsModal(true);
+  }, []);
+
+  const handleDismissClinicalEventMatch = useCallback((match: KeywordMatch) => {
+    // For real-time matches, we just hide them locally
+    // They'll be properly handled when saved
+    console.log('Dismissed real-time match:', match.eventType);
+  }, []);
+
+  const handleCloseClinicalEventsBanner = useCallback(() => {
+    setShowClinicalEventsBanner(false);
+  }, []);
+
+  const handleCloseEventDetailsModal = useCallback(() => {
+    setShowEventDetailsModal(false);
+    setSelectedEvent(null);
+  }, []);
+
+  const handleAcknowledgeClinicalEvent = useCallback((eventId: string) => {
+    acknowledgeEvent(eventId);
+    setShowEventDetailsModal(false);
+    setSelectedEvent(null);
+  }, [acknowledgeEvent]);
+
+  const handleDismissClinicalEvent = useCallback((eventId: string, reason: string) => {
+    dismissEvent({ eventId, reason });
+    setShowEventDetailsModal(false);
+    setSelectedEvent(null);
+  }, [dismissEvent]);
+
+  const handleDraftCommunicationFromEvent = useCallback((event: KeywordMatch | DetectedClinicalEvent) => {
+    // Close the event modal and open the communication draft editor
+    setShowEventDetailsModal(false);
+    // Convert clinical event to communication trigger format if needed
+    console.log('Draft communication for event:', event.eventType);
+    // TODO: Integrate with communication draft system
+  }, []);
+
   const handleTransferToEMR = useCallback(() => {
     setTransferring(true);
     setTimeout(() => {
@@ -385,6 +460,18 @@ export default function DocumentationTab({
 
       {/* Main Content */}
       <div className="flex-1 min-w-0 space-y-4">
+        {/* Clinical Events Alert Banner */}
+        {showClinicalEventsBanner && hasClinicalEvents && (
+          <EventAlertBanner
+            realtimeMatches={realtimeMatches}
+            pendingEvents={pendingEvents}
+            onReviewEvent={handleReviewClinicalEvent}
+            onDismissMatch={handleDismissClinicalEventMatch}
+            onDismissBanner={handleCloseClinicalEventsBanner}
+            isDetecting={isDetectingEvents}
+          />
+        )}
+
         {/* Communication Trigger Alert Banner */}
         {showTriggerBanner && hasActiveTriggers && (
           <TriggerAlertBanner
@@ -540,6 +627,16 @@ export default function DocumentationTab({
         physicianName={physicianName}
         physicianNpi={physicianNpi}
         onSaved={handleCommunicationSaved}
+      />
+
+      {/* Clinical Event Details Modal */}
+      <EventDetailsModal
+        event={selectedEvent}
+        isOpen={showEventDetailsModal}
+        onClose={handleCloseEventDetailsModal}
+        onAcknowledge={handleAcknowledgeClinicalEvent}
+        onDismiss={handleDismissClinicalEvent}
+        onDraftCommunication={handleDraftCommunicationFromEvent}
       />
     </div>
   );
