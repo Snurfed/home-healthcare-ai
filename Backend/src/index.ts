@@ -21,6 +21,7 @@ import referralDocumentsRoutes from './routes/referralDocuments';
 import soapNotesRoutes from './routes/soapNotes';
 import agencySettingsRoutes from './routes/agencySettings';
 import communicationRoutes from './routes/communications';
+import clinicalEventsRoutes from './routes/clinicalEvents';
 
 // Initialize Express app
 const app: Application = express();
@@ -165,6 +166,9 @@ app.use('/api/settings/agency', agencySettingsRoutes);
 
 // Physician communication routes
 app.use('/api', communicationRoutes);
+
+// Clinical event detection and notification routes
+app.use('/api/clinical-events', clinicalEventsRoutes);
 
 // ===========================================
 // 404 HANDLER
