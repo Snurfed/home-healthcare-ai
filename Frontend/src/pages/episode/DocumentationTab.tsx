@@ -131,13 +131,13 @@ export default function DocumentationTab({
     }
   }, [assessmentId, draftResponses, detectTriggers]);
 
-  // Check if a question is answered
+  // Check if a question is answered - include draftResponses in deps to trigger re-render
   const isQuestionAnswered = useCallback((itemCode: string): boolean => {
     const response = getResponseValue(itemCode);
     return !!(response?.responseValue || response?.responseCode || response?.responseNumeric !== undefined);
-  }, [getResponseValue]);
+  }, [getResponseValue, draftResponses]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Group questions by section with counts
+  // Group questions by section with counts - recalculate when draftResponses changes
   const sectionData = useMemo((): SectionData[] => {
     return OASIS_SECTIONS.map((section) => {
       const shortName = section.name.includes('.')
@@ -158,9 +158,11 @@ export default function DocumentationTab({
         return false;
       });
 
-      const answeredCount = sectionQuestions.filter((q: OASISQuestion) =>
-        isQuestionAnswered(q.itemCode)
-      ).length;
+      // Count answered questions - uses draftResponses via getResponseValue
+      const answeredCount = sectionQuestions.filter((q: OASISQuestion) => {
+        const response = getResponseValue(q.itemCode);
+        return !!(response?.responseValue || response?.responseCode || response?.responseNumeric !== undefined);
+      }).length;
 
       return {
         id: section.id,
@@ -171,7 +173,7 @@ export default function DocumentationTab({
         totalCount: sectionQuestions.length,
       };
     }).filter(s => s.totalCount > 0); // Only show sections with questions
-  }, [allQuestions, isQuestionAnswered]);
+  }, [allQuestions, draftResponses, getResponseValue]);
 
   // Calculate totals
   const totalQuestions = sectionData.reduce((sum, s) => sum + s.totalCount, 0);
@@ -179,29 +181,39 @@ export default function DocumentationTab({
   const totalRemaining = totalQuestions - totalAnswered;
   const isComplete = totalRemaining === 0 && totalQuestions > 0;
 
-  // IntersectionObserver for active section tracking
+  // Scroll-spy: track which section is visible using scroll events
   useEffect(() => {
-    const observers: IntersectionObserver[] = [];
+    const handleScroll = () => {
+      const scrollTop = window.scrollY;
+      const viewportTop = scrollTop + 150; // 15% from top of viewport
 
-    sectionRefs.current.forEach((element, sectionId) => {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting && entry.intersectionRatio > 0.2) {
-              setActiveSection(sectionId);
-            }
-          });
-        },
-        { threshold: [0.2, 0.5], rootMargin: '-100px 0px -50% 0px' }
-      );
-      observer.observe(element);
-      observers.push(observer);
-    });
+      let currentSection: OASISSectionId | null = null;
+
+      // Find the section whose header has scrolled past the 15% mark
+      sectionRefs.current.forEach((element, sectionId) => {
+        const rect = element.getBoundingClientRect();
+        const elementTop = rect.top + scrollTop;
+
+        if (elementTop <= viewportTop) {
+          currentSection = sectionId;
+        }
+      });
+
+      if (currentSection && currentSection !== activeSection) {
+        setActiveSection(currentSection);
+      }
+    };
+
+    // Initial check
+    handleScroll();
+
+    // Listen to scroll events
+    window.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
-      observers.forEach((obs) => obs.disconnect());
+      window.removeEventListener('scroll', handleScroll);
     };
-  }, [sectionData]);
+  }, [sectionData, activeSection]);
 
   // Scroll to section
   const scrollToSection = useCallback((sectionId: OASISSectionId) => {
