@@ -36,6 +36,75 @@ interface SectionData {
   totalCount: number;
 }
 
+// Administrative items classification
+// Hidden completely - agency constants (auto-injected on EMR export)
+const HIDDEN_ADMIN_ITEMS = ['M0010', 'M0014', 'M0016', 'M0018'];
+
+// Read-only demographics - shown in verification card, not counted as questions
+const DEMOGRAPHIC_ITEMS = ['M0020', 'M0040', 'M0050', 'M0060', 'M0066', 'M0069'];
+
+// Clinician confirmation items - pre-filled but editable
+const CLINICIAN_CONFIRM_ITEMS = ['M0030', 'M0032', 'M0080', 'M0090'];
+
+// Patient Info Card - shows demographics as read-only verification
+function PatientInfoCard({
+  patientName,
+  patientId,
+  dob,
+  gender,
+  state,
+  zip,
+}: {
+  patientName?: string;
+  patientId?: string;
+  dob?: string;
+  gender?: string;
+  state?: string;
+  zip?: string;
+}) {
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-blue-900 flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          Patient Information (from referral)
+        </h3>
+        <span className="text-xs text-blue-600 hover:text-blue-800 cursor-pointer">
+          Edit in patient record →
+        </span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+        <div>
+          <span className="text-blue-600 text-xs">Name</span>
+          <p className="font-medium text-gray-900">{patientName || '—'}</p>
+        </div>
+        <div>
+          <span className="text-blue-600 text-xs">Patient ID</span>
+          <p className="font-medium text-gray-900">{patientId || '—'}</p>
+        </div>
+        <div>
+          <span className="text-blue-600 text-xs">DOB</span>
+          <p className="font-medium text-gray-900">{dob || '—'}</p>
+        </div>
+        <div>
+          <span className="text-blue-600 text-xs">Gender</span>
+          <p className="font-medium text-gray-900">{gender || '—'}</p>
+        </div>
+        <div>
+          <span className="text-blue-600 text-xs">State</span>
+          <p className="font-medium text-gray-900">{state || '—'}</p>
+        </div>
+        <div>
+          <span className="text-blue-600 text-xs">ZIP</span>
+          <p className="font-medium text-gray-900">{zip || '—'}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface DocumentationTabProps {
   assessmentId?: string;
   patientId?: string;
@@ -138,6 +207,7 @@ export default function DocumentationTab({
   }, [getResponseValue, draftResponses]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Group questions by section with counts - recalculate when draftResponses changes
+  // Excludes hidden admin items and demographics (shown separately)
   const sectionData = useMemo((): SectionData[] => {
     return OASIS_SECTIONS.map((section) => {
       const shortName = section.name.includes('.')
@@ -145,7 +215,7 @@ export default function DocumentationTab({
         : section.name.split(' ').slice(0, 2).join(' ');
 
       // Filter questions belonging to this section
-      const sectionQuestions = allQuestions.filter((q: OASISQuestion) => {
+      let sectionQuestions = allQuestions.filter((q: OASISQuestion) => {
         const code = q.itemCode || '';
         if (section.id === 'administrative' && code.match(/^M00/)) return true;
         if (section.id === 'clinical_record' && code.match(/^M10/)) return true;
@@ -157,6 +227,19 @@ export default function DocumentationTab({
         if (section.id === 'mood' && code.match(/^D\d/)) return true;
         return false;
       });
+
+      // For administrative section, exclude hidden items and demographics
+      // Only show clinician confirmation items (M0030, M0032, M0080, M0090)
+      if (section.id === 'administrative') {
+        sectionQuestions = sectionQuestions.filter((q: OASISQuestion) => {
+          const code = q.itemCode || '';
+          // Hide agency constants and demographics
+          if (HIDDEN_ADMIN_ITEMS.includes(code)) return false;
+          if (DEMOGRAPHIC_ITEMS.includes(code)) return false;
+          // Only show clinician confirmation items
+          return CLINICIAN_CONFIRM_ITEMS.includes(code);
+        });
+      }
 
       // Count answered questions - uses draftResponses via getResponseValue
       const answeredCount = sectionQuestions.filter((q: OASISQuestion) => {
@@ -493,6 +576,14 @@ export default function DocumentationTab({
             <Spinner size="lg" />
             <span className="ml-3 text-gray-500">Loading questions...</span>
           </div>
+        )}
+
+        {/* Patient Info Card - Demographics from referral (read-only) */}
+        {!isLoading && (
+          <PatientInfoCard
+            patientName={propPatientName}
+            patientId={patientId}
+          />
         )}
 
         {/* All Sections */}
