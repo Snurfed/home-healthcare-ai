@@ -101,6 +101,7 @@ function SidebarSection({ section, isActive, onClick }: SidebarSectionProps) {
 interface DocumentationTabProps {
   assessmentId?: string;
   patientId?: string;
+  patientName?: string;
   physicianName?: string;
   physicianNpi?: string;
 }
@@ -108,6 +109,7 @@ interface DocumentationTabProps {
 export default function DocumentationTab({
   assessmentId,
   patientId: propPatientId,
+  patientName: propPatientName,
   physicianName = 'Dr. Smith',
   physicianNpi,
 }: DocumentationTabProps) {
@@ -344,18 +346,13 @@ export default function DocumentationTab({
     setShowEventDetailsModal(false);
     setSelectedEvent(null);
 
-    // Get patient name from current assessment
-    const patientName = currentAssessment?.patient?.lastName
-      ? `${currentAssessment.patient.firstName} ${currentAssessment.patient.lastName}`
-      : 'Patient';
-
     // One-click: directly open email client with everything pre-filled
     openPhysicianEmail({
       event,
-      patientName,
+      patientName: propPatientName || 'Patient',
       physicianName,
     });
-  }, [currentAssessment, physicianName]);
+  }, [propPatientName, physicianName]);
 
   const handleTransferToEMR = useCallback(() => {
     setTransferring(true);

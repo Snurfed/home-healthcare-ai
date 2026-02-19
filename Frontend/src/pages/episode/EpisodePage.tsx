@@ -93,6 +93,7 @@ export default function EpisodePage() {
           <DocumentationTab
             assessmentId={assessment?.id}
             patientId={patientId}
+            patientName={`${patient.firstName} ${patient.lastName}`}
             physicianName={patient.primaryPhysicianName || 'Dr. Smith'}
           />
         )}
