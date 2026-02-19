@@ -185,6 +185,19 @@ export function useQuestions(params?: { section?: string; assessmentType?: strin
 }
 
 /**
+ * Hook to get ALL OASIS questions (for single-scroll documentation view)
+ */
+export function useAllQuestions() {
+  return useQuery<OASISQuestion[], Error>(
+    queryKeys.questions.lists(),
+    () => oasisService.getQuestions({}),
+    {
+      staleTime: 60 * 60 * 1000, // Questions rarely change, cache for 1 hour
+    }
+  );
+}
+
+/**
  * Hook to calculate HIPPS score
  */
 export function useCalculateScore(id: string) {

@@ -1,20 +1,18 @@
 /**
- * Documentation Tab (NestMed Style)
+ * Documentation Tab - Single Scroll Layout
  *
- * OASIS assessment with:
- * - Left sidebar with section navigation
- * - Progress bar with percentage
- * - "Transfer Results to EMR" green button
- * - Green checkmarks for completed items
- * - AI Explanation sparkle buttons
- * - Filter dropdown (Show all / Required only / Incomplete)
- * - AI-powered physician communication triggers
+ * All OASIS sections stacked vertically with:
+ * - Fixed left sidebar with click-to-scroll navigation
+ * - IntersectionObserver to highlight current section
+ * - Unanswered filter toggle with badges
+ * - Progress bar at bottom of sidebar
+ * - 140px bottom padding for recording bar
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEpisodeStore } from '@context/stores/episodeStore';
 import { useAssessmentStore } from '@context/stores/assessmentStore';
-import { useQuestions, useAssessment } from '@hooks/queries/useAssessments';
+import { useAllQuestions, useAssessment } from '@hooks/queries/useAssessments';
 import { useAutoSave } from '@hooks/useAutoSave';
 import { useClinicalEventAlerts } from '@hooks/useClinicalEvents';
 import QuestionRenderer from '@components/oasis/QuestionRenderer';
@@ -29,73 +27,13 @@ import type { OASISSectionId, OASISQuestion, OASISResponse } from '@typedefs/ind
 import type { CommunicationTriggerWithStatus } from '@typedefs/communication.types';
 import type { KeywordMatch, DetectedClinicalEvent } from '@typedefs/clinicalEvents.types';
 
-type FilterOption = 'all' | 'required' | 'incomplete';
-
-interface SectionInfo {
+interface SectionData {
   id: OASISSectionId;
   name: string;
   shortName: string;
-  completedCount: number;
+  questions: OASISQuestion[];
+  answeredCount: number;
   totalCount: number;
-}
-
-interface SidebarSectionProps {
-  section: SectionInfo;
-  isActive: boolean;
-  onClick: () => void;
-}
-
-function SidebarSection({ section, isActive, onClick }: SidebarSectionProps) {
-  const isComplete = section.completedCount === section.totalCount && section.totalCount > 0;
-  const hasProgress = section.completedCount > 0;
-
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors
-        ${isActive
-          ? 'bg-green-50 text-green-700'
-          : 'text-gray-700 hover:bg-gray-50'
-        }
-      `}
-    >
-      {/* Status indicator */}
-      <span
-        className={`
-          flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs
-          ${isComplete
-            ? 'bg-green-500 text-white'
-            : hasProgress
-              ? 'bg-green-100 text-green-600'
-              : 'bg-gray-200 text-gray-500'
-          }
-        `}
-      >
-        {isComplete ? (
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-              clipRule="evenodd"
-            />
-          </svg>
-        ) : (
-          section.completedCount
-        )}
-      </span>
-
-      {/* Title and count */}
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${isActive ? 'text-green-700' : 'text-gray-900'}`}>
-          {section.shortName}
-        </p>
-        <p className="text-xs text-gray-500">
-          {section.completedCount}/{section.totalCount}
-        </p>
-      </div>
-    </button>
-  );
 }
 
 interface DocumentationTabProps {
@@ -113,23 +51,21 @@ export default function DocumentationTab({
   physicianName = 'Dr. Smith',
   physicianNpi,
 }: DocumentationTabProps) {
+  // Filter state
+  const [showUnansweredOnly, setShowUnansweredOnly] = useState(false);
   const [activeSection, setActiveSection] = useState<OASISSectionId>('clinical_record');
-  const [filter, setFilter] = useState<FilterOption>('all');
   const [transferring, setTransferring] = useState(false);
-  const {
-    hideCompletedCards,
-    setHideCompletedCards,
-    currentPatientId,
-    currentEpisodeId,
-  } = useEpisodeStore();
 
-  // Use prop or store for patient/episode IDs
+  // Section refs for scroll-to
+  const sectionRefs = useRef<Map<OASISSectionId, HTMLDivElement>>(new Map());
+
+  // Episode store
+  const { currentPatientId, currentEpisodeId } = useEpisodeStore();
   const patientId = propPatientId || currentPatientId || '';
   const episodeId = currentEpisodeId || '';
 
-  // Assessment store for managing responses
+  // Assessment store
   const {
-    currentAssessment,
     draftResponses,
     updateResponse,
     getResponseValue,
@@ -139,24 +75,21 @@ export default function DocumentationTab({
   // Fetch assessment data
   const { isLoading: assessmentLoading } = useAssessment(assessmentId);
 
-  // Fetch questions for the active section
-  const { data: questions = [], isLoading: questionsLoading } = useQuestions({
-    section: activeSection,
-  });
+  // Fetch ALL questions for all sections
+  const { data: allQuestions = [], isLoading: questionsLoading } = useAllQuestions();
 
-  // Auto-save draft responses
+  // Auto-save
   useAutoSave({
     assessmentId: assessmentId || '',
     debounceMs: 2000,
     enabled: !!assessmentId && isDirty,
   });
 
-  // Communication triggers state
+  // Communication triggers
   const [showTriggerBanner, setShowTriggerBanner] = useState(true);
   const [showDraftEditor, setShowDraftEditor] = useState(false);
   const [selectedTrigger, setSelectedTrigger] = useState<CommunicationTriggerWithStatus | null>(null);
 
-  // Communication triggers hook
   const {
     activeTriggers,
     dismissTrigger,
@@ -168,12 +101,11 @@ export default function DocumentationTab({
     debounceMs: 500,
   });
 
-  // Clinical events detection state
+  // Clinical events
   const [showClinicalEventsBanner, setShowClinicalEventsBanner] = useState(true);
   const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<KeywordMatch | DetectedClinicalEvent | null>(null);
 
-  // Clinical events detection hook
   const {
     realtimeMatches,
     pendingEvents,
@@ -183,10 +115,9 @@ export default function DocumentationTab({
   } = useClinicalEventAlerts(patientId, episodeId, {
     enableRealtime: true,
     enablePolling: true,
-    pollingInterval: 60000, // Check every minute
+    pollingInterval: 60000,
   });
 
-  // Combined events for display
   const hasClinicalEvents = realtimeMatches.length > 0 || pendingEvents.length > 0;
 
   // Detect triggers when responses change
@@ -200,23 +131,22 @@ export default function DocumentationTab({
     }
   }, [assessmentId, draftResponses, detectTriggers]);
 
-  // Calculate section completion counts
-  const sectionInfo = useMemo((): SectionInfo[] => {
-    const responses = currentAssessment?.responses || {};
-    const allResponses = { ...responses, ...draftResponses };
+  // Check if a question is answered
+  const isQuestionAnswered = useCallback((itemCode: string): boolean => {
+    const response = getResponseValue(itemCode);
+    return !!(response?.responseValue || response?.responseCode || response?.responseNumeric !== undefined);
+  }, [getResponseValue]);
 
+  // Group questions by section with counts
+  const sectionData = useMemo((): SectionData[] => {
     return OASIS_SECTIONS.map((section) => {
-      // Get short name from section name
       const shortName = section.name.includes('.')
         ? section.name.split('.')[1]?.trim().split(' ').slice(0, 2).join(' ') || section.name
         : section.name.split(' ').slice(0, 2).join(' ');
 
-      // Count completed questions for this section
-      // We need to know which item codes belong to which section
-      // For now, we'll estimate based on the section's requiredItems
-      const sectionResponses = Object.values(allResponses).filter((r) => {
-        // Match responses to sections based on item code patterns
-        const code = (r as OASISResponse).itemCode || '';
+      // Filter questions belonging to this section
+      const sectionQuestions = allQuestions.filter((q: OASISQuestion) => {
+        const code = q.itemCode || '';
         if (section.id === 'administrative' && code.match(/^M00/)) return true;
         if (section.id === 'clinical_record' && code.match(/^M10/)) return true;
         if (section.id === 'functional_abilities' && code.match(/^GG/)) return true;
@@ -228,43 +158,60 @@ export default function DocumentationTab({
         return false;
       });
 
-      const completedCount = sectionResponses.filter((r) => {
-        const resp = r as OASISResponse;
-        return !!(resp.responseValue || resp.responseCode || resp.responseNumeric !== undefined);
-      }).length;
+      const answeredCount = sectionQuestions.filter((q: OASISQuestion) =>
+        isQuestionAnswered(q.itemCode)
+      ).length;
 
       return {
         id: section.id,
         name: section.name,
         shortName,
-        completedCount: Math.min(completedCount, section.requiredItems),
-        totalCount: section.requiredItems,
+        questions: sectionQuestions,
+        answeredCount,
+        totalCount: sectionQuestions.length,
       };
+    }).filter(s => s.totalCount > 0); // Only show sections with questions
+  }, [allQuestions, isQuestionAnswered]);
+
+  // Calculate totals
+  const totalQuestions = sectionData.reduce((sum, s) => sum + s.totalCount, 0);
+  const totalAnswered = sectionData.reduce((sum, s) => sum + s.answeredCount, 0);
+  const totalRemaining = totalQuestions - totalAnswered;
+  const isComplete = totalRemaining === 0 && totalQuestions > 0;
+
+  // IntersectionObserver for active section tracking
+  useEffect(() => {
+    const observers: IntersectionObserver[] = [];
+
+    sectionRefs.current.forEach((element, sectionId) => {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting && entry.intersectionRatio > 0.2) {
+              setActiveSection(sectionId);
+            }
+          });
+        },
+        { threshold: [0.2, 0.5], rootMargin: '-100px 0px -50% 0px' }
+      );
+      observer.observe(element);
+      observers.push(observer);
     });
-  }, [currentAssessment?.responses, draftResponses]);
 
-  // Filter questions based on filter option
-  const filteredQuestions = useMemo(() => {
-    if (!questions) return [];
+    return () => {
+      observers.forEach((obs) => obs.disconnect());
+    };
+  }, [sectionData]);
 
-    return questions.filter((q: OASISQuestion) => {
-      const response = getResponseValue(q.itemCode);
-      const hasValue = !!(response?.responseValue || response?.responseCode || response?.responseNumeric !== undefined);
-      const isRequired = q.validationRules?.some((r) => r.ruleType === 'required') ?? false;
-
-      // Apply hide completed filter
-      if (hideCompletedCards && hasValue) return false;
-
-      switch (filter) {
-        case 'required':
-          return isRequired;
-        case 'incomplete':
-          return !hasValue;
-        default:
-          return true;
-      }
-    });
-  }, [questions, filter, hideCompletedCards, getResponseValue]);
+  // Scroll to section
+  const scrollToSection = useCallback((sectionId: OASISSectionId) => {
+    const element = sectionRefs.current.get(sectionId);
+    if (element) {
+      const yOffset = -120; // Account for sticky header
+      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  }, []);
 
   // Handle response change
   const handleResponseChange = useCallback(
@@ -274,36 +221,31 @@ export default function DocumentationTab({
     [updateResponse]
   );
 
-  // Handle opening draft editor for a trigger
+  // Communication handlers
   const handleReviewDraft = useCallback((trigger: CommunicationTriggerWithStatus) => {
     setSelectedTrigger(trigger);
     setShowDraftEditor(true);
   }, []);
 
-  // Handle dismissing a trigger
   const handleDismissTrigger = useCallback(async (ruleId: string) => {
     await dismissTrigger(ruleId, 'dismissed');
   }, [dismissTrigger]);
 
-  // Handle dismissing all triggers
   const handleDismissAll = useCallback(async () => {
     for (const trigger of activeTriggers) {
       await dismissTrigger(trigger.ruleId, 'dismissed');
     }
   }, [activeTriggers, dismissTrigger]);
 
-  // Close the banner
   const handleCloseBanner = useCallback(() => {
     setShowTriggerBanner(false);
   }, []);
 
-  // Close draft editor
   const handleCloseDraftEditor = useCallback(() => {
     setShowDraftEditor(false);
     setSelectedTrigger(null);
   }, []);
 
-  // Handle saved communication
   const handleCommunicationSaved = useCallback(() => {
     console.log('Communication saved successfully');
   }, []);
@@ -315,8 +257,6 @@ export default function DocumentationTab({
   }, []);
 
   const handleDismissClinicalEventMatch = useCallback((match: KeywordMatch) => {
-    // For real-time matches, we just hide them locally
-    // They'll be properly handled when saved
     console.log('Dismissed real-time match:', match.eventType);
   }, []);
 
@@ -342,11 +282,8 @@ export default function DocumentationTab({
   }, [dismissEvent]);
 
   const handleDraftCommunicationFromEvent = useCallback((event: KeywordMatch | DetectedClinicalEvent) => {
-    // Close the event modal and directly open email client
     setShowEventDetailsModal(false);
     setSelectedEvent(null);
-
-    // One-click: directly open email client with everything pre-filled
     openPhysicianEmail({
       event,
       patientName: propPatientName || 'Patient',
@@ -362,111 +299,159 @@ export default function DocumentationTab({
     }, 1500);
   }, []);
 
-  // Navigate to previous/next section
-  const navigateSection = useCallback((direction: 'prev' | 'next') => {
-    const currentIndex = OASIS_SECTIONS.findIndex((s) => s.id === activeSection);
-    const newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
-    const newSection = OASIS_SECTIONS[newIndex];
-    if (newIndex >= 0 && newIndex < OASIS_SECTIONS.length && newSection) {
-      setActiveSection(newSection.id);
-    }
-  }, [activeSection]);
-
-  // Calculate overall progress
-  const totalItems = sectionInfo.reduce((sum, s) => sum + s.totalCount, 0);
-  const completedItems = sectionInfo.reduce((sum, s) => sum + s.completedCount, 0);
-  const progressPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-
-  // Get current section info
-  const currentSectionInfo = sectionInfo.find((s) => s.id === activeSection);
-  const currentIndex = OASIS_SECTIONS.findIndex((s) => s.id === activeSection);
-  const hasPrevSection = currentIndex > 0;
-  const hasNextSection = currentIndex < OASIS_SECTIONS.length - 1;
-
   const isLoading = assessmentLoading || questionsLoading;
 
   return (
-    <div className="flex gap-6 min-h-[calc(100vh-200px)]">
-      {/* Left Sidebar */}
+    <div className="flex gap-6 pb-36"> {/* pb-36 = 144px for recording bar */}
+      {/* Fixed Left Sidebar */}
       <div className="w-56 flex-shrink-0">
-        <div className="sticky top-24 space-y-4">
-          {/* Progress Card */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-900">Progress</span>
-              <span className="text-lg font-bold text-green-600">{progressPercent}%</span>
-            </div>
-            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-green-500 rounded-full transition-all"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              {completedItems} of {totalItems} items
-            </p>
-            {isDirty && (
-              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
-                Unsaved changes
-              </p>
-            )}
+        <div className="fixed w-56 top-32 bottom-36 flex flex-col">
+          {/* Filter Toggle */}
+          <div className="bg-white rounded-xl border border-gray-200 p-3 mb-3">
+            <button
+              onClick={() => setShowUnansweredOnly(!showUnansweredOnly)}
+              className={`
+                w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                ${showUnansweredOnly
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }
+              `}
+            >
+              {showUnansweredOnly ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Show Unanswered Only
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                  Show All
+                </>
+              )}
+            </button>
           </div>
 
-          {/* Sections List */}
-          <div className="bg-white rounded-xl border border-gray-200 p-3 max-h-[50vh] overflow-y-auto">
+          {/* Section Navigation */}
+          <div className="flex-1 bg-white rounded-xl border border-gray-200 p-3 overflow-y-auto">
             <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider px-3 mb-2">
               Sections
             </h3>
             <div className="space-y-1">
-              {sectionInfo.map((section) => (
-                <SidebarSection
-                  key={section.id}
-                  section={section}
-                  isActive={activeSection === section.id}
-                  onClick={() => setActiveSection(section.id)}
-                />
-              ))}
+              {sectionData.map((section) => {
+                const isActive = activeSection === section.id;
+                const isComplete = section.answeredCount === section.totalCount;
+                const remaining = section.totalCount - section.answeredCount;
+
+                // Hide complete sections when filtering
+                if (showUnansweredOnly && isComplete) return null;
+
+                return (
+                  <button
+                    key={section.id}
+                    onClick={() => scrollToSection(section.id)}
+                    className={`
+                      w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors
+                      ${isActive
+                        ? 'bg-green-50 text-green-700 border-l-2 border-green-500'
+                        : 'text-gray-700 hover:bg-gray-50'
+                      }
+                    `}
+                  >
+                    {/* Status badge */}
+                    <span
+                      className={`
+                        flex-shrink-0 min-w-[28px] px-1.5 py-0.5 rounded text-xs font-medium text-center
+                        ${isComplete
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-amber-100 text-amber-700'
+                        }
+                      `}
+                    >
+                      {isComplete ? '✓' : `${remaining}`}
+                    </span>
+
+                    {/* Section name */}
+                    <span className={`text-sm truncate ${isActive ? 'font-medium' : ''}`}>
+                      {section.shortName}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Transfer to EMR Button */}
-          <button
-            onClick={handleTransferToEMR}
-            disabled={transferring}
-            className={`
-              w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium
-              transition-all min-h-[48px]
-              ${transferring
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-green-500 text-white hover:bg-green-600 shadow-lg shadow-green-200'
-              }
-            `}
-          >
-            {transferring ? (
-              <>
-                <Spinner size="sm" />
-                <span>Transferring...</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                  />
-                </svg>
-                <span>Transfer to EMR</span>
-              </>
-            )}
-          </button>
+          {/* Progress Bar & Transfer Button */}
+          <div className="mt-3 space-y-3">
+            {/* Progress */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              {isComplete ? (
+                <div className="flex items-center gap-2 text-green-600">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="font-medium">Ready for EMR</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <span className="text-gray-600">{totalAnswered}/{totalQuestions} complete</span>
+                    <span className="font-medium text-amber-600">{totalRemaining} remaining</span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 rounded-full transition-all"
+                      style={{ width: `${(totalAnswered / totalQuestions) * 100}%` }}
+                    />
+                  </div>
+                </>
+              )}
+              {isDirty && (
+                <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                  Unsaved changes
+                </p>
+              )}
+            </div>
+
+            {/* Transfer Button */}
+            <button
+              onClick={handleTransferToEMR}
+              disabled={transferring || !isComplete}
+              className={`
+                w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-all
+                ${transferring
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : isComplete
+                    ? 'bg-green-500 text-white hover:bg-green-600 shadow-lg shadow-green-200'
+                    : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }
+              `}
+            >
+              {transferring ? (
+                <>
+                  <Spinner size="sm" />
+                  <span>Transferring...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  <span>Transfer to EMR</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 min-w-0 space-y-4">
+      {/* Main Content - All Sections */}
+      <div className="flex-1 min-w-0 space-y-6">
         {/* Clinical Events Alert Banner */}
         {showClinicalEventsBanner && hasClinicalEvents && (
           <EventAlertBanner
@@ -490,57 +475,6 @@ export default function DocumentationTab({
           />
         )}
 
-        {/* Header with filters */}
-        <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 p-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {currentSectionInfo?.name || 'Documentation'}
-            </h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {filteredQuestions.length} items
-              {filter !== 'all' && ` (${filter})`}
-            </p>
-          </div>
-
-          {/* Filter and hide toggle */}
-          <div className="flex items-center gap-4">
-            {/* Filter dropdown */}
-            <div className="relative">
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value as FilterOption)}
-                className="appearance-none bg-gray-100 border-0 rounded-lg px-4 py-2 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[44px]"
-              >
-                <option value="all">Show all items</option>
-                <option value="required">Required only</option>
-                <option value="incomplete">Incomplete only</option>
-              </select>
-              <svg
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-
-            {/* Hide completed toggle */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={hideCompletedCards}
-                  onChange={(e) => setHideCompletedCards(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500" />
-              </div>
-              <span className="text-sm text-gray-600">Hide completed</span>
-            </label>
-          </div>
-        </div>
-
         {/* Loading State */}
         {isLoading && (
           <div className="flex items-center justify-center py-12 bg-white rounded-xl border border-gray-200">
@@ -549,83 +483,73 @@ export default function DocumentationTab({
           </div>
         )}
 
-        {/* No Questions Message */}
-        {!isLoading && filteredQuestions.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+        {/* All Sections */}
+        {!isLoading && sectionData.map((section) => {
+          const isComplete = section.answeredCount === section.totalCount;
+
+          // Filter questions if showing unanswered only
+          const visibleQuestions = showUnansweredOnly
+            ? section.questions.filter(q => !isQuestionAnswered(q.itemCode))
+            : section.questions;
+
+          // Hide section entirely if filtered and no unanswered questions
+          if (showUnansweredOnly && visibleQuestions.length === 0) return null;
+
+          return (
+            <div
+              key={section.id}
+              ref={(el) => {
+                if (el) sectionRefs.current.set(section.id, el);
+              }}
+              className="scroll-mt-32"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No questions found</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              {filter !== 'all'
-                ? 'Try changing the filter to see more questions.'
-                : 'No questions available for this section.'}
-            </p>
-          </div>
-        )}
+              {/* Section Header */}
+              <div className={`
+                sticky top-28 z-10 bg-white rounded-t-xl border border-gray-200 border-b-0 p-4
+                flex items-center justify-between
+              `}>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`
+                      px-2 py-1 rounded text-xs font-medium
+                      ${isComplete ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}
+                    `}
+                  >
+                    {isComplete ? '✓ Complete' : `${section.totalCount - section.answeredCount} remaining`}
+                  </span>
+                  <h2 className="text-lg font-semibold text-gray-900">{section.name}</h2>
+                </div>
+                <span className="text-sm text-gray-500">
+                  {section.answeredCount}/{section.totalCount}
+                </span>
+              </div>
 
-        {/* Question Cards */}
-        {!isLoading && filteredQuestions.length > 0 && (
-          <div className="space-y-4">
-            {filteredQuestions.map((question: OASISQuestion) => {
-              const response = getResponseValue(question.itemCode);
-              return (
-                <QuestionRenderer
-                  key={question.itemCode}
-                  question={question}
-                  value={response}
-                  onChange={(resp) => handleResponseChange(question.itemCode, resp)}
-                />
-              );
-            })}
-          </div>
-        )}
-
-        {/* Bottom navigation */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-          <button
-            onClick={() => navigateSection('prev')}
-            disabled={!hasPrevSection}
-            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
-              hasPrevSection
-                ? 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                : 'text-gray-300 cursor-not-allowed'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Previous Section
-          </button>
-
-          <button
-            onClick={() => navigateSection('next')}
-            disabled={!hasNextSection}
-            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
-              hasNextSection
-                ? 'bg-green-500 text-white hover:bg-green-600'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            Next Section
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
+              {/* Section Questions */}
+              <div className="bg-white rounded-b-xl border border-gray-200 border-t-0 p-4 space-y-4">
+                {visibleQuestions.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">
+                    All questions in this section are complete
+                  </p>
+                ) : (
+                  visibleQuestions.map((question: OASISQuestion) => {
+                    const response = getResponseValue(question.itemCode);
+                    return (
+                      <QuestionRenderer
+                        key={question.itemCode}
+                        question={question}
+                        value={response}
+                        onChange={(resp) => handleResponseChange(question.itemCode, resp)}
+                      />
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Communication Draft Editor Modal */}
+      {/* Modals */}
       <CommunicationDraftEditor
         isOpen={showDraftEditor}
         onClose={handleCloseDraftEditor}
@@ -636,7 +560,6 @@ export default function DocumentationTab({
         onSaved={handleCommunicationSaved}
       />
 
-      {/* Clinical Event Details Modal */}
       <EventDetailsModal
         event={selectedEvent}
         isOpen={showEventDetailsModal}
