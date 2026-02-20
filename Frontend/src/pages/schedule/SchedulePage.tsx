@@ -9,7 +9,7 @@
  * - New Assessment button
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { usePatients } from '@hooks/index';
 import { Spinner } from '@components/common';
@@ -79,7 +79,28 @@ export default function SchedulePage() {
     limit: 100,
   });
 
-  // Handle search submission
+  // Debounced search - automatically search as user types
+  useEffect(() => {
+    const trimmedInput = searchInput.trim();
+    const trimmedQuery = searchQuery.trim();
+
+    // Don't update if the values are the same
+    if (trimmedInput === trimmedQuery) return;
+
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams(searchParams);
+      if (trimmedInput) {
+        params.set('search', trimmedInput);
+      } else {
+        params.delete('search');
+      }
+      setSearchParams(params);
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timer);
+  }, [searchInput, searchQuery, searchParams, setSearchParams]);
+
+  // Handle search submission (for Enter key)
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     const params = new URLSearchParams(searchParams);
