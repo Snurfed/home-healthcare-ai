@@ -120,3 +120,32 @@ export {
   usePlanOfCare,
   planOfCareKeys,
 } from './usePlanOfCare';
+
+// Form Engine hooks
+export {
+  useForm,
+  useVisitForm,
+  useFormDefinitions,
+  useFormDefinition,
+  useSections,
+  useSaveResponses,
+  useToggleModule,
+  useValidateVisitNote,
+  useValidateOnDemand,
+  useSearchQuestions,
+  useQuestion,
+  formEngineQueryKeys,
+} from './queries/useFormEngine';
+
+// EMR Export hooks
+export {
+  useTemplates,
+  useAllTemplates,
+  useTemplate,
+  useExportPreview,
+  useGenerateExport,
+  useCopyToClipboard,
+  useExportAndCopy,
+  useAuditEvents,
+  emrExportQueryKeys,
+} from './queries/useEmrExport';

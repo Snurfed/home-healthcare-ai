@@ -25,6 +25,8 @@ import clinicalEventsRoutes from './routes/clinicalEvents';
 import integrationsRoutes from './routes/integrations';
 import emrRoutes from './routes/emr';
 import visitNotesRoutes from './routes/visitNotes';
+import formEngineRoutes from './routes/formEngine.routes';
+import emrExportRoutes from './routes/emrExport.routes';
 
 // Initialize Express app
 const app: Application = express();
@@ -181,6 +183,12 @@ app.use('/api/emr', emrRoutes);
 
 // Visit notes and documentation routes
 app.use('/api', visitNotesRoutes);
+
+// Form engine routes (canonical forms and responses)
+app.use('/api', formEngineRoutes);
+
+// EMR export routes (templates, export generation, audit)
+app.use('/api', emrExportRoutes);
 
 // ===========================================
 // 404 HANDLER
