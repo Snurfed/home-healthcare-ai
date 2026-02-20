@@ -9,6 +9,15 @@ import { create } from 'zustand';
 
 export type EpisodeTab = 'prepare' | 'visit' | 'documentation';
 export type SectionFilter = 'all' | 'remaining' | 'required';
+export type VisitType = 'SOC' | 'ROC' | 'RECERT' | 'FOLLOWUP' | 'DISCHARGE';
+
+export const VISIT_TYPE_LABELS: Record<VisitType, string> = {
+  SOC: 'Start of Care',
+  ROC: 'Resumption of Care',
+  RECERT: 'Recertification',
+  FOLLOWUP: 'Follow-up Visit',
+  DISCHARGE: 'Discharge',
+};
 
 export interface EpisodeSection {
   id: string;
@@ -24,6 +33,7 @@ interface EpisodeState {
   // Current patient/episode
   currentPatientId: string | null;
   currentEpisodeId: string | null;
+  currentVisitType: VisitType | null;
 
   // Tab navigation
   activeTab: EpisodeTab;
@@ -54,7 +64,8 @@ interface EpisodeState {
   setSidebarOpen: (open: boolean) => void;
 
   // Load episode
-  loadEpisode: (patientId: string, episodeId: string) => void;
+  loadEpisode: (patientId: string, episodeId: string, visitType?: VisitType) => void;
+  setVisitType: (visitType: VisitType) => void;
   clearEpisode: () => void;
 }
 
@@ -62,6 +73,7 @@ export const useEpisodeStore = create<EpisodeState>()((set) => ({
   // Initial state
   currentPatientId: null,
   currentEpisodeId: null,
+  currentVisitType: null,
   activeTab: 'prepare',
   activeSectionId: null,
   sectionFilter: 'all',
@@ -101,19 +113,23 @@ export const useEpisodeStore = create<EpisodeState>()((set) => ({
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   // Episode management
-  loadEpisode: (patientId, episodeId) =>
+  loadEpisode: (patientId, episodeId, visitType) =>
     set({
       currentPatientId: patientId,
       currentEpisodeId: episodeId,
+      currentVisitType: visitType || null,
       activeTab: 'prepare',
       activeSectionId: null,
       sectionCompletion: {},
     }),
 
+  setVisitType: (visitType) => set({ currentVisitType: visitType }),
+
   clearEpisode: () =>
     set({
       currentPatientId: null,
       currentEpisodeId: null,
+      currentVisitType: null,
       activeTab: 'prepare',
       activeSectionId: null,
       sectionCompletion: {},

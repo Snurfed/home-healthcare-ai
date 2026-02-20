@@ -6,9 +6,9 @@
  */
 
 import { useEffect, useCallback, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { usePatient, useAssessment } from '@hooks/index';
-import { useEpisodeStore } from '@context/stores/episodeStore';
+import { useEpisodeStore, VISIT_TYPE_LABELS, type VisitType } from '@context/stores/episodeStore';
 import { Spinner, Modal } from '@components/common';
 import EpisodeShell from '@components/episode/EpisodeShell';
 import PrepareTab from './PrepareTab';
@@ -17,9 +17,11 @@ import DocumentationTab from './DocumentationTab';
 
 export default function EpisodePage() {
   const { patientId, episodeId } = useParams<{ patientId: string; episodeId?: string }>();
+  const [searchParams] = useSearchParams();
   const [showUploadsModal, setShowUploadsModal] = useState(false);
 
-  const { activeTab, loadEpisode, clearEpisode } = useEpisodeStore();
+  const visitTypeParam = searchParams.get('visitType') as VisitType | null;
+  const { activeTab, currentVisitType, loadEpisode, clearEpisode } = useEpisodeStore();
 
   // Load patient data
   const { data: patient, isLoading: patientLoading } = usePatient(patientId);
@@ -30,12 +32,12 @@ export default function EpisodePage() {
   // Initialize episode store
   useEffect(() => {
     if (patientId) {
-      loadEpisode(patientId, episodeId || '');
+      loadEpisode(patientId, episodeId || '', visitTypeParam || undefined);
     }
     return () => {
       clearEpisode();
     };
-  }, [patientId, episodeId, loadEpisode, clearEpisode]);
+  }, [patientId, episodeId, visitTypeParam, loadEpisode, clearEpisode]);
 
   // Handle recording complete
   const handleRecordingComplete = useCallback((audioBlob: Blob) => {
@@ -69,6 +71,7 @@ export default function EpisodePage() {
 
   const patientName = `${patient.lastName}, ${patient.firstName}`;
   const uploadCount = 2; // Mock count
+  const visitTypeLabel = currentVisitType ? VISIT_TYPE_LABELS[currentVisitType] : undefined;
 
   return (
     <>
@@ -76,6 +79,7 @@ export default function EpisodePage() {
         patientName={patientName}
         mrn={patient.mrn}
         status={assessment?.status || 'In Progress'}
+        visitType={visitTypeLabel}
         uploadCount={uploadCount}
         onViewUploads={handleViewUploads}
         onRecordingComplete={handleRecordingComplete}
