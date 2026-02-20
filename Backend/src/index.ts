@@ -23,6 +23,7 @@ import agencySettingsRoutes from './routes/agencySettings';
 import communicationRoutes from './routes/communications';
 import clinicalEventsRoutes from './routes/clinicalEvents';
 import integrationsRoutes from './routes/integrations';
+import emrRoutes from './routes/emr';
 
 // Initialize Express app
 const app: Application = express();
@@ -173,6 +174,9 @@ app.use('/api/clinical-events', clinicalEventsRoutes);
 
 // Email/Fax integration management routes
 app.use('/api/integrations', integrationsRoutes);
+
+// EMR integration routes (FHIR R4)
+app.use('/api/emr', emrRoutes);
 
 // ===========================================
 // 404 HANDLER

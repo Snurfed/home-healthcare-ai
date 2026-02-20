@@ -79,3 +79,19 @@ export {
   useUpdateTriggerConfig,
   clinicalEventsKeys,
 } from './useClinicalEvents';
+
+// EMR integration hooks
+export {
+  useEmrConnections,
+  useEmrConnectionStatus,
+  useCreateEmrConnection,
+  useUpdateEmrConnection,
+  useDeleteEmrConnection,
+  useTestEmrConnection,
+  useEmrAuthorize,
+  useEmrPatientSearch,
+  useEmrPatient,
+  useCheckDuplicates,
+  useImportEmrPatient,
+  emrQueryKeys,
+} from './queries/useEmr';

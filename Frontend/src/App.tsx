@@ -6,6 +6,7 @@ const LoginPage = lazy(() => import('@pages/auth/LoginPage'));
 const SchedulePage = lazy(() => import('@pages/schedule/SchedulePage'));
 const EpisodePage = lazy(() => import('@pages/episode/EpisodePage'));
 const AgencySettingsPage = lazy(() => import('@pages/settings/AgencySettingsPage'));
+const EmrConnectionsPage = lazy(() => import('@pages/settings/EmrConnectionsPage'));
 const NotFoundPage = lazy(() => import('@pages/NotFoundPage'));
 
 // Layout and auth components
@@ -68,6 +69,20 @@ function App() {
               <RoleGuard allowedRoles={['ADMIN', 'SUPERVISOR']}>
                 <AppShell>
                   <AgencySettingsPage />
+                </AppShell>
+              </RoleGuard>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* EMR Connections - Admin only */}
+        <Route
+          path="/settings/emr-connections"
+          element={
+            <ProtectedRoute>
+              <RoleGuard allowedRoles={['ADMIN']}>
+                <AppShell>
+                  <EmrConnectionsPage />
                 </AppShell>
               </RoleGuard>
             </ProtectedRoute>

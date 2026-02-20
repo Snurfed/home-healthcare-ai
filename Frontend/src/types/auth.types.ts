@@ -115,6 +115,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'assessments:approve',
     'patients:read',
     'patients:write',
+    'patient:create',
+    'emr:manage',
     'users:read',
   ],
   NURSE: [
@@ -123,6 +125,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'assessments:submit',
     'patients:read',
     'patients:write',
+    'patient:create',
+    'emr:search',
+    'emr:import',
   ],
   THERAPIST_PT: [
     'assessments:read',

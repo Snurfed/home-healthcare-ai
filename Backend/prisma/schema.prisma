@@ -392,6 +392,7 @@ model Patient {
   referralDocuments     ReferralDocument[]
   soapNotes             SoapNote[]
   physicianCommunications PhysicianCommunication[]
+  emrLink               EmrPatientLink?
 
   @@index([mrn])
   @@index([lastName, firstName])
@@ -1580,4 +1581,108 @@ model CommunicationSendLog {
   @@index([status])
   @@index([queuedAt])
   @@map("communication_send_logs")
+}
+
+// ===========================================
+// EMR INTEGRATION (FHIR R4)
+// ===========================================
+
+enum EmrVendor {
+  EPIC
+  CERNER
+  ALLSCRIPTS
+  MEDITECH
+  ATHENAHEALTH
+  NEXTGEN
+  CUSTOM
+}
+
+// EMR Connection configuration
+model EmrConnection {
+  id                    String          @id @default(uuid())
+  name                  String          // "City Hospital Epic"
+  vendor                EmrVendor
+  fhirBaseUrl           String
+  clientId              String
+  clientSecretEncrypted String?         // Encrypted client secret for confidential clients
+  scopes                String[]        // OAuth scopes (e.g., "patient/*.read")
+  authorizationUrl      String?         // OAuth authorization endpoint
+  tokenUrl              String?         // OAuth token endpoint
+  isEnabled             Boolean         @default(true)
+  lastConnectedAt       DateTime?
+  lastConnectionError   String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  createdById           String
+
+  // Relationships
+  tokens                EmrAccessToken[]
+  auditLogs             EmrAuditLog[]
+  patientLinks          EmrPatientLink[]
+
+  @@map("emr_connections")
+}
+
+// Per-user OAuth tokens (stored encrypted)
+model EmrAccessToken {
+  id                    String          @id @default(uuid())
+  connectionId          String
+  connection            EmrConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  userId                String
+  accessTokenEncrypted  String          // AES-256 encrypted access token
+  refreshTokenEncrypted String?         // AES-256 encrypted refresh token
+  expiresAt             DateTime
+  tokenType             String          @default("Bearer")
+  scope                 String?         // Granted scopes
+  isRevoked             Boolean         @default(false)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@unique([connectionId, userId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("emr_access_tokens")
+}
+
+// HIPAA-compliant audit log for EMR access
+model EmrAuditLog {
+  id                    String          @id @default(uuid())
+  connectionId          String
+  connection            EmrConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  userId                String
+  action                String          // SEARCH, READ, IMPORT, AUTHORIZE, REFRESH_TOKEN
+  resourceType          String          // Patient, Observation, Condition, etc.
+  resourceId            String?         // FHIR resource ID
+  requestUrl            String          // Full request URL (without PHI in query params)
+  responseStatus        Int             // HTTP status code
+  patientFhirId         String?         // FHIR patient ID accessed
+  patientLocalId        String?         // Local patient ID if imported
+  timestamp             DateTime        @default(now())
+  durationMs            Int?            // Request duration
+  errorMessage          String?
+  requestBody           Json?           // Sanitized request body
+  responseBody          Json?           // Sanitized response (no full PHI)
+
+  @@index([connectionId, timestamp])
+  @@index([userId, timestamp])
+  @@index([patientFhirId])
+  @@map("emr_audit_logs")
+}
+
+// Track imported patients to prevent duplicates
+model EmrPatientLink {
+  id                    String          @id @default(uuid())
+  patientId             String          @unique
+  patient               Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  connectionId          String
+  connection            EmrConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  fhirPatientId         String          // FHIR Patient resource ID
+  mrn                   String?         // MRN from EMR system
+  lastSyncedAt          DateTime        @default(now())
+  createdAt             DateTime        @default(now())
+  fhirResourceJson      Json?           // Cached FHIR Patient resource
+
+  @@unique([connectionId, fhirPatientId])
+  @@index([mrn])
+  @@map("emr_patient_links")
 }

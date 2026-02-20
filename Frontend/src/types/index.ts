@@ -239,3 +239,22 @@ export type {
 } from './integration.types';
 
 export { PROVIDER_CONFIG } from './integration.types';
+
+// EMR Integration types
+export type {
+  EmrVendor,
+  EmrConnection,
+  CreateEmrConnectionRequest,
+  UpdateEmrConnectionRequest,
+  ConnectionTestResult,
+  ConnectionStatus,
+  EmrPatientSearchParams,
+  EmrPatientSearchResult,
+  EmrPatientImportData,
+  EmrPatientDetail,
+  DuplicateCheckResult,
+  ImportPatientRequest,
+  ImportPatientResponse,
+} from './emr.types';
+
+export { EMR_VENDOR_CONFIG } from './emr.types';
