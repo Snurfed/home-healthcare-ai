@@ -10,9 +10,10 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { usePatients } from '@hooks/index';
 import { Spinner } from '@components/common';
+import { NewAssessmentModal } from '@components/schedule';
 
 type VisitStatus = 'all' | 'not_started' | 'in_progress' | 'completed' | 'pending_review';
 
@@ -65,8 +66,8 @@ function StatusBadge({ status }: { status: Exclude<VisitStatus, 'all'> }) {
 }
 
 export default function SchedulePage() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [showNewAssessmentModal, setShowNewAssessmentModal] = useState(false);
   const searchQuery = searchParams.get('search') || '';
   const filterParam = (searchParams.get('filter') as VisitStatus) || 'all';
 
@@ -203,7 +204,7 @@ export default function SchedulePage() {
 
           {/* New Assessment Button */}
           <button
-            onClick={() => navigate('/episode/new')}
+            onClick={() => setShowNewAssessmentModal(true)}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors shadow-sm"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -424,6 +425,12 @@ export default function SchedulePage() {
           ))
         )}
       </main>
+
+      {/* New Assessment Modal */}
+      <NewAssessmentModal
+        isOpen={showNewAssessmentModal}
+        onClose={() => setShowNewAssessmentModal(false)}
+      />
     </div>
   );
 }
