@@ -95,3 +95,28 @@ export {
   useImportEmrPatient,
   emrQueryKeys,
 } from './queries/useEmr';
+
+// Visit note hooks
+export {
+  useVisitNoteQuery,
+  useEpisodeDashboard,
+  useEpisodeVisitNotes,
+  useCreateVisitNote,
+  useUpdateVisitNote,
+  useGenerateAIDraft,
+  useFinalizeVisitNote,
+  useVisitNoteAutoSave,
+  useVisitNote,
+  visitNoteKeys,
+} from './useVisitNote';
+
+// Plan of Care hooks
+export {
+  usePlanOfCareQuery,
+  useCreatePlanOfCare,
+  useUpdatePlanOfCare,
+  useAutoPopulateFromOasis,
+  useSignPlanOfCare,
+  usePlanOfCare,
+  planOfCareKeys,
+} from './usePlanOfCare';

@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import type { Discipline } from '@typedefs/index';
 
 export type EpisodeTab = 'prepare' | 'visit' | 'documentation';
 export type SectionFilter = 'all' | 'remaining' | 'required';
@@ -34,6 +35,8 @@ interface EpisodeState {
   currentPatientId: string | null;
   currentEpisodeId: string | null;
   currentVisitType: VisitType | null;
+  currentVisitId: string | null;
+  currentDiscipline: Discipline | null;
 
   // Tab navigation
   activeTab: EpisodeTab;
@@ -66,6 +69,8 @@ interface EpisodeState {
   // Load episode
   loadEpisode: (patientId: string, episodeId: string, visitType?: VisitType) => void;
   setVisitType: (visitType: VisitType) => void;
+  setCurrentVisit: (visitId: string) => void;
+  setDiscipline: (discipline: Discipline) => void;
   clearEpisode: () => void;
 }
 
@@ -74,6 +79,8 @@ export const useEpisodeStore = create<EpisodeState>()((set) => ({
   currentPatientId: null,
   currentEpisodeId: null,
   currentVisitType: null,
+  currentVisitId: null,
+  currentDiscipline: null,
   activeTab: 'prepare',
   activeSectionId: null,
   sectionFilter: 'all',
@@ -125,11 +132,17 @@ export const useEpisodeStore = create<EpisodeState>()((set) => ({
 
   setVisitType: (visitType) => set({ currentVisitType: visitType }),
 
+  setCurrentVisit: (visitId) => set({ currentVisitId: visitId }),
+
+  setDiscipline: (discipline) => set({ currentDiscipline: discipline }),
+
   clearEpisode: () =>
     set({
       currentPatientId: null,
       currentEpisodeId: null,
       currentVisitType: null,
+      currentVisitId: null,
+      currentDiscipline: null,
       activeTab: 'prepare',
       activeSectionId: null,
       sectionCompletion: {},

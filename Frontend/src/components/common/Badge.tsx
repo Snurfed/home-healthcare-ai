@@ -9,6 +9,7 @@ import type { AssessmentStatus } from '@typedefs/index';
 interface BadgeProps {
   variant?: 'default' | 'success' | 'warning' | 'error' | 'info' | 'status';
   status?: AssessmentStatus;
+  size?: 'sm' | 'md';
   children: React.ReactNode;
   className?: string;
 }
@@ -35,6 +36,7 @@ const statusClasses: Record<AssessmentStatus, string> = {
 export default function Badge({
   variant = 'default',
   status,
+  size = 'md',
   children,
   className = '',
 }: BadgeProps) {
@@ -43,11 +45,14 @@ export default function Badge({
       ? statusClasses[status]
       : variantClasses[variant];
 
+  const sizeClass = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-0.5 text-xs';
+
   return (
     <span
       className={`
-        inline-flex items-center px-2.5 py-0.5 rounded-full
-        text-xs font-medium
+        inline-flex items-center rounded-full
+        font-medium
+        ${sizeClass}
         ${colorClass}
         ${className}
       `}

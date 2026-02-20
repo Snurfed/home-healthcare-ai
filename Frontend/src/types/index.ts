@@ -258,3 +258,42 @@ export type {
 } from './emr.types';
 
 export { EMR_VENDOR_CONFIG } from './emr.types';
+
+// Visit Note types
+export type {
+  Discipline,
+  VisitPurpose,
+  ResponseType as VisitResponseType,
+  VisitFormQuestion,
+  VisitFormSection,
+  VisitFormConfig,
+  VitalSigns,
+  VitalSignsWithMeta,
+  WoundAssessment,
+  VisitNoteStatus,
+  VisitNoteResponse,
+  VisitNoteSectionProgress,
+  VisitNoteSignature,
+  VisitNote,
+  VisitNoteListItem,
+  CreateVisitNoteRequest,
+  UpdateVisitNoteRequest,
+  GenerateAIDraftRequest,
+  GenerateAIDraftResponse,
+  FinalizeVisitNoteRequest,
+  AmendVisitNoteRequest,
+  RequiredAssessment,
+  VisitHistoryItem,
+  EpisodeDashboardData,
+  PlanOfCareStatus,
+  ServiceFrequency,
+  CareGoal,
+  Diagnosis,
+  PlanOfCare,
+  PlanOfCareListItem,
+  CreatePlanOfCareRequest,
+  UpdatePlanOfCareRequest,
+  AutoPopulateFromOasisRequest,
+  AutoPopulateFromOasisResponse,
+  SignPlanOfCareRequest,
+} from './visitNote.types';
