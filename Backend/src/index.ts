@@ -27,6 +27,7 @@ import emrRoutes from './routes/emr';
 import visitNotesRoutes from './routes/visitNotes';
 import formEngineRoutes from './routes/formEngine.routes';
 import emrExportRoutes from './routes/emrExport.routes';
+import captureRoutes from './routes/capture';
 
 // Initialize Express app
 const app: Application = express();
@@ -189,6 +190,9 @@ app.use('/api', formEngineRoutes);
 
 // EMR export routes (templates, export generation, audit)
 app.use('/api', emrExportRoutes);
+
+// Capture routes (voice capture workflow)
+app.use('/api/capture', captureRoutes);
 
 // ===========================================
 // 404 HANDLER

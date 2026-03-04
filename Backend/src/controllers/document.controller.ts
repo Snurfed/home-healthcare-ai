@@ -3,6 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import * as os from 'os';
+import Anthropic from '@anthropic-ai/sdk';
+import { extractTextFromDocument } from '../services/referralExtraction.service';
 import {
   UserRole,
   DocumentCategory,
@@ -1293,6 +1296,160 @@ export async function getCategories(
 }
 
 // ===========================================
+// EXTRACT DOCUMENT TEXT (for Capture Workflow)
+// ===========================================
+
+/**
+ * Extract text from an uploaded document for the capture workflow
+ * POST /api/capture/extract-document
+ */
+export async function extractDocument(req: AuthenticatedRequest, res: Response): Promise<void> {
+  let tempFilePath: string | null = null;
+
+  try {
+    const file = req.file as FileUpload | undefined;
+
+    if (!file) {
+      res.status(400).json({
+        success: false,
+        error: 'No file uploaded',
+      });
+      return;
+    }
+
+    console.log(`[Document Extract] Processing ${file.originalname} (${file.mimetype})`);
+
+    // Determine document type from mimetype
+    let docType: 'pdf' | 'docx' | 'jpg' | 'png' = 'pdf';
+    if (file.mimetype.includes('image/jpeg') || file.mimetype.includes('image/jpg')) {
+      docType = 'jpg';
+    } else if (file.mimetype.includes('image/png')) {
+      docType = 'png';
+    } else if (file.mimetype.includes('word') || file.mimetype.includes('docx')) {
+      docType = 'docx';
+    }
+
+    // Save buffer to temp file for extraction
+    const tempDir = os.tmpdir();
+    tempFilePath = path.join(tempDir, `doc_${Date.now()}_${file.originalname}`);
+
+    if (file.buffer) {
+      await fs.promises.writeFile(tempFilePath, file.buffer);
+    } else if (file.path) {
+      // File already on disk, use its path
+      tempFilePath = file.path;
+    } else {
+      res.status(400).json({
+        success: false,
+        error: 'No file data available',
+      });
+      return;
+    }
+
+    // Extract text from the document
+    const result = await extractTextFromDocument(tempFilePath, docType);
+    let extractedText = result.text;
+    let usedVision = false;
+
+    // For scanned PDFs or images with no text, use Claude Vision
+    if ((!extractedText || extractedText.trim().length < 50) && (docType === 'pdf' || docType === 'jpg' || docType === 'png')) {
+      console.log('[Document Extract] Insufficient text, using Claude Vision API...');
+
+      try {
+        const apiKey = process.env['ANTHROPIC_API_KEY'];
+        if (apiKey) {
+          const anthropic = new Anthropic({ apiKey });
+          const buffer = await fs.promises.readFile(tempFilePath);
+          const base64Data = buffer.toString('base64');
+
+          const mediaType = docType === 'pdf' ? 'application/pdf' :
+                           docType === 'jpg' ? 'image/jpeg' : 'image/png';
+
+          const response = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 8192,
+            messages: [{
+              role: 'user',
+              content: [
+                {
+                  type: docType === 'pdf' ? 'document' : 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: mediaType,
+                    data: base64Data,
+                  },
+                } as Anthropic.DocumentBlockParam | Anthropic.ImageBlockParam,
+                {
+                  type: 'text',
+                  text: 'Please extract all text from this document. Return only the raw text content, preserving the structure and formatting as much as possible. Do not add any commentary or analysis.',
+                },
+              ],
+            }],
+          });
+
+          const content = response.content[0];
+          if (content && content.type === 'text') {
+            extractedText = content.text;
+            usedVision = true;
+            console.log(`[Document Extract] Claude Vision extracted ${extractedText.length} characters`);
+          }
+        } else {
+          console.log('[Document Extract] No ANTHROPIC_API_KEY, cannot use Vision API');
+        }
+      } catch (visionError) {
+        console.error('[Document Extract] Claude Vision failed:', visionError);
+        // Continue with empty text
+      }
+    }
+
+    // Clean up temp file (only if we created it from buffer)
+    if (file.buffer && tempFilePath && fs.existsSync(tempFilePath)) {
+      await fs.promises.unlink(tempFilePath);
+      tempFilePath = null;
+    }
+
+    if (!extractedText || extractedText.trim().length === 0) {
+      res.status(200).json({
+        success: true,
+        fileName: file.originalname,
+        fileType: docType,
+        extractedText: '',
+        pageCount: result.pageCount,
+        warning: 'No text could be extracted from the document. It may be a scanned image and ANTHROPIC_API_KEY may not be configured.',
+      });
+      return;
+    }
+
+    console.log(`[Document Extract] Extracted ${extractedText.length} characters from ${result.pageCount || 1} pages${usedVision ? ' (via Claude Vision)' : ''}`);
+
+    res.json({
+      success: true,
+      fileName: file.originalname,
+      fileType: docType,
+      extractedText,
+      textLength: extractedText.length,
+      pageCount: result.pageCount,
+      usedVision,
+    });
+  } catch (error) {
+    // Clean up temp file on error
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        await fs.promises.unlink(tempFilePath);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+
+    console.error('[Document Extract Error]', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Document extraction failed',
+    });
+  }
+}
+
+// ===========================================
 // EXPORTS
 // ===========================================
 
@@ -1305,4 +1462,5 @@ export default {
   processOcr,
   downloadDocument,
   getCategories,
+  extractDocument,
 };

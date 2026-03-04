@@ -10,7 +10,7 @@
  * - Plan of Care (485) access
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useEpisodeStore } from '@context/stores/episodeStore';
 import EpisodeDashboard from '@components/episode/EpisodeDashboard';
 import { VisitFormContainer } from '@components/forms';
@@ -108,14 +108,30 @@ export default function VisitTab({
   const [isFormValid, setIsFormValid] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
 
-  // Use props or store values
-  const visitId = propVisitId || currentVisitId || `visit_${currentEpisodeId || 'test'}_${Date.now()}`;
+  // Generate stable visit ID (only once per component instance)
+  const generatedVisitIdRef = useRef<string | null>(null);
+  if (!generatedVisitIdRef.current) {
+    generatedVisitIdRef.current = `visit_${currentEpisodeId || 'new'}_${Date.now()}`;
+  }
+
+  // Use props or store values - prioritize explicit values over generated
+  const visitId = propVisitId || currentVisitId || generatedVisitIdRef.current;
   const episodeId = currentEpisodeId || 'episode_test';
 
   // Map visit type to discipline/purpose
   // In production, this would come from the selected visit or user's discipline
   const discipline: Discipline = DEFAULT_DISCIPLINE;
   const visitType: VisitType = mapVisitPurposeToType(currentVisitType || '') || DEFAULT_VISIT_TYPE;
+
+  // Debug logging to trace visit type flow
+  useEffect(() => {
+    console.log('[VisitTab] Visit type debug:', {
+      currentVisitType,
+      mappedVisitType: visitType,
+      visitId,
+      episodeId,
+    });
+  }, [currentVisitType, visitType, visitId, episodeId]);
 
   // Get visit purpose label for display
   const visitPurposeLabel = useMemo(() => {
