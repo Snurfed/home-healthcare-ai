@@ -23,19 +23,23 @@ const CLINICIANS = [
   UserRole.MEDICAL_SOCIAL_WORKER,
 ];
 
-router.use(authenticate);
+// Applied per route rather than with router.use(). This router is mounted at
+// a bare /api, so a blanket middleware here would run for every /api request
+// that reaches it — including ones belonging to routers mounted later. That is
+// exactly what happened: it was silently supplying the only authentication that
+// visitNotes, formEngine and emrExport had.
 
 // Form instances
-router.post('/forms', authorize(CLINICIANS), controller.createFormInstance);
-router.get('/forms/quality', controller.fieldQuality);
-router.get('/forms/:id', controller.getFormInstance);
+router.post('/forms', authenticate, authorize(CLINICIANS), controller.createFormInstance);
+router.get('/forms/quality', authenticate, controller.fieldQuality);
+router.get('/forms/:id', authenticate, controller.getFormInstance);
 
 // Capture and review
-router.post('/forms/:id/capture', authorize(CLINICIANS), controller.runScribe);
-router.get('/forms/:id/proposals', controller.listProposals);
-router.post('/proposals/:id/decide', authorize(CLINICIANS), controller.decideProposal);
+router.post('/forms/:id/capture', authenticate, authorize(CLINICIANS), controller.runScribe);
+router.get('/forms/:id/proposals', authenticate, controller.listProposals);
+router.post('/proposals/:id/decide', authenticate, authorize(CLINICIANS), controller.decideProposal);
 
 // Direct entry
-router.put('/forms/:id/values/:questionCode', authorize(CLINICIANS), controller.setValue);
+router.put('/forms/:id/values/:questionCode', authenticate, authorize(CLINICIANS), controller.setValue);
 
 export default router;
