@@ -8,7 +8,8 @@
  * apart, the chart can disagree with its own provenance trail, which is the one
  * failure mode that would be unrecoverable at audit.
  */
-import { PrismaClient, Prisma, ProposalStatus } from '../../generated/prisma';
+import { Prisma, ProposalStatus } from '../../generated/prisma';
+import { TxClient } from '../../config/tenancy';
 
 import {
   decide,
@@ -51,8 +52,14 @@ export interface RecordRunOutcome {
   withheld: number;
 }
 
+/**
+ * Every method takes the transaction opened by withTenant() rather than a
+ * client of its own. Row-level security keys off a transaction-local setting,
+ * so a query issued outside that transaction is unscoped — and unscoped now
+ * means it returns nothing. Taking the tx as a parameter makes it impossible to
+ * forget: there is no client here to accidentally use.
+ */
 export class ProposalService {
-  constructor(private readonly prisma: PrismaClient) {}
 
   /**
    * Persist an agent run and its proposals, already triaged into what the
@@ -62,12 +69,12 @@ export class ProposalService {
    * the earliest signal that audio quality or a form template has regressed,
    * and they map exactly where the model knows it is weak.
    */
-  async recordRun(args: RecordRunArgs): Promise<RecordRunOutcome> {
+  async recordRun(tx: TxClient, args: RecordRunArgs): Promise<RecordRunOutcome> {
     const { agencyId, formInstanceId, result } = args;
     const policy = args.policy ?? DEFAULT_CONFIDENCE_POLICY;
     const triaged = triageStrict(result.proposals, policy);
 
-    return this.prisma.$transaction(async (tx) => {
+    {
       const run = await tx.agentRun.create({
         data: {
           agencyId,
@@ -110,12 +117,12 @@ export class ProposalService {
         surfaced: triaged.filter((p) => p.status === 'SURFACED').length,
         withheld: triaged.filter((p) => p.status === 'WITHHELD').length,
       };
-    });
+    }
   }
 
   /** What the clinician is asked to review, newest run first. */
-  async surfacedFor(formInstanceId: string) {
-    return this.prisma.proposal.findMany({
+  async surfacedFor(tx: TxClient, formInstanceId: string) {
+    return tx.proposal.findMany({
       where: { formInstanceId, status: ProposalStatus.SURFACED },
       include: { evidence: true },
       orderBy: { createdAt: 'desc' },
@@ -131,11 +138,12 @@ export class ProposalService {
    * of the record, and a surveyor may ask what changed and when.
    */
   async decide(
+    tx: TxClient,
     proposalId: string,
     clinicianId: string,
     decision: ProposalDecision
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    {
       const proposal = await tx.proposal.findUniqueOrThrow({
         where: { id: proposalId },
         include: { formInstance: { select: { formCode: true } } },
@@ -195,21 +203,21 @@ export class ProposalService {
       });
 
       return { proposal: updated, fieldValue };
-    });
+    }
   }
 
   /**
    * A value the clinician typed themselves, with no agent involved. Same
    * supersession rule, so human and agent edits share one history.
    */
-  async setManualValue(args: {
+  async setManualValue(tx: TxClient, args: {
     agencyId: string;
     formInstanceId: string;
     questionCode: string;
     value: unknown;
     clinicianId: string;
   }) {
-    return this.prisma.$transaction(async (tx) => {
+    {
       const form = await tx.formInstance.findUniqueOrThrow({
         where: { id: args.formInstanceId },
         select: { formCode: true },
@@ -235,12 +243,12 @@ export class ProposalService {
           supersedesId: superseded?.id ?? null,
         },
       });
-    });
+    }
   }
 
   /** The current chart: latest value per question, ignoring superseded ones. */
-  async currentValues(formInstanceId: string) {
-    return this.prisma.fieldValue.findMany({
+  async currentValues(tx: TxClient, formInstanceId: string) {
+    return tx.fieldValue.findMany({
       where: { formInstanceId, supersededBy: { is: null } },
       orderBy: { questionCode: 'asc' },
     });
@@ -251,8 +259,8 @@ export class ProposalService {
    * use produces for free. Feeds the underperforming-field check that decides
    * whether an agent should abstain on a field in future.
    */
-  async qualityByField(agencyId: string, since?: Date) {
-    return this.prisma.proposal.groupBy({
+  async qualityByField(tx: TxClient, agencyId: string, since?: Date) {
+    return tx.proposal.groupBy({
       by: ['questionCode', 'status'],
       where: {
         agencyId,

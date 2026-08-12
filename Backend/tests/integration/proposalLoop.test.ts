@@ -15,6 +15,7 @@ import { PrismaClient } from '../../src/generated/prisma';
 import { ProposalService } from '../../src/services/proposals/proposal.service';
 import { AgentRunResult } from '../../src/domain/proposals/types';
 import { InvalidTransitionError } from '../../src/domain/proposals/stateMachine';
+import { withTenant } from '../../src/config/tenancy';
 import { ValueRejectedError } from '../../src/services/proposals/proposal.service';
 
 dotenv.config();
@@ -22,7 +23,15 @@ dotenv.config();
 // This Prisma build requires a driver adapter, matching src/config/prisma.ts.
 const pool = new Pool({ connectionString: process.env['DATABASE_URL'] });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
-const service = new ProposalService(prisma);
+const service = new ProposalService();
+
+/**
+ * Every service call now runs inside a tenant scope, matching how the handlers
+ * use it. The seeding below still uses the raw client because this suite
+ * connects as the owner, which is not policy-bound — tenantIsolation.test.ts is
+ * where enforcement itself is proven, against the restricted role.
+ */
+const scoped = <T>(fn: Parameters<typeof withTenant<T>>[2]) => withTenant(prisma, AGENCY, fn);
 
 const AGENCY = 'test-agency-proposals';
 const CLINICIAN = 'test-clinician-1';
@@ -70,7 +79,7 @@ const maybe = () => (reachable ? it : it.skip);
 
 describe('proposal loop (integration)', () => {
   maybe()('separates surfaced from withheld on the confidence policy', async () => {
-    const outcome = await service.recordRun({
+    const outcome = await scoped((tx) => service.recordRun(tx, {
       agencyId: AGENCY,
       formInstanceId,
       result: run([
@@ -88,7 +97,7 @@ describe('proposal loop (integration)', () => {
           evidence: [{ transcriptId: 's2', quote: 'I can mostly manage on my own' }],
         },
       ]),
-    });
+    }));
 
     expect(outcome.surfaced).toBe(1);
     expect(outcome.withheld).toBe(1);
@@ -102,10 +111,10 @@ describe('proposal loop (integration)', () => {
   });
 
   maybe()('accepting writes a FieldValue linked back to its proposal', async () => {
-    const [proposal] = await service.surfacedFor(formInstanceId);
+    const [proposal] = await scoped((tx) => service.surfacedFor(tx, formInstanceId));
     expect(proposal).toBeDefined();
 
-    const { fieldValue } = await service.decide(proposal!.id, CLINICIAN, { kind: 'accept' });
+    const { fieldValue } = await scoped((tx) => service.decide(tx, proposal!.id, CLINICIAN, { kind: 'accept' });
 
     expect(fieldValue).not.toBeNull();
     expect(fieldValue!.source).toBe('AGENT');
@@ -118,12 +127,12 @@ describe('proposal loop (integration)', () => {
       where: { formInstanceId, status: 'COMMITTED' },
     });
     await expect(
-      service.decide(decided!.id, CLINICIAN, { kind: 'reject' })
+      scoped((tx) => service.decide(tx, decided!.id, CLINICIAN, { kind: 'reject' }))
     ).rejects.toThrow(InvalidTransitionError);
   });
 
   maybe()('editing records how far the clinician moved the value', async () => {
-    await service.recordRun({
+    await scoped((tx) => service.recordRun(tx, {
       agencyId: AGENCY,
       formInstanceId,
       result: run([
@@ -134,12 +143,12 @@ describe('proposal loop (integration)', () => {
           evidence: [{ transcriptId: 's3', quote: 'walking looked steady enough' }],
         },
       ]),
-    });
+    }));
 
-    const surfaced = await service.surfacedFor(formInstanceId);
+    const surfaced = await scoped((tx) => service.surfacedFor(tx, formInstanceId));
     const target = surfaced.find((p) => p.questionCode === 'PT.NARRATIVE.GAIT');
 
-    const { proposal, fieldValue } = await service.decide(target!.id, CLINICIAN, {
+    const { proposal, fieldValue } = await scoped((tx) => service.decide(tx, target!.id, CLINICIAN, {
       kind: 'edit',
       value: 'Ambulates with an antalgic gait favouring the right.',
     });
@@ -150,7 +159,7 @@ describe('proposal loop (integration)', () => {
   });
 
   maybe()('rejecting writes no FieldValue', async () => {
-    await service.recordRun({
+    await scoped((tx) => service.recordRun(tx, {
       agencyId: AGENCY,
       formInstanceId,
       result: run([
@@ -161,12 +170,12 @@ describe('proposal loop (integration)', () => {
           evidence: [{ transcriptId: 's4', quote: 'the shoulder is sore too' }],
         },
       ]),
-    });
+    }));
 
-    const surfaced = await service.surfacedFor(formInstanceId);
+    const surfaced = await scoped((tx) => service.surfacedFor(tx, formInstanceId));
     const target = surfaced.find((p) => p.questionCode === 'PT.PAIN.LOCATION');
 
-    const { fieldValue } = await service.decide(target!.id, CLINICIAN, { kind: 'reject' });
+    const { fieldValue } = await scoped((tx) => service.decide(tx, target!.id, CLINICIAN, { kind: 'reject' });
     expect(fieldValue).toBeNull();
 
     const values = await prisma.fieldValue.findMany({
@@ -176,7 +185,7 @@ describe('proposal loop (integration)', () => {
   });
 
   maybe()('a later value supersedes rather than overwrites', async () => {
-    await service.setManualValue({
+    await scoped((tx) => service.setManualValue(tx, {
       agencyId: AGENCY,
       formInstanceId,
       questionCode: 'PT.PLAN.FREQUENCY',
@@ -184,7 +193,7 @@ describe('proposal loop (integration)', () => {
       clinicianId: CLINICIAN,
     });
 
-    await service.setManualValue({
+    await scoped((tx) => service.setManualValue(tx, {
       agencyId: AGENCY,
       formInstanceId,
       questionCode: 'PT.PLAN.FREQUENCY',
@@ -198,7 +207,7 @@ describe('proposal loop (integration)', () => {
     expect(all).toHaveLength(2);
 
     // The chart reads only the newest; the prior value survives underneath it.
-    const current = await service.currentValues(formInstanceId);
+    const current = await scoped((tx) => service.currentValues(tx, formInstanceId));
     const freq = current.filter((v) => v.questionCode === 'PT.PLAN.FREQUENCY');
     expect(freq).toHaveLength(1);
     expect(freq[0]?.value).toBe('3x/week for 4 weeks');
@@ -220,7 +229,7 @@ describe('proposal loop (integration)', () => {
 
 describe('form rules bind the clinician too (integration)', () => {
   maybe()('rejects an edit that is not a legal option code', async () => {
-    await service.recordRun({
+    await scoped((tx) => service.recordRun(tx, {
       agencyId: AGENCY,
       formInstanceId,
       result: run([
@@ -231,14 +240,16 @@ describe('form rules bind the clinician too (integration)', () => {
           evidence: [{ transcriptId: 's9', quote: 'standing nearby with no hands on' }],
         },
       ]),
-    });
+    }));
 
-    const surfaced = await service.surfacedFor(formInstanceId);
+    const surfaced = await scoped((tx) => service.surfacedFor(tx, formInstanceId));
     const target = surfaced.find((p) => p.questionCode === 'PT.GAIT.ASSIST_LEVEL');
 
     // The exact string that slipped through before validation existed.
     await expect(
-      service.decide(target!.id, CLINICIAN, { kind: 'edit', value: 'CLINICIAN CORRECTED VALUE' })
+      scoped((tx) =>
+        service.decide(tx, target!.id, CLINICIAN, { kind: 'edit', value: 'CLINICIAN CORRECTED VALUE' })
+      )
     ).rejects.toThrow(ValueRejectedError);
 
     // And the proposal is untouched, so it can still be decided properly.
@@ -246,31 +257,37 @@ describe('form rules bind the clinician too (integration)', () => {
     expect(after?.status).toBe('SURFACED');
 
     // A legal edit still works.
-    const ok = await service.decide(target!.id, CLINICIAN, { kind: 'edit', value: 'setup' });
+    const ok = await scoped((tx) =>
+      service.decide(tx, target!.id, CLINICIAN, { kind: 'edit', value: 'setup' })
+    );
     expect(ok.fieldValue?.value).toBe('setup');
   });
 
   maybe()('rejects a hand-typed value that breaks the form rules', async () => {
     await expect(
-      service.setManualValue({
-        agencyId: AGENCY,
-        formInstanceId,
-        questionCode: 'PT.PAIN.CURRENT',
-        value: 99,
-        clinicianId: CLINICIAN,
-      })
+      scoped((tx) =>
+        service.setManualValue(tx, {
+          agencyId: AGENCY,
+          formInstanceId,
+          questionCode: 'PT.PAIN.CURRENT',
+          value: 99,
+          clinicianId: CLINICIAN,
+        })
+      )
     ).rejects.toThrow(ValueRejectedError);
   });
 
   maybe()('still allows a value for a question the registry does not govern', async () => {
     // OASIS items share the canonical store before their definitions land.
-    const v = await service.setManualValue({
-      agencyId: AGENCY,
-      formInstanceId,
-      questionCode: 'OASIS.M1800',
-      value: '02',
-      clinicianId: CLINICIAN,
-    });
+    const v = await scoped((tx) =>
+      service.setManualValue(tx, {
+        agencyId: AGENCY,
+        formInstanceId,
+        questionCode: 'OASIS.M1800',
+        value: '02',
+        clinicianId: CLINICIAN,
+      })
+    );
     expect(v.value).toBe('02');
   });
 });

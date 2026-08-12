@@ -67,7 +67,6 @@ CREATE POLICY tenant_isolation ON validation_findings
       AND f."agencyId" = current_setting('app.current_agency_id', true)
   ));
 
--- The subquery policies read the parent on every row; without these the
--- planner falls back to sequential scans on large charts.
-CREATE INDEX IF NOT EXISTS evidence_proposal_idx ON evidence("proposalId");
-CREATE INDEX IF NOT EXISTS validation_findings_form_idx ON validation_findings("formInstanceId");
+-- No extra indexes needed for the subquery policies: Prisma already declares
+-- evidence(proposalId) and validation_findings(formInstanceId, severity), and
+-- the planner uses both.

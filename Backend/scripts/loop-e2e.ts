@@ -42,7 +42,7 @@ async function main() {
   // ---- a real clinician, because the middleware loads the user -----------
   const user = await prisma.user.upsert({
     where: { email: EMAIL },
-    update: { status: UserStatus.ACTIVE, role: UserRole.THERAPIST_PT },
+    update: { status: UserStatus.ACTIVE, role: UserRole.THERAPIST_PT, agencyId: AGENCY },
     create: {
       email: EMAIL,
       passwordHash: 'not-used-in-this-test',
@@ -50,6 +50,7 @@ async function main() {
       lastName: 'Reyes',
       role: UserRole.THERAPIST_PT,
       status: UserStatus.ACTIVE,
+      agencyId: AGENCY,
     },
   });
 
@@ -72,8 +73,8 @@ async function main() {
   };
 
   step('1. open a PT evaluation');
+  // No agencyId in the body any more: the server takes it from the session.
   const created = await api('POST', '/api/forms', {
-    agencyId: AGENCY,
     patientId: 'e2e-patient',
     formCode: 'PT_EVAL_V1',
   });
@@ -159,7 +160,7 @@ async function main() {
   console.log(`   every AGENT value (${agentValues.length}) links back to its proposal`);
 
   step('8. per-field quality');
-  const quality = await api('GET', `/api/forms/quality?agencyId=${AGENCY}`);
+  const quality = await api('GET', '/api/forms/quality');
   assert(quality.status === 200, `quality failed: ${quality.status}`);
   for (const r of quality.json.rows as any[]) {
     console.log(`   ${r.questionCode.padEnd(32)} ${r.status.padEnd(10)} n=${r._count._all}`);

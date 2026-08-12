@@ -1,17 +1,22 @@
 /**
  * HTTP surface for the proposal loop.
  *
- * Tenancy note: User carries no agencyId in this schema, so every handler
- * derives the agency from the FormInstance it is operating on rather than
- * trusting anything the client sends. That is safe for these operations, but it
- * is not multi-tenancy — a user from agency A can still address a form in
- * agency B if they learn its id. Closing that needs agencyId on User plus
- * Postgres row-level security; see the note in docs/ai-emr-architecture.html.
+ * Every handler runs inside withTenant(), so row-level security filters each
+ * query in Postgres rather than in application code. Two consequences worth
+ * knowing:
+ *
+ *   The tenant comes from the authenticated user, never from the request. A
+ *   client that could name its own agency could read any agency.
+ *
+ *   Outside a tenant scope the policies return nothing, so a handler that
+ *   forgets withTenant yields an obvious empty result rather than a leak. That
+ *   is deliberate: the failure is visible and safe.
  */
 import { Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 
 import prisma from '../config/prisma';
+import { withTenant, TenantScopeError } from '../config/tenancy';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { ProposalService, ValueRejectedError } from '../services/proposals/proposal.service';
 import { ScribeAgent, TranscriptSegment } from '../services/agents/scribe.agent';
@@ -19,25 +24,58 @@ import { getForm, listForms } from '../domain/canonical/forms/registry';
 import { InvalidTransitionError } from '../domain/proposals/stateMachine';
 import { ProposalDecision } from '../domain/proposals/types';
 
-const service = new ProposalService(prisma);
+const service = new ProposalService();
 
-function requireUser(req: AuthenticatedRequest, res: Response): string | null {
-  const id = req.user?.id;
-  if (!id) {
+interface Caller {
+  clinicianId: string;
+  agencyId: string;
+}
+
+/**
+ * The caller's identity and tenant, or null having already answered.
+ *
+ * A user with no agency cannot reach patient data at all: there is no tenant to
+ * scope them to, and defaulting to any agency would be the exact leak the
+ * policies exist to prevent.
+ */
+function caller(req: AuthenticatedRequest, res: Response): Caller | null {
+  const user = req.user;
+  if (!user) {
     res.status(401).json({ error: 'Authentication required' });
     return null;
   }
-  return id;
+  if (!user.agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so patient data is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return { clinicianId: user.id, agencyId: user.agencyId };
+}
+
+/** Map the domain errors onto status codes, once. */
+function handle(error: unknown, res: Response): Response {
+  if (error instanceof InvalidTransitionError) {
+    return res.status(409).json({ error: error.message });
+  }
+  if (error instanceof ValueRejectedError) {
+    return res.status(422).json({ error: error.message, questionCode: error.questionCode });
+  }
+  if (error instanceof TenantScopeError) {
+    return res.status(400).json({ error: error.message });
+  }
+  throw error;
 }
 
 /** POST /api/forms — open a form for a visit. */
 export async function createFormInstance(req: AuthenticatedRequest, res: Response) {
-  const clinicianId = requireUser(req, res);
-  if (!clinicianId) return;
+  const who = caller(req, res);
+  if (!who) return;
 
-  const { agencyId, patientId, visitId, formCode } = req.body ?? {};
-  if (!agencyId || !patientId || !formCode) {
-    return res.status(400).json({ error: 'agencyId, patientId and formCode are required' });
+  const { patientId, visitId, formCode } = req.body ?? {};
+  if (!patientId || !formCode) {
+    return res.status(400).json({ error: 'patientId and formCode are required' });
   }
 
   const definition = getForm(formCode);
@@ -45,40 +83,47 @@ export async function createFormInstance(req: AuthenticatedRequest, res: Respons
     return res.status(404).json({ error: `Unknown form ${formCode}`, available: listForms() });
   }
 
-  const form = await prisma.formInstance.create({
-    data: {
-      agencyId,
-      patientId,
-      visitId: visitId ?? null,
-      clinicianId,
-      formCode: definition.id,
-      formVersion: definition.version,
-      discipline: definition.discipline,
-    },
-  });
+  const form = await withTenant(prisma, who.agencyId, (tx) =>
+    tx.formInstance.create({
+      data: {
+        // From the session, not the body. RLS would refuse anything else.
+        agencyId: who.agencyId,
+        patientId,
+        visitId: visitId ?? null,
+        clinicianId: who.clinicianId,
+        formCode: definition.id,
+        formVersion: definition.version,
+        discipline: definition.discipline,
+      },
+    })
+  );
 
   return res.status(201).json({ form, definition });
 }
 
 /** GET /api/forms/:id — the form, its current values, and anything awaiting review. */
 export async function getFormInstance(req: AuthenticatedRequest, res: Response) {
-  if (!requireUser(req, res)) return;
+  const who = caller(req, res);
+  if (!who) return;
 
   const id = req.params['id'] as string;
-  const form = await prisma.formInstance.findUnique({ where: { id } });
-  if (!form) return res.status(404).json({ error: 'Form instance not found' });
 
-  const [values, pending] = await Promise.all([
-    service.currentValues(id),
-    service.surfacedFor(id),
-  ]);
+  const result = await withTenant(prisma, who.agencyId, async (tx) => {
+    const form = await tx.formInstance.findUnique({ where: { id } });
+    if (!form) return null;
 
-  return res.json({
-    form,
-    definition: getForm(form.formCode) ?? null,
-    values,
-    pendingProposals: pending,
+    const [values, pendingProposals] = await Promise.all([
+      service.currentValues(tx, id),
+      service.surfacedFor(tx, id),
+    ]);
+    return { form, values, pendingProposals };
   });
+
+  // Another agency's form is indistinguishable from one that does not exist,
+  // which is the correct answer to give.
+  if (!result) return res.status(404).json({ error: 'Form instance not found' });
+
+  return res.json({ ...result, definition: getForm(result.form.formCode) ?? null });
 }
 
 /**
@@ -89,7 +134,8 @@ export async function getFormInstance(req: AuthenticatedRequest, res: Response) 
  * reaches a clinician.
  */
 export async function runScribe(req: AuthenticatedRequest, res: Response) {
-  if (!requireUser(req, res)) return;
+  const who = caller(req, res);
+  if (!who) return;
 
   const id = req.params['id'] as string;
   const segments = req.body?.segments as TranscriptSegment[] | undefined;
@@ -101,7 +147,9 @@ export async function runScribe(req: AuthenticatedRequest, res: Response) {
     return res.status(400).json({ error: 'each segment needs an id and text' });
   }
 
-  const form = await prisma.formInstance.findUnique({ where: { id } });
+  const form = await withTenant(prisma, who.agencyId, (tx) =>
+    tx.formInstance.findUnique({ where: { id } })
+  );
   if (!form) return res.status(404).json({ error: 'Form instance not found' });
   if (form.status !== 'in_progress') {
     return res.status(409).json({ error: `Form is ${form.status}; nothing further can be proposed` });
@@ -113,23 +161,12 @@ export async function runScribe(req: AuthenticatedRequest, res: Response) {
   const apiKey = process.env['ANTHROPIC_API_KEY'];
   if (!apiKey) return res.status(503).json({ error: 'Scribe unavailable: ANTHROPIC_API_KEY is not configured' });
 
+  // The model call sits outside the transaction on purpose: it takes seconds,
+  // and holding a database transaction open for it would exhaust the pool.
+  let result;
   try {
     const agent = new ScribeAgent(new Anthropic({ apiKey }));
-    const result = await agent.run({ form: definition, segments });
-
-    // agencyId comes from the record, never the request body.
-    const outcome = await service.recordRun({
-      agencyId: form.agencyId,
-      formInstanceId: id,
-      result,
-    });
-
-    return res.json({
-      ...outcome,
-      modelId: result.modelId,
-      promptVersion: result.promptVersion,
-      latencyMs: result.latencyMs,
-    });
+    result = await agent.run({ form: definition, segments });
   } catch (error) {
     // A scribe failure must never block documentation — the clinician types.
     return res.status(502).json({
@@ -137,19 +174,35 @@ export async function runScribe(req: AuthenticatedRequest, res: Response) {
       detail: error instanceof Error ? error.message : String(error),
     });
   }
+
+  const outcome = await withTenant(prisma, who.agencyId, (tx) =>
+    service.recordRun(tx, { agencyId: who.agencyId, formInstanceId: id, result })
+  );
+
+  return res.json({
+    ...outcome,
+    modelId: result.modelId,
+    promptVersion: result.promptVersion,
+    latencyMs: result.latencyMs,
+  });
 }
 
 /** GET /api/forms/:id/proposals — what is awaiting a decision. */
 export async function listProposals(req: AuthenticatedRequest, res: Response) {
-  if (!requireUser(req, res)) return;
+  const who = caller(req, res);
+  if (!who) return;
+
   const id = req.params['id'] as string;
-  return res.json({ proposals: await service.surfacedFor(id) });
+  const proposals = await withTenant(prisma, who.agencyId, (tx) =>
+    service.surfacedFor(tx, id)
+  );
+  return res.json({ proposals });
 }
 
 /** POST /api/proposals/:id/decide — accept, edit or reject. */
 export async function decideProposal(req: AuthenticatedRequest, res: Response) {
-  const clinicianId = requireUser(req, res);
-  if (!clinicianId) return;
+  const who = caller(req, res);
+  if (!who) return;
 
   const id = req.params['id'] as string;
   const { action, value } = req.body ?? {};
@@ -165,67 +218,71 @@ export async function decideProposal(req: AuthenticatedRequest, res: Response) {
   }
 
   try {
-    const result = await service.decide(id, clinicianId, decision);
+    const result = await withTenant(prisma, who.agencyId, (tx) =>
+      service.decide(tx, id, who.clinicianId, decision)
+    );
     return res.json(result);
   } catch (error) {
-    if (error instanceof InvalidTransitionError) {
-      // Already decided, or never surfaced. A conflict, not a server fault.
-      return res.status(409).json({ error: error.message });
+    // findUniqueOrThrow on a proposal belonging to another agency: RLS hides
+    // the row, so it reads as missing rather than forbidden.
+    if (error instanceof Error && error.message.includes('No Proposal found')) {
+      return res.status(404).json({ error: 'Proposal not found' });
     }
-    if (error instanceof ValueRejectedError) {
-      // The clinician's edit broke the form's own rules.
-      return res.status(422).json({ error: error.message, questionCode: error.questionCode });
-    }
-    throw error;
+    return handle(error, res);
   }
 }
 
 /** PUT /api/forms/:id/values/:questionCode — a value the clinician typed. */
 export async function setValue(req: AuthenticatedRequest, res: Response) {
-  const clinicianId = requireUser(req, res);
-  if (!clinicianId) return;
+  const who = caller(req, res);
+  if (!who) return;
 
   const id = req.params['id'] as string;
   const questionCode = req.params['questionCode'] as string;
   const { value } = req.body ?? {};
   if (value === undefined) return res.status(400).json({ error: 'value is required' });
 
-  const form = await prisma.formInstance.findUnique({ where: { id } });
-  if (!form) return res.status(404).json({ error: 'Form instance not found' });
-  if (form.status === 'signed' || form.status === 'locked') {
-    return res.status(409).json({ error: `Form is ${form.status} and cannot be edited` });
-  }
-
   try {
-    const fieldValue = await service.setManualValue({
-      agencyId: form.agencyId,
-      formInstanceId: id,
-      questionCode,
-      value,
-      clinicianId,
+    const outcome = await withTenant(prisma, who.agencyId, async (tx) => {
+      const form = await tx.formInstance.findUnique({ where: { id } });
+      if (!form) return { notFound: true as const };
+      if (form.status === 'signed' || form.status === 'locked') {
+        return { locked: form.status };
+      }
+
+      const fieldValue = await service.setManualValue(tx, {
+        agencyId: who.agencyId,
+        formInstanceId: id,
+        questionCode,
+        value,
+        clinicianId: who.clinicianId,
+      });
+      return { fieldValue };
     });
-    return res.status(201).json({ fieldValue });
-  } catch (error) {
-    if (error instanceof ValueRejectedError) {
-      return res.status(422).json({ error: error.message, questionCode: error.questionCode });
+
+    if ('notFound' in outcome) return res.status(404).json({ error: 'Form instance not found' });
+    if ('locked' in outcome) {
+      return res.status(409).json({ error: `Form is ${outcome.locked} and cannot be edited` });
     }
-    throw error;
+    return res.status(201).json(outcome);
+  } catch (error) {
+    return handle(error, res);
   }
 }
 
 /**
- * GET /api/forms/quality?agencyId=…
+ * GET /api/forms/quality
  *
- * Per-field acceptance and mean edit distance. This is the evaluation set that
- * ordinary use produces, and the input to deciding whether an agent should stop
- * proposing on a field.
+ * Per-field acceptance and mean edit distance for the caller's own agency —
+ * the evaluation set that ordinary use produces.
  */
 export async function fieldQuality(req: AuthenticatedRequest, res: Response) {
-  if (!requireUser(req, res)) return;
-
-  const agencyId = req.query['agencyId'] as string | undefined;
-  if (!agencyId) return res.status(400).json({ error: 'agencyId is required' });
+  const who = caller(req, res);
+  if (!who) return;
 
   const since = req.query['since'] ? new Date(req.query['since'] as string) : undefined;
-  return res.json({ rows: await service.qualityByField(agencyId, since) });
+  const rows = await withTenant(prisma, who.agencyId, (tx) =>
+    service.qualityByField(tx, who.agencyId, since)
+  );
+  return res.json({ rows });
 }

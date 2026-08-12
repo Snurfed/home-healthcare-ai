@@ -243,6 +243,10 @@ enum SoapNoteStatus {
 model User {
   id                String     @id @default(uuid())
   email             String     @unique
+  /// The agency this user belongs to. Nullable only so existing rows survive
+  /// the migration; every tenant-scoped request requires it, and a user
+  /// without one cannot reach patient data.
+  agencyId          String?
   passwordHash      String
   firstName         String
   lastName          String
@@ -295,6 +299,7 @@ model User {
   reviewedSoapNotes  SoapNote[] @relation("SoapNoteReviewer")
   finalizedSoapNotes SoapNote[] @relation("SoapNoteFinalizer")
 
+  @@index([agencyId])
   @@index([email])
   @@index([role])
   @@index([status])

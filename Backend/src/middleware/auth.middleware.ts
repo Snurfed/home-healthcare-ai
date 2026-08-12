@@ -7,7 +7,17 @@ import prisma from '../config/prisma';
 // CONFIGURATION
 // ===========================================
 
-const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'your-access-secret-min-32-chars';
+// JWT secret must be set via environment variable
+// This will be validated at startup by validateEnv.ts
+const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
+
+if (!JWT_ACCESS_SECRET) {
+  throw new Error(
+    'CRITICAL: JWT_ACCESS_SECRET environment variable is not set. ' +
+    'This is required for secure authentication. ' +
+    'Set JWT_ACCESS_SECRET to a secure random string of at least 32 characters.'
+  );
+}
 
 // ===========================================
 // TYPE DEFINITIONS
@@ -31,6 +41,13 @@ export interface AuthenticatedUser {
   status: UserStatus;
   firstName: string;
   lastName: string;
+  /**
+   * The tenant every scoped query runs under. Comes from the user record, never
+   * from the request — a client that could name its own agency could read any
+   * agency. Null only for legacy accounts created before tenancy existed; those
+   * cannot reach patient data.
+   */
+  agencyId: string | null;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -117,6 +134,7 @@ export async function authenticate(
         status: true,
         firstName: true,
         lastName: true,
+        agencyId: true,
         deletedAt: true,
         passwordChangedAt: true,
       },
@@ -177,6 +195,7 @@ export async function authenticate(
       status: user.status,
       firstName: user.firstName,
       lastName: user.lastName,
+      agencyId: user.agencyId,
     };
 
     req.token = token;
@@ -229,6 +248,7 @@ export async function optionalAuthenticate(
           status: true,
           firstName: true,
           lastName: true,
+          agencyId: true,
           deletedAt: true,
         },
       });
@@ -241,6 +261,7 @@ export async function optionalAuthenticate(
           status: user.status,
           firstName: user.firstName,
           lastName: user.lastName,
+          agencyId: user.agencyId,
         };
         req.token = token;
       }
