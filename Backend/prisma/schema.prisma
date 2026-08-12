@@ -241,59 +241,59 @@ enum SoapNoteStatus {
 // ===========================================
 
 model User {
-  id                    String       @id @default(uuid())
-  email                 String       @unique
-  passwordHash          String
-  firstName             String
-  lastName              String
-  middleName            String?
-  phone                 String?
-  role                  UserRole     @default(NURSE)
-  status                UserStatus   @default(PENDING_VERIFICATION)
-  licenseNumber         String?
-  licenseState          String?
-  licenseExpiration     DateTime?
-  npiNumber             String?
-  profileImageUrl       String?
+  id                String     @id @default(uuid())
+  email             String     @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  middleName        String?
+  phone             String?
+  role              UserRole   @default(NURSE)
+  status            UserStatus @default(PENDING_VERIFICATION)
+  licenseNumber     String?
+  licenseState      String?
+  licenseExpiration DateTime?
+  npiNumber         String?
+  profileImageUrl   String?
 
   // Security
-  failedLoginAttempts   Int          @default(0)
-  lockedUntil           DateTime?
-  lastLoginAt           DateTime?
-  lastLoginIp           String?
-  passwordChangedAt     DateTime     @default(now())
-  mustChangePassword    Boolean      @default(false)
-  twoFactorEnabled      Boolean      @default(false)
-  twoFactorSecret       String?
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  lastLoginIp         String?
+  passwordChangedAt   DateTime  @default(now())
+  mustChangePassword  Boolean   @default(false)
+  twoFactorEnabled    Boolean   @default(false)
+  twoFactorSecret     String?
 
   // Audit fields
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  deletedAt             DateTime?
-  createdBy             String?
-  updatedBy             String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
 
   // Relationships
-  refreshTokens         RefreshToken[]
-  assignedPatients      PatientAssignment[]
-  createdPatients       Patient[]            @relation("PatientCreatedBy")
-  updatedPatients       Patient[]            @relation("PatientUpdatedBy")
-  visits                Visit[]              @relation("VisitClinician")
-  supervisedVisits      Visit[]              @relation("VisitSupervisor")
-  assessments           OasisAssessment[]    @relation("AssessmentClinician")
-  reviewedAssessments   OasisAssessment[]    @relation("AssessmentReviewer")
-  approvedAssessments   OasisAssessment[]    @relation("AssessmentApprover")
-  uploadedDocuments     Document[]           @relation("DocumentUploader")
-  transcriptions        VoiceTranscription[]
-  auditLogs             AuditLog[]
+  refreshTokens       RefreshToken[]
+  assignedPatients    PatientAssignment[]
+  createdPatients     Patient[]            @relation("PatientCreatedBy")
+  updatedPatients     Patient[]            @relation("PatientUpdatedBy")
+  visits              Visit[]              @relation("VisitClinician")
+  supervisedVisits    Visit[]              @relation("VisitSupervisor")
+  assessments         OasisAssessment[]    @relation("AssessmentClinician")
+  reviewedAssessments OasisAssessment[]    @relation("AssessmentReviewer")
+  approvedAssessments OasisAssessment[]    @relation("AssessmentApprover")
+  uploadedDocuments   Document[]           @relation("DocumentUploader")
+  transcriptions      VoiceTranscription[]
+  auditLogs           AuditLog[]
 
   // Referral Documents
-  uploadedReferrals     ReferralDocument[]   @relation("ReferralUploader")
+  uploadedReferrals ReferralDocument[] @relation("ReferralUploader")
 
   // SOAP Notes
-  generatedSoapNotes    SoapNote[]           @relation("SoapNoteGenerator")
-  reviewedSoapNotes     SoapNote[]           @relation("SoapNoteReviewer")
-  finalizedSoapNotes    SoapNote[]           @relation("SoapNoteFinalizer")
+  generatedSoapNotes SoapNote[] @relation("SoapNoteGenerator")
+  reviewedSoapNotes  SoapNote[] @relation("SoapNoteReviewer")
+  finalizedSoapNotes SoapNote[] @relation("SoapNoteFinalizer")
 
   @@index([email])
   @@index([role])
@@ -303,16 +303,16 @@ model User {
 }
 
 model RefreshToken {
-  id          String    @id @default(uuid())
-  token       String    @unique
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt   DateTime
-  isRevoked   Boolean   @default(false)
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  userAgent   String?
-  ipAddress   String?
+  id        String    @id @default(uuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  isRevoked Boolean   @default(false)
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  userAgent String?
+  ipAddress String?
 
   @@index([userId])
   @@index([token])
@@ -325,41 +325,41 @@ model RefreshToken {
 // ===========================================
 
 model Patient {
-  id                    String        @id @default(uuid())
-  mrn                   String        @unique  // Medical Record Number
+  id  String @id @default(uuid())
+  mrn String @unique // Medical Record Number
 
   // Demographics
-  firstName             String
-  lastName              String
-  middleName            String?
-  preferredName         String?
-  dateOfBirth           DateTime
-  gender                Gender
-  ssnEncrypted          String?       // Last 4 digits, encrypted
-  maritalStatus         MaritalStatus?
-  preferredLanguage     String        @default("English")
-  ethnicity             String?
-  race                  String?
-  religion              String?
+  firstName         String
+  lastName          String
+  middleName        String?
+  preferredName     String?
+  dateOfBirth       DateTime
+  gender            Gender
+  ssnEncrypted      String? // Last 4 digits, encrypted
+  maritalStatus     MaritalStatus?
+  preferredLanguage String         @default("English")
+  ethnicity         String?
+  race              String?
+  religion          String?
 
   // Contact Information
-  addressStreet1        String
-  addressStreet2        String?
-  addressCity           String
-  addressState          String
-  addressZipCode        String
-  addressCounty         String?
-  phoneHome             String?
-  phoneMobile           String
-  phoneWork             String?
-  email                 String?
-  preferredContactMethod String       @default("phone")
+  addressStreet1         String
+  addressStreet2         String?
+  addressCity            String
+  addressState           String
+  addressZipCode         String
+  addressCounty          String?
+  phoneHome              String?
+  phoneMobile            String
+  phoneWork              String?
+  email                  String?
+  preferredContactMethod String  @default("phone")
 
   // Status
-  status                PatientStatus @default(PENDING)
-  admissionDate         DateTime?
-  dischargeDate         DateTime?
-  dischargeReason       String?
+  status          PatientStatus @default(PENDING)
+  admissionDate   DateTime?
+  dischargeDate   DateTime?
+  dischargeReason String?
 
   // Medical Info
   primaryPhysicianName  String?
@@ -367,32 +367,32 @@ model Patient {
   primaryPhysicianPhone String?
   primaryPhysicianFax   String?
   allergies             String[]
-  dnrStatus             Boolean       @default(false)
+  dnrStatus             Boolean  @default(false)
   advanceDirectives     String?
 
   // Audit fields
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  deletedAt             DateTime?
-  createdById           String?
-  updatedById           String?
-  createdBy             User?         @relation("PatientCreatedBy", fields: [createdById], references: [id])
-  updatedBy             User?         @relation("PatientUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String?
+  updatedById String?
+  createdBy   User?     @relation("PatientCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?     @relation("PatientUpdatedBy", fields: [updatedById], references: [id])
 
   // Relationships
-  emergencyContacts     EmergencyContact[]
-  insurances            Insurance[]
-  carePlans             CarePlan[]
-  episodes              Episode[]
-  visits                Visit[]
-  assessments           OasisAssessment[]
-  documents             Document[]
-  transcriptions        VoiceTranscription[]
-  assignments           PatientAssignment[]
-  referralDocuments     ReferralDocument[]
-  soapNotes             SoapNote[]
+  emergencyContacts       EmergencyContact[]
+  insurances              Insurance[]
+  carePlans               CarePlan[]
+  episodes                Episode[]
+  visits                  Visit[]
+  assessments             OasisAssessment[]
+  documents               Document[]
+  transcriptions          VoiceTranscription[]
+  assignments             PatientAssignment[]
+  referralDocuments       ReferralDocument[]
+  soapNotes               SoapNote[]
   physicianCommunications PhysicianCommunication[]
-  emrLink               EmrPatientLink?
+  emrLink                 EmrPatientLink?
 
   @@index([mrn])
   @@index([lastName, firstName])
@@ -404,29 +404,29 @@ model Patient {
 }
 
 model EmergencyContact {
-  id                    String              @id @default(uuid())
-  patientId             String
-  patient               Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
-  firstName             String
-  lastName              String
-  relationship          ContactRelationship
-  relationshipOther     String?
-  phoneHome             String?
-  phoneMobile           String
-  phoneWork             String?
-  email                 String?
+  firstName         String
+  lastName          String
+  relationship      ContactRelationship
+  relationshipOther String?
+  phoneHome         String?
+  phoneMobile       String
+  phoneWork         String?
+  email             String?
 
-  isPrimaryContact      Boolean             @default(false)
-  hasPowerOfAttorney    Boolean             @default(false)
-  isHealthcareProxy     Boolean             @default(false)
-  canReceivePhiInfo     Boolean             @default(true)
-  notes                 String?
+  isPrimaryContact   Boolean @default(false)
+  hasPowerOfAttorney Boolean @default(false)
+  isHealthcareProxy  Boolean @default(false)
+  canReceivePhiInfo  Boolean @default(true)
+  notes              String?
 
   // Audit fields
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  deletedAt             DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([patientId])
   @@index([isPrimaryContact])
@@ -434,47 +434,47 @@ model EmergencyContact {
 }
 
 model Insurance {
-  id                      String        @id @default(uuid())
-  patientId               String
-  patient                 Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
-  insuranceType           InsuranceType
-  isPrimary               Boolean       @default(false)
-  priority                Int           @default(1)  // 1=Primary, 2=Secondary, etc.
+  insuranceType InsuranceType
+  isPrimary     Boolean       @default(false)
+  priority      Int           @default(1) // 1=Primary, 2=Secondary, etc.
 
-  companyName             String
-  planName                String?
-  policyNumber            String
-  groupNumber             String?
-  subscriberId            String
-  subscriberName          String
-  subscriberRelationship  String        @default("self")
-  subscriberDob           DateTime?
+  companyName            String
+  planName               String?
+  policyNumber           String
+  groupNumber            String?
+  subscriberId           String
+  subscriberName         String
+  subscriberRelationship String    @default("self")
+  subscriberDob          DateTime?
 
-  effectiveDate           DateTime
-  terminationDate         DateTime?
+  effectiveDate   DateTime
+  terminationDate DateTime?
 
-  copay                   Decimal?      @db.Decimal(10, 2)
-  deductible              Decimal?      @db.Decimal(10, 2)
-  coinsurancePercent      Int?
+  copay              Decimal? @db.Decimal(10, 2)
+  deductible         Decimal? @db.Decimal(10, 2)
+  coinsurancePercent Int?
 
-  preAuthRequired         Boolean       @default(false)
-  preAuthNumber           String?
-  preAuthStartDate        DateTime?
-  preAuthEndDate          DateTime?
-  authorizedVisits        Int?
-  usedVisits              Int           @default(0)
+  preAuthRequired  Boolean   @default(false)
+  preAuthNumber    String?
+  preAuthStartDate DateTime?
+  preAuthEndDate   DateTime?
+  authorizedVisits Int?
+  usedVisits       Int       @default(0)
 
-  contactPhone            String?
-  contactFax              String?
-  claimsAddress           String?
+  contactPhone  String?
+  contactFax    String?
+  claimsAddress String?
 
   // Audit fields
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
-  deletedAt               DateTime?
-  verifiedAt              DateTime?
-  verifiedBy              String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  verifiedAt DateTime?
+  verifiedBy String?
 
   @@index([patientId])
   @@index([insuranceType])
@@ -484,20 +484,20 @@ model Insurance {
 }
 
 model PatientAssignment {
-  id          String    @id @default(uuid())
-  patientId   String
-  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  isPrimary   Boolean   @default(false)
-  discipline  VisitType
-  startDate   DateTime  @default(now())
-  endDate     DateTime?
-  notes       String?
+  isPrimary  Boolean   @default(false)
+  discipline VisitType
+  startDate  DateTime  @default(now())
+  endDate    DateTime?
+  notes      String?
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([patientId, userId, discipline])
   @@index([patientId])
@@ -510,33 +510,33 @@ model PatientAssignment {
 // ===========================================
 
 model Episode {
-  id                    String        @id @default(uuid())
-  patientId             String
-  patient               Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
-  episodeNumber         Int
-  startDate             DateTime
-  endDate               DateTime?
+  episodeNumber Int
+  startDate     DateTime
+  endDate       DateTime?
 
-  referralDate          DateTime?
-  referralSource        String?
-  referralDiagnosis     String?
+  referralDate      DateTime?
+  referralSource    String?
+  referralDiagnosis String?
 
   // Certification periods
-  certPeriodStart       DateTime?
-  certPeriodEnd         DateTime?
+  certPeriodStart DateTime?
+  certPeriodEnd   DateTime?
 
-  status                CarePlanStatus @default(DRAFT)
+  status CarePlanStatus @default(DRAFT)
 
   // Audit fields
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
-  deletedAt             DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   // Relationships
-  carePlans             CarePlan[]
-  visits                Visit[]
-  assessments           OasisAssessment[]
+  carePlans               CarePlan[]
+  visits                  Visit[]
+  assessments             OasisAssessment[]
   physicianCommunications PhysicianCommunication[]
 
   @@unique([patientId, episodeNumber])
@@ -547,57 +547,57 @@ model Episode {
 }
 
 model CarePlan {
-  id                    String         @id @default(uuid())
-  patientId             String
-  patient               Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  episodeId             String
-  episode               Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  episodeId String
+  episode   Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
-  status                CarePlanStatus @default(DRAFT)
-  startDate             DateTime
-  endDate               DateTime?
+  status    CarePlanStatus @default(DRAFT)
+  startDate DateTime
+  endDate   DateTime?
 
   // Primary Diagnosis
-  primaryDiagnosisCode  String         // ICD-10
+  primaryDiagnosisCode  String // ICD-10
   primaryDiagnosisDesc  String
   primaryDiagnosisOnset DateTime?
 
   // Secondary Diagnoses (stored as JSON)
-  secondaryDiagnoses    Json?
+  secondaryDiagnoses Json?
 
   // Physician Info
-  attendingPhysicianName    String?
-  attendingPhysicianNpi     String?
-  attendingPhysicianPhone   String?
-  referringPhysicianName    String?
-  referringPhysicianNpi     String?
+  attendingPhysicianName  String?
+  attendingPhysicianNpi   String?
+  attendingPhysicianPhone String?
+  referringPhysicianName  String?
+  referringPhysicianNpi   String?
 
   // Authorized Services (stored as JSON)
-  authorizedServices    Json?
+  authorizedServices Json?
 
   // Goals (stored as JSON)
-  goals                 Json?
+  goals Json?
 
   // Frequencies
-  snFrequency           String?
-  ptFrequency           String?
-  otFrequency           String?
-  stFrequency           String?
-  hhaFrequency          String?
-  mswFrequency          String?
+  snFrequency  String?
+  ptFrequency  String?
+  otFrequency  String?
+  stFrequency  String?
+  hhaFrequency String?
+  mswFrequency String?
 
-  specialInstructions   String?
+  specialInstructions String?
 
   // Approvals
-  physicianSignedAt     DateTime?
-  physicianSignedBy     String?
+  physicianSignedAt DateTime?
+  physicianSignedBy String?
 
   // Audit fields
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
-  deletedAt             DateTime?
-  createdBy             String?
-  updatedBy             String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
 
   @@index([patientId])
   @@index([episodeId])
@@ -610,62 +610,63 @@ model CarePlan {
 // ===========================================
 
 model Visit {
-  id                    String       @id @default(uuid())
-  patientId             String
-  patient               Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  episodeId             String
-  episode               Episode      @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  clinicianId           String
-  clinician             User         @relation("VisitClinician", fields: [clinicianId], references: [id])
-  supervisorId          String?
-  supervisor            User?        @relation("VisitSupervisor", fields: [supervisorId], references: [id])
+  id           String  @id @default(uuid())
+  patientId    String
+  patient      Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  episodeId    String
+  episode      Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  clinicianId  String
+  clinician    User    @relation("VisitClinician", fields: [clinicianId], references: [id])
+  supervisorId String?
+  supervisor   User?   @relation("VisitSupervisor", fields: [supervisorId], references: [id])
 
-  visitType             VisitType
-  status                VisitStatus  @default(SCHEDULED)
+  visitType VisitType
+  status    VisitStatus @default(SCHEDULED)
 
-  scheduledDate         DateTime
-  scheduledStartTime    DateTime?
-  scheduledEndTime      DateTime?
+  scheduledDate      DateTime
+  scheduledStartTime DateTime?
+  scheduledEndTime   DateTime?
 
-  actualStartTime       DateTime?
-  actualEndTime         DateTime?
-  checkInTime           DateTime?
-  checkOutTime          DateTime?
+  actualStartTime DateTime?
+  actualEndTime   DateTime?
+  checkInTime     DateTime?
+  checkOutTime    DateTime?
 
   // Location
-  checkInLatitude       Decimal?     @db.Decimal(10, 8)
-  checkInLongitude      Decimal?     @db.Decimal(11, 8)
-  checkOutLatitude      Decimal?     @db.Decimal(10, 8)
-  checkOutLongitude     Decimal?     @db.Decimal(11, 8)
-  mileage               Decimal?     @db.Decimal(6, 2)
+  checkInLatitude   Decimal? @db.Decimal(10, 8)
+  checkInLongitude  Decimal? @db.Decimal(11, 8)
+  checkOutLatitude  Decimal? @db.Decimal(10, 8)
+  checkOutLongitude Decimal? @db.Decimal(11, 8)
+  mileage           Decimal? @db.Decimal(6, 2)
 
   // Visit Notes
-  visitNotes            String?
-  patientCondition      String?
-  interventions         String?
-  patientResponse       String?
-  planForNextVisit      String?
+  visitNotes       String?
+  patientCondition String?
+  interventions    String?
+  patientResponse  String?
+  planForNextVisit String?
 
   // Vitals (stored as JSON)
-  vitalSigns            Json?
+  vitalSigns Json?
 
   // Signature
-  clinicianSignedAt     DateTime?
-  patientSignedAt       DateTime?
-  patientSignature      String?      // Base64 or URL
+  clinicianSignedAt DateTime?
+  patientSignedAt   DateTime?
+  patientSignature  String? // Base64 or URL
 
-  missedReason          String?
-  cancelledReason       String?
+  missedReason    String?
+  cancelledReason String?
 
   // Audit fields
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  deletedAt             DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   // Relationships
-  assessments           OasisAssessment[]
-  documents             Document[]
-  transcriptions        VoiceTranscription[]
+  assessments    OasisAssessment[]
+  documents      Document[]
+  transcriptions VoiceTranscription[]
+  emrSyncJobs    EmrSyncJob[]
 
   @@index([patientId])
   @@index([episodeId])
@@ -681,63 +682,64 @@ model Visit {
 // ===========================================
 
 model OasisAssessment {
-  id                    String           @id @default(uuid())
-  patientId             String
-  patient               Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  episodeId             String
-  episode               Episode          @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  visitId               String?
-  visit                 Visit?           @relation(fields: [visitId], references: [id])
-  clinicianId           String
-  clinician             User             @relation("AssessmentClinician", fields: [clinicianId], references: [id])
-  reviewerId            String?
-  reviewer              User?            @relation("AssessmentReviewer", fields: [reviewerId], references: [id])
-  approverId            String?
-  approver              User?            @relation("AssessmentApprover", fields: [approverId], references: [id])
+  id          String  @id @default(uuid())
+  patientId   String
+  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  episodeId   String
+  episode     Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  visitId     String?
+  visit       Visit?  @relation(fields: [visitId], references: [id])
+  clinicianId String
+  clinician   User    @relation("AssessmentClinician", fields: [clinicianId], references: [id])
+  reviewerId  String?
+  reviewer    User?   @relation("AssessmentReviewer", fields: [reviewerId], references: [id])
+  approverId  String?
+  approver    User?   @relation("AssessmentApprover", fields: [approverId], references: [id])
 
-  assessmentType        AssessmentType
-  status                AssessmentStatus @default(DRAFT)
+  assessmentType AssessmentType
+  status         AssessmentStatus @default(DRAFT)
 
   // Key Dates
-  m0030_startOfCareDate     DateTime?
+  m0030_startOfCareDate      DateTime?
   m0032_resumptionOfCareDate DateTime?
-  m0090_completionDate      DateTime?
-  m0906_dischargeDate       DateTime?
+  m0090_completionDate       DateTime?
+  m0906_dischargeDate        DateTime?
 
   // Scoring
   hippsCode             String?
   clinicalGrouping      String?
   functionalLevel       String?
   comorbidityAdjustment String?
-  caseMixWeight         Decimal?     @db.Decimal(6, 4)
+  caseMixWeight         Decimal? @db.Decimal(6, 4)
 
   // Completion tracking
-  completionPercentage  Int          @default(0)
+  completionPercentage Int @default(0)
 
   // Voice auto-population
-  voicePopulatedFields  Json?
-  voiceTranscriptionId  String?
+  voicePopulatedFields Json?
+  voiceTranscriptionId String?
 
   // Review workflow
-  submittedAt           DateTime?
-  reviewedAt            DateTime?
-  reviewNotes           String?
-  approvedAt            DateTime?
-  lockedAt              DateTime?
+  submittedAt DateTime?
+  reviewedAt  DateTime?
+  reviewNotes String?
+  approvedAt  DateTime?
+  lockedAt    DateTime?
 
-  correctionReason      String?
-  previousVersionId     String?
-  version               Int          @default(1)
+  correctionReason  String?
+  previousVersionId String?
+  version           Int     @default(1)
 
   // Audit fields
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  deletedAt             DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   // Relationships
-  responses             OasisResponse[]
-  referralDocuments     ReferralDocument[]
-  soapNotes             SoapNote[]
+  responses         OasisResponse[]
+  referralDocuments ReferralDocument[]
+  soapNotes         SoapNote[]
+  emrSyncJobs       EmrSyncJob[]
 
   @@index([patientId])
   @@index([episodeId])
@@ -749,37 +751,37 @@ model OasisAssessment {
 }
 
 model OasisResponse {
-  id                    String          @id @default(uuid())
-  assessmentId          String
-  assessment            OasisAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  id           String          @id @default(uuid())
+  assessmentId String
+  assessment   OasisAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
   // OASIS Item
-  itemCode              String          // e.g., "M1021", "GG0130A"
-  section               String          // e.g., "patient_history", "functional_abilities"
+  itemCode String // e.g., "M1021", "GG0130A"
+  section  String // e.g., "patient_history", "functional_abilities"
 
   // Response
-  responseValue         String?         // The selected/entered value
-  responseCode          String?         // The coded response (e.g., "01", "02")
-  responseText          String?         // Free text response if applicable
-  responseNumeric       Decimal?        @db.Decimal(10, 2)
-  responseDate          DateTime?
-  responseJson          Json?           // Complex responses (e.g., wound measurements)
+  responseValue   String? // The selected/entered value
+  responseCode    String? // The coded response (e.g., "01", "02")
+  responseText    String? // Free text response if applicable
+  responseNumeric Decimal?  @db.Decimal(10, 2)
+  responseDate    DateTime?
+  responseJson    Json? // Complex responses (e.g., wound measurements)
 
   // Confidence & Source (for voice auto-population)
-  confidence            Decimal?        @db.Decimal(3, 2)  // 0.00-1.00
-  sourceType            String?         // "manual", "voice", "ocr", "emr"
+  confidence            Decimal? @db.Decimal(3, 2) // 0.00-1.00
+  sourceType            String? // "manual", "voice", "ocr", "emr"
   sourceTranscriptionId String?
   sourceText            String?
 
   // Validation
-  isValid               Boolean         @default(true)
-  validationErrors      Json?
-  requiresReview        Boolean         @default(false)
-  reviewReason          String?
+  isValid          Boolean @default(true)
+  validationErrors Json?
+  requiresReview   Boolean @default(false)
+  reviewReason     String?
 
   // Audit fields
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([assessmentId, itemCode])
   @@index([assessmentId])
@@ -793,13 +795,13 @@ model OasisResponse {
 // ===========================================
 
 model SuggestionDismissal {
-  id            String   @id @default(uuid())
-  assessmentId  String
-  suggestionId  String   // Format: ruleId-questionCode
-  questionCode  String
-  reason        String   // 'addressed' | 'not_applicable' | 'reviewed'
-  dismissedAt   DateTime @default(now())
-  dismissedBy   String   // User ID who dismissed
+  id           String   @id @default(uuid())
+  assessmentId String
+  suggestionId String // Format: ruleId-questionCode
+  questionCode String
+  reason       String // 'addressed' | 'not_applicable' | 'reviewed'
+  dismissedAt  DateTime @default(now())
+  dismissedBy  String // User ID who dismissed
 
   @@unique([assessmentId, suggestionId])
   @@index([assessmentId])
@@ -811,75 +813,75 @@ model SuggestionDismissal {
 // ===========================================
 
 model Document {
-  id                    String           @id @default(uuid())
-  patientId             String
-  patient               Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  visitId               String?
-  visit                 Visit?           @relation(fields: [visitId], references: [id])
-  uploadedById          String
-  uploadedBy            User             @relation("DocumentUploader", fields: [uploadedById], references: [id])
+  id           String  @id @default(uuid())
+  patientId    String
+  patient      Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visitId      String?
+  visit        Visit?  @relation(fields: [visitId], references: [id])
+  uploadedById String
+  uploadedBy   User    @relation("DocumentUploader", fields: [uploadedById], references: [id])
 
-  category              DocumentCategory
-  title                 String
-  description           String?
+  category    DocumentCategory
+  title       String
+  description String?
 
   // File Info
-  originalFileName      String
-  storedFileName        String
-  mimeType              String
-  fileSize              Int              // bytes
-  fileExtension         String
-  checksum              String           // SHA-256
+  originalFileName String
+  storedFileName   String
+  mimeType         String
+  fileSize         Int // bytes
+  fileExtension    String
+  checksum         String // SHA-256
 
   // Storage
-  storageProvider       String           // "s3", "azure", "gcs", "local"
-  storagePath           String
-  storageUrl            String?
+  storageProvider String // "s3", "azure", "gcs", "local"
+  storagePath     String
+  storageUrl      String?
 
   // Image dimensions (if applicable)
-  imageWidth            Int?
-  imageHeight           Int?
+  imageWidth  Int?
+  imageHeight Int?
 
   // PHI & Encryption
-  phiLevel              PHILevel         @default(MEDIUM)
-  isEncrypted           Boolean          @default(true)
-  encryptionKeyId       String?
+  phiLevel        PHILevel @default(MEDIUM)
+  isEncrypted     Boolean  @default(true)
+  encryptionKeyId String?
 
   // Status
-  status                DocumentStatus   @default(ACTIVE)
-  reviewStatus          ReviewStatus     @default(PENDING_REVIEW)
-  reviewedById          String?
-  reviewedAt            DateTime?
-  reviewNotes           String?
+  status       DocumentStatus @default(ACTIVE)
+  reviewStatus ReviewStatus   @default(PENDING_REVIEW)
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNotes  String?
 
   // Dates
-  effectiveDate         DateTime?
-  expirationDate        DateTime?
+  effectiveDate  DateTime?
+  expirationDate DateTime?
 
   // Signatures
-  signatureRequired     Boolean          @default(false)
-  signatures            Json?            // Array of signature info
+  signatureRequired Boolean @default(false)
+  signatures        Json? // Array of signature info
 
   // OCR
-  ocrProcessed          Boolean          @default(false)
-  ocrProcessedAt        DateTime?
-  ocrText               String?
-  ocrConfidence         Decimal?         @db.Decimal(3, 2)
-  ocrExtractedData      Json?
+  ocrProcessed     Boolean   @default(false)
+  ocrProcessedAt   DateTime?
+  ocrText          String?
+  ocrConfidence    Decimal?  @db.Decimal(3, 2)
+  ocrExtractedData Json?
 
   // Versioning
-  version               Int              @default(1)
-  previousVersionId     String?
+  version           Int     @default(1)
+  previousVersionId String?
 
   // Tags
-  tags                  String[]
+  tags String[]
 
   // Audit fields
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
-  deletedAt             DateTime?
-  deletedBy             String?
-  deletionReason        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  deletedBy      String?
+  deletionReason String?
 
   @@index([patientId])
   @@index([visitId])
@@ -896,44 +898,44 @@ model Document {
 // ===========================================
 
 model ReferralDocument {
-  id                    String               @id @default(uuid())
-  patientId             String
-  patient               Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  assessmentId          String?
-  assessment            OasisAssessment?     @relation(fields: [assessmentId], references: [id])
+  id           String           @id @default(uuid())
+  patientId    String
+  patient      Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  assessmentId String?
+  assessment   OasisAssessment? @relation(fields: [assessmentId], references: [id])
 
   // File Information
-  fileName              String
-  fileType              String               // pdf, docx, jpg, png, tiff
-  fileUrl               String               // Storage path
-  fileSize              Int?                 // bytes
-  checksum              String?              // SHA-256
+  fileName String
+  fileType String // pdf, docx, jpg, png, tiff
+  fileUrl  String // Storage path
+  fileSize Int? // bytes
+  checksum String? // SHA-256
 
   // Upload Information
-  uploadedById          String
-  uploadedBy            User                 @relation("ReferralUploader", fields: [uploadedById], references: [id])
-  uploadedAt            DateTime             @default(now())
+  uploadedById String
+  uploadedBy   User     @relation("ReferralUploader", fields: [uploadedById], references: [id])
+  uploadedAt   DateTime @default(now())
 
   // Document Classification
-  documentType          ReferralDocumentType @default(REFERRAL)
-  title                 String?
-  description           String?
+  documentType ReferralDocumentType @default(REFERRAL)
+  title        String?
+  description  String?
 
   // Extraction Processing
-  extractionStatus      ExtractionStatus     @default(PENDING)
-  extractedData         Json?                // All extracted fields mapped to OASIS codes
-  rawText               String?              // Full OCR/extracted text from document
-  extractionError       String?              // Error message if extraction failed
-  extractedAt           DateTime?
+  extractionStatus ExtractionStatus @default(PENDING)
+  extractedData    Json? // All extracted fields mapped to OASIS codes
+  rawText          String? // Full OCR/extracted text from document
+  extractionError  String? // Error message if extraction failed
+  extractedAt      DateTime?
 
   // PHI & Security
-  phiLevel              PHILevel             @default(HIGH)
-  isEncrypted           Boolean              @default(true)
+  phiLevel    PHILevel @default(HIGH)
+  isEncrypted Boolean  @default(true)
 
   // Audit fields
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
-  deletedAt             DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([patientId])
   @@index([assessmentId])
@@ -949,51 +951,51 @@ model ReferralDocument {
 // ===========================================
 
 model SoapNote {
-  id                    String           @id @default(uuid())
-  assessmentId          String
-  assessment            OasisAssessment  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  patientId             String
-  patient               Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id           String          @id @default(uuid())
+  assessmentId String
+  assessment   OasisAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  patientId    String
+  patient      Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   // SOAP Content
-  subjective            String?          // Subjective - patient's symptoms, concerns
-  objective             String?          // Objective - measurable findings
-  assessmentContent     String?          @map("assessment_content") // Assessment - diagnosis/analysis
-  plan                  String?          // Plan - treatment plan
+  subjective        String? // Subjective - patient's symptoms, concerns
+  objective         String? // Objective - measurable findings
+  assessmentContent String? @map("assessment_content") // Assessment - diagnosis/analysis
+  plan              String? // Plan - treatment plan
 
   // Workflow
-  status                SoapNoteStatus   @default(DRAFT)
+  status SoapNoteStatus @default(DRAFT)
 
   // Generation
-  generatedById         String
-  generatedBy           User             @relation("SoapNoteGenerator", fields: [generatedById], references: [id])
-  generatedAt           DateTime         @default(now())
+  generatedById String
+  generatedBy   User     @relation("SoapNoteGenerator", fields: [generatedById], references: [id])
+  generatedAt   DateTime @default(now())
 
   // Review
-  reviewedById          String?
-  reviewedBy            User?            @relation("SoapNoteReviewer", fields: [reviewedById], references: [id])
-  reviewedAt            DateTime?
-  reviewNotes           String?
+  reviewedById String?
+  reviewedBy   User?     @relation("SoapNoteReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNotes  String?
 
   // Finalization
-  finalizedById         String?
-  finalizedBy           User?            @relation("SoapNoteFinalizer", fields: [finalizedById], references: [id])
-  finalizedAt           DateTime?
+  finalizedById String?
+  finalizedBy   User?     @relation("SoapNoteFinalizer", fields: [finalizedById], references: [id])
+  finalizedAt   DateTime?
 
   // Amendment tracking
-  amendedFromId         String?
-  amendmentReason       String?
+  amendedFromId   String?
+  amendmentReason String?
 
   // Versioning
-  version               Int              @default(1)
+  version Int @default(1)
 
   // AI Model tracking
-  aiModelUsed           String?          // Track which AI model generated this
+  aiModelUsed String? // Track which AI model generated this
 
   // Audit fields
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
-  deletedAt             DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([assessmentId])
   @@index([patientId])
@@ -1008,42 +1010,42 @@ model SoapNote {
 // ===========================================
 
 model VoiceTranscription {
-  id                    String              @id @default(uuid())
-  patientId             String?
-  patient               Patient?            @relation(fields: [patientId], references: [id])
-  visitId               String?
-  visit                 Visit?              @relation(fields: [visitId], references: [id])
-  clinicianId           String
-  clinician             User                @relation(fields: [clinicianId], references: [id])
+  id          String   @id @default(uuid())
+  patientId   String?
+  patient     Patient? @relation(fields: [patientId], references: [id])
+  visitId     String?
+  visit       Visit?   @relation(fields: [visitId], references: [id])
+  clinicianId String
+  clinician   User     @relation(fields: [clinicianId], references: [id])
 
   // Audio File
-  audioFileName         String
-  audioStoragePath      String
-  audioMimeType         String
-  audioDurationSeconds  Int
-  audioFileSize         Int
+  audioFileName        String
+  audioStoragePath     String
+  audioMimeType        String
+  audioDurationSeconds Int
+  audioFileSize        Int
 
   // Transcription
-  status                TranscriptionStatus @default(PENDING)
-  provider              TranscriptionProvider
+  status   TranscriptionStatus   @default(PENDING)
+  provider TranscriptionProvider
 
-  fullText              String?
-  segments              Json?               // Array of time-coded segments
-  wordCount             Int?
+  fullText  String?
+  segments  Json? // Array of time-coded segments
+  wordCount Int?
 
   // Confidence
-  overallConfidence     Decimal?            @db.Decimal(3, 2)
-  lowConfidenceFlags    Json?
+  overallConfidence  Decimal? @db.Decimal(3, 2)
+  lowConfidenceFlags Json?
 
   // Medical Term Extraction
-  medicalTerms          Json?
+  medicalTerms Json?
 
   // Speaker Diarization
-  speakerSegments       Json?
+  speakerSegments Json?
 
   // Audio Quality
-  audioQuality          String?             // "excellent", "good", "fair", "poor"
-  hasBackgroundNoise    Boolean?
+  audioQuality       String? // "excellent", "good", "fair", "poor"
+  hasBackgroundNoise Boolean?
 
   // Processing
   processingStartedAt   DateTime?
@@ -1052,16 +1054,16 @@ model VoiceTranscription {
   errorMessage          String?
 
   // Context
-  transcriptionContext  String?             // "general_notes", "oasis_assessment", etc.
-  language              String              @default("en-US")
+  transcriptionContext String? // "general_notes", "oasis_assessment", etc.
+  language             String  @default("en-US")
 
   // OASIS Mapping (if processed for OASIS)
-  oasisMappingResult    Json?
+  oasisMappingResult Json?
 
   // Audit fields
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  deletedAt             DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([patientId])
   @@index([visitId])
@@ -1076,44 +1078,44 @@ model VoiceTranscription {
 // ===========================================
 
 model AuditLog {
-  id                    String      @id @default(uuid())
+  id String @id @default(uuid())
 
   // Who
-  userId                String?
-  user                  User?       @relation(fields: [userId], references: [id])
-  userEmail             String?
-  userRole              String?
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id])
+  userEmail String?
+  userRole  String?
 
   // What
-  action                AuditAction
-  resourceType          String      // "patient", "document", "assessment", etc.
-  resourceId            String?
-  resourceName          String?
+  action       AuditAction
+  resourceType String // "patient", "document", "assessment", etc.
+  resourceId   String?
+  resourceName String?
 
   // Details
-  description           String?
-  previousValues        Json?       // For UPDATE actions
-  newValues             Json?       // For CREATE/UPDATE actions
+  description    String?
+  previousValues Json? // For UPDATE actions
+  newValues      Json? // For CREATE/UPDATE actions
 
   // PHI Access
-  phiAccessed           Boolean     @default(false)
-  phiFields             String[]    // List of PHI fields accessed
+  phiAccessed Boolean  @default(false)
+  phiFields   String[] // List of PHI fields accessed
 
   // Context
-  ipAddress             String?
-  userAgent             String?
-  requestId             String?
-  sessionId             String?
+  ipAddress String?
+  userAgent String?
+  requestId String?
+  sessionId String?
 
   // Result
-  success               Boolean     @default(true)
-  errorMessage          String?
+  success      Boolean @default(true)
+  errorMessage String?
 
   // Timestamp
-  timestamp             DateTime    @default(now())
+  timestamp DateTime @default(now())
 
   // Retention (HIPAA requires 6 years minimum)
-  retentionExpiresAt    DateTime?
+  retentionExpiresAt DateTime?
 
   @@index([userId])
   @@index([action])
@@ -1145,56 +1147,56 @@ model SystemConfig {
 // ===========================================
 
 model AgencySettings {
-  id                    String   @id @default(uuid())
+  id String @id @default(uuid())
 
   // Agency identification
-  agencyName            String   // Display name
-  cmsNumber             String   // M0010 - 6-digit CMS certification number
-  branchState           String   // M0014 - 2-character state code
-  branchId              String?  // M0016 - 10-digit branch ID (optional)
-  facilityNpi           String   // M0030/A0100 - 10-digit facility NPI
-  providerType          String   @default("01") // A0200 - '01' for HHA
+  agencyName   String // Display name
+  cmsNumber    String // M0010 - 6-digit CMS certification number
+  branchState  String // M0014 - 2-character state code
+  branchId     String? // M0016 - 10-digit branch ID (optional)
+  facilityNpi  String // M0030/A0100 - 10-digit facility NPI
+  providerType String  @default("01") // A0200 - '01' for HHA
 
   // Contact information
-  agencyAddress         String?
-  agencyCity            String?
-  agencyState           String?
-  agencyZip             String?
-  agencyPhone           String?
-  agencyFax             String?
+  agencyAddress String?
+  agencyCity    String?
+  agencyState   String?
+  agencyZip     String?
+  agencyPhone   String?
+  agencyFax     String?
 
   // Active flag (for multi-branch support in future)
-  isActive              Boolean  @default(true)
-  isPrimary             Boolean  @default(true) // Primary agency settings
+  isActive  Boolean @default(true)
+  isPrimary Boolean @default(true) // Primary agency settings
 
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  createdBy             String?
-  updatedBy             String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
 
   @@map("agency_settings")
 }
 
 model OasisQuestion {
-  id                String   @id @default(uuid())
-  itemCode          String   @unique
-  itemName          String
-  section           String
-  questionText      String
-  helpText          String?
-  responseType      String   // "single_select", "multi_select", "numeric", "date", "text"
-  responses         Json?    // Array of response options
-  skipLogic         Json?
-  validationRules   Json?
-  scoringRules      Json?
-  assessmentTypes   String[] // Which assessment types this applies to
-  effectiveDate     DateTime
-  retiredDate       DateTime?
-  cmsGuidance       String?
-  sortOrder         Int      @default(0)
+  id              String    @id @default(uuid())
+  itemCode        String    @unique
+  itemName        String
+  section         String
+  questionText    String
+  helpText        String?
+  responseType    String // "single_select", "multi_select", "numeric", "date", "text"
+  responses       Json? // Array of response options
+  skipLogic       Json?
+  validationRules Json?
+  scoringRules    Json?
+  assessmentTypes String[] // Which assessment types this applies to
+  effectiveDate   DateTime
+  retiredDate     DateTime?
+  cmsGuidance     String?
+  sortOrder       Int       @default(0)
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([section])
   @@index([effectiveDate])
@@ -1233,35 +1235,35 @@ enum CommunicationStatus {
 }
 
 model PhysicianCommunication {
-  id                    String                @id @default(uuid())
-  patientId             String
-  episodeId             String
-  assessmentId          String?
-  communicationType     CommunicationType
-  urgency               CommunicationUrgency  @default(ROUTINE)
-  status                CommunicationStatus   @default(DRAFT)
-  physicianName         String
-  physicianNpi          String?
-  physicianFax          String?
-  subject               String
-  summaryContent        String                // Concise 3-5 sentence version
-  detailedContent       String                // Full detailed communication
-  clinicalDataSnapshot  Json?
-  triggeredBy           String?               // Rule ID that triggered this
-  triggerData           Json?
-  aiModelUsed           String?
-  generationTimeMs      Int?
-  sentAt                DateTime?
-  deliveredAt           DateTime?
-  acknowledgedAt        DateTime?
-  createdById           String
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  id                   String               @id @default(uuid())
+  patientId            String
+  episodeId            String
+  assessmentId         String?
+  communicationType    CommunicationType
+  urgency              CommunicationUrgency @default(ROUTINE)
+  status               CommunicationStatus  @default(DRAFT)
+  physicianName        String
+  physicianNpi         String?
+  physicianFax         String?
+  subject              String
+  summaryContent       String // Concise 3-5 sentence version
+  detailedContent      String // Full detailed communication
+  clinicalDataSnapshot Json?
+  triggeredBy          String? // Rule ID that triggered this
+  triggerData          Json?
+  aiModelUsed          String?
+  generationTimeMs     Int?
+  sentAt               DateTime?
+  deliveredAt          DateTime?
+  acknowledgedAt       DateTime?
+  createdById          String
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
-  patient               Patient               @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  episode               Episode               @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  attachments           CommunicationAttachment[]
-  auditTrail            CommunicationAuditLog[]
+  patient     Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  episode     Episode                   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  attachments CommunicationAttachment[]
+  auditTrail  CommunicationAuditLog[]
 
   @@index([patientId, status])
   @@index([episodeId])
@@ -1271,18 +1273,18 @@ model PhysicianCommunication {
 }
 
 model CommunicationTrigger {
-  id                    String                @id @default(uuid())
-  assessmentId          String
-  ruleId                String
-  triggerType           CommunicationType
-  urgency               CommunicationUrgency
-  triggerData           Json
-  dismissed             Boolean               @default(false)
-  dismissedAt           DateTime?
-  dismissedById         String?
-  dismissReason         String?
-  communicationId       String?
-  createdAt             DateTime              @default(now())
+  id              String               @id @default(uuid())
+  assessmentId    String
+  ruleId          String
+  triggerType     CommunicationType
+  urgency         CommunicationUrgency
+  triggerData     Json
+  dismissed       Boolean              @default(false)
+  dismissedAt     DateTime?
+  dismissedById   String?
+  dismissReason   String?
+  communicationId String?
+  createdAt       DateTime             @default(now())
 
   @@unique([assessmentId, ruleId])
   @@index([assessmentId])
@@ -1291,29 +1293,29 @@ model CommunicationTrigger {
 }
 
 model CommunicationAttachment {
-  id                    String                @id @default(uuid())
-  communicationId       String
-  fileName              String
-  fileType              String
-  fileUrl               String
-  fileSize              Int?
-  createdAt             DateTime              @default(now())
+  id              String   @id @default(uuid())
+  communicationId String
+  fileName        String
+  fileType        String
+  fileUrl         String
+  fileSize        Int?
+  createdAt       DateTime @default(now())
 
-  communication         PhysicianCommunication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  communication PhysicianCommunication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
 
   @@index([communicationId])
   @@map("communication_attachments")
 }
 
 model CommunicationAuditLog {
-  id                    String                @id @default(uuid())
-  communicationId       String
-  action                String                // CREATED, UPDATED, SENT, DELIVERED, etc.
-  performedById         String
-  details               String?
-  createdAt             DateTime              @default(now())
+  id              String   @id @default(uuid())
+  communicationId String
+  action          String // CREATED, UPDATED, SENT, DELIVERED, etc.
+  performedById   String
+  details         String?
+  createdAt       DateTime @default(now())
 
-  communication         PhysicianCommunication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  communication PhysicianCommunication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
 
   @@index([communicationId])
   @@index([createdAt])
@@ -1355,7 +1357,7 @@ enum IntegrationProvider {
   MICROSOFT_365
   GOOGLE_WORKSPACE
   SMTP
-  MAILTO           // Browser-based mailto: fallback (no server config needed)
+  MAILTO // Browser-based mailto: fallback (no server config needed)
   PHAXIO
   SRFAX
   TWILIO_FAX
@@ -1364,45 +1366,45 @@ enum IntegrationProvider {
 // Clinical Event Trigger Configuration
 // Pre-defined triggers with keyword matching and AI detection rules
 model ClinicalEventTriggerConfig {
-  id                    String              @id @default(uuid())
-  eventType             ClinicalEventType   @unique
-  name                  String              // Human-readable name
-  description           String?             // Description of what this trigger detects
+  id          String            @id @default(uuid())
+  eventType   ClinicalEventType @unique
+  name        String // Human-readable name
+  description String? // Description of what this trigger detects
 
   // Detection Configuration
-  isEnabled             Boolean             @default(true)
-  priority              TriggerPriority     @default(MEDIUM)
+  isEnabled Boolean         @default(true)
+  priority  TriggerPriority @default(MEDIUM)
 
   // Keyword-based detection (fast, runs in real-time)
-  keywords              String[]            // Keywords that trigger this event
-  keywordMatchThreshold Int                 @default(1)  // Min keywords to match
-  excludeKeywords       String[]            // Keywords that should NOT trigger
+  keywords              String[] // Keywords that trigger this event
+  keywordMatchThreshold Int      @default(1) // Min keywords to match
+  excludeKeywords       String[] // Keywords that should NOT trigger
 
   // AI-based detection (runs after save)
-  aiDetectionEnabled    Boolean             @default(true)
-  aiPromptContext       String?             // Additional context for AI detection
-  aiConfidenceThreshold Decimal             @default(0.7) @db.Decimal(3, 2)
+  aiDetectionEnabled    Boolean @default(true)
+  aiPromptContext       String? // Additional context for AI detection
+  aiConfidenceThreshold Decimal @default(0.7) @db.Decimal(3, 2)
 
   // OASIS field monitoring (for functional decline, etc.)
-  monitoredOasisFields  String[]            // OASIS item codes to watch
-  declineThreshold      Int?                // Points of decline to trigger
+  monitoredOasisFields String[] // OASIS item codes to watch
+  declineThreshold     Int? // Points of decline to trigger
 
   // Default Recipients
-  defaultRecipientRole  String?             // e.g., "PCP", "REFERRING", "SPECIALIST"
-  alwaysNotifyRoles     String[]            // User roles that always get notified
+  defaultRecipientRole String? // e.g., "PCP", "REFERRING", "SPECIALIST"
+  alwaysNotifyRoles    String[] // User roles that always get notified
 
   // Auto-generation settings
-  autoGenerateDraft     Boolean             @default(true)
-  requiresReview        Boolean             @default(true)  // HIPAA: always true for PHI
+  autoGenerateDraft Boolean @default(true)
+  requiresReview    Boolean @default(true) // HIPAA: always true for PHI
 
   // Timing
-  cooldownMinutes       Int                 @default(60)    // Min time between triggers
+  cooldownMinutes Int @default(60) // Min time between triggers
 
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relationships
-  templates             NotificationTemplate[]
+  templates NotificationTemplate[]
 
   @@index([eventType])
   @@index([isEnabled])
@@ -1411,34 +1413,34 @@ model ClinicalEventTriggerConfig {
 
 // Notification Templates for each event type
 model NotificationTemplate {
-  id                    String              @id @default(uuid())
-  triggerId             String
-  trigger               ClinicalEventTriggerConfig @relation(fields: [triggerId], references: [id], onDelete: Cascade)
+  id        String                     @id @default(uuid())
+  triggerId String
+  trigger   ClinicalEventTriggerConfig @relation(fields: [triggerId], references: [id], onDelete: Cascade)
 
-  name                  String              // Template name
-  channel               NotificationChannel // EMAIL, FAX, etc.
-  isDefault             Boolean             @default(false)
+  name      String // Template name
+  channel   NotificationChannel // EMAIL, FAX, etc.
+  isDefault Boolean             @default(false)
 
   // Template content (supports {{variables}})
-  subject               String              // Email subject or fax cover title
-  bodyTemplate          String              // Main content template
-  summaryTemplate       String?             // Short summary template
+  subject         String // Email subject or fax cover title
+  bodyTemplate    String // Main content template
+  summaryTemplate String? // Short summary template
 
   // Variables available in this template
-  availableVariables    String[]            // e.g., ["patientName", "eventDate", "details"]
+  availableVariables String[] // e.g., ["patientName", "eventDate", "details"]
 
   // Formatting
-  format                String              @default("html") // html, plain, pdf
-  includeClinicalData   Boolean             @default(true)
-  includePatientDemo    Boolean             @default(true)
-  includePhysicianInfo  Boolean             @default(true)
+  format               String  @default("html") // html, plain, pdf
+  includeClinicalData  Boolean @default(true)
+  includePatientDemo   Boolean @default(true)
+  includePhysicianInfo Boolean @default(true)
 
   // Attachments
-  autoAttachDocuments   String[]            // Document types to auto-attach
+  autoAttachDocuments String[] // Document types to auto-attach
 
-  isActive              Boolean             @default(true)
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([triggerId])
   @@index([channel])
@@ -1447,47 +1449,47 @@ model NotificationTemplate {
 
 // Detected Clinical Events (instances of triggered events)
 model DetectedClinicalEvent {
-  id                    String              @id @default(uuid())
-  patientId             String
-  episodeId             String
-  assessmentId          String?
-  visitId               String?
+  id           String  @id @default(uuid())
+  patientId    String
+  episodeId    String
+  assessmentId String?
+  visitId      String?
 
-  eventType             ClinicalEventType
-  priority              TriggerPriority
+  eventType ClinicalEventType
+  priority  TriggerPriority
 
   // Detection details
-  detectedAt            DateTime            @default(now())
-  detectionMethod       String              // "keyword", "ai", "oasis_change", "manual"
-  detectionConfidence   Decimal?            @db.Decimal(3, 2)
+  detectedAt          DateTime @default(now())
+  detectionMethod     String // "keyword", "ai", "oasis_change", "manual"
+  detectionConfidence Decimal? @db.Decimal(3, 2)
 
   // What triggered it
-  matchedKeywords       String[]
-  aiAnalysis            String?             // AI explanation
-  triggerData           Json?               // Supporting data (vitals, OASIS scores, etc.)
-  sourceText            String?             // The text that triggered detection
+  matchedKeywords String[]
+  aiAnalysis      String? // AI explanation
+  triggerData     Json? // Supporting data (vitals, OASIS scores, etc.)
+  sourceText      String? // The text that triggered detection
 
   // Event details (extracted/generated)
-  eventSummary          String              // Brief description
-  eventDetails          String?             // Full details
-  clinicalSignificance  String?             // Why this matters
-  recommendedActions    String[]            // Suggested next steps
+  eventSummary         String // Brief description
+  eventDetails         String? // Full details
+  clinicalSignificance String? // Why this matters
+  recommendedActions   String[] // Suggested next steps
 
   // Status
-  isAcknowledged        Boolean             @default(false)
-  acknowledgedAt        DateTime?
-  acknowledgedById      String?
+  isAcknowledged   Boolean   @default(false)
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
 
-  isDismissed           Boolean             @default(false)
-  dismissedAt           DateTime?
-  dismissedById         String?
-  dismissReason         String?
+  isDismissed   Boolean   @default(false)
+  dismissedAt   DateTime?
+  dismissedById String?
+  dismissReason String?
 
   // Link to generated communication
-  communicationId       String?
+  communicationId String?
 
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([patientId])
   @@index([episodeId])
@@ -1499,45 +1501,45 @@ model DetectedClinicalEvent {
 
 // Integration Settings for Email/Fax providers
 model IntegrationSettings {
-  id                    String              @id @default(uuid())
-  provider              IntegrationProvider
-  name                  String              // Display name
-  isEnabled             Boolean             @default(false)
-  isPrimary             Boolean             @default(false) // Primary for this channel type
+  id        String              @id @default(uuid())
+  provider  IntegrationProvider
+  name      String // Display name
+  isEnabled Boolean             @default(false)
+  isPrimary Boolean             @default(false) // Primary for this channel type
 
   // Channel type this provider handles
-  channel               NotificationChannel
+  channel NotificationChannel
 
   // Encrypted credentials (stored as JSON)
-  credentials           Json?               // OAuth tokens, API keys, etc.
+  credentials Json? // OAuth tokens, API keys, etc.
 
   // Provider-specific settings
-  settings              Json?               // SMTP host/port, fax number, etc.
+  settings Json? // SMTP host/port, fax number, etc.
 
   // Microsoft 365 / Google specific
-  tenantId              String?             // MS365 tenant
-  clientId              String?
+  tenantId String? // MS365 tenant
+  clientId String?
 
   // SMTP specific
-  smtpHost              String?
-  smtpPort              Int?
-  smtpSecure            Boolean             @default(true)
-  fromEmail             String?
-  fromName              String?
+  smtpHost   String?
+  smtpPort   Int?
+  smtpSecure Boolean @default(true)
+  fromEmail  String?
+  fromName   String?
 
   // Fax specific
-  faxNumber             String?             // Agency fax number
-  faxCoverPage          String?             // Default cover page template
+  faxNumber    String? // Agency fax number
+  faxCoverPage String? // Default cover page template
 
   // Health check
-  lastTestedAt          DateTime?
-  lastTestResult        Boolean?
-  lastTestError         String?
+  lastTestedAt   DateTime?
+  lastTestResult Boolean?
+  lastTestError  String?
 
   // Audit
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  configuredById        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  configuredById String?
 
   @@unique([provider, channel])
   @@index([channel, isEnabled])
@@ -1546,36 +1548,36 @@ model IntegrationSettings {
 
 // Communication Send Log (detailed delivery tracking)
 model CommunicationSendLog {
-  id                    String              @id @default(uuid())
-  communicationId       String
+  id              String @id @default(uuid())
+  communicationId String
 
   // Send attempt details
-  channel               NotificationChannel
-  provider              IntegrationProvider
-  recipientAddress      String              // Email, fax number, etc.
+  channel          NotificationChannel
+  provider         IntegrationProvider
+  recipientAddress String // Email, fax number, etc.
 
   // Status tracking
-  status                String              // queued, sending, sent, delivered, failed, bounced
-  attemptNumber         Int                 @default(1)
+  status        String // queued, sending, sent, delivered, failed, bounced
+  attemptNumber Int    @default(1)
 
   // Timestamps
-  queuedAt              DateTime            @default(now())
-  sentAt                DateTime?
-  deliveredAt           DateTime?
-  failedAt              DateTime?
+  queuedAt    DateTime  @default(now())
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  failedAt    DateTime?
 
   // Provider response
-  providerMessageId     String?             // External ID from provider
-  providerResponse      Json?               // Full response from provider
-  errorCode             String?
-  errorMessage          String?
+  providerMessageId String? // External ID from provider
+  providerResponse  Json? // Full response from provider
+  errorCode         String?
+  errorMessage      String?
 
   // Retry tracking
-  willRetry             Boolean             @default(false)
-  retryAfter            DateTime?
-  maxRetries            Int                 @default(3)
+  willRetry  Boolean   @default(false)
+  retryAfter DateTime?
+  maxRetries Int       @default(3)
 
-  createdAt             DateTime            @default(now())
+  createdAt DateTime @default(now())
 
   @@index([communicationId])
   @@index([status])
@@ -1599,44 +1601,44 @@ enum EmrVendor {
 
 // EMR Connection configuration
 model EmrConnection {
-  id                    String          @id @default(uuid())
-  name                  String          // "City Hospital Epic"
+  id                    String    @id @default(uuid())
+  name                  String // "City Hospital Epic"
   vendor                EmrVendor
   fhirBaseUrl           String
   clientId              String
-  clientSecretEncrypted String?         // Encrypted client secret for confidential clients
-  scopes                String[]        // OAuth scopes (e.g., "patient/*.read")
-  authorizationUrl      String?         // OAuth authorization endpoint
-  tokenUrl              String?         // OAuth token endpoint
-  isEnabled             Boolean         @default(true)
+  clientSecretEncrypted String? // Encrypted client secret for confidential clients
+  scopes                String[] // OAuth scopes (e.g., "patient/*.read")
+  authorizationUrl      String? // OAuth authorization endpoint
+  tokenUrl              String? // OAuth token endpoint
+  isEnabled             Boolean   @default(true)
   lastConnectedAt       DateTime?
   lastConnectionError   String?
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
   createdById           String
 
   // Relationships
-  tokens                EmrAccessToken[]
-  auditLogs             EmrAuditLog[]
-  patientLinks          EmrPatientLink[]
+  tokens       EmrAccessToken[]
+  auditLogs    EmrAuditLog[]
+  patientLinks EmrPatientLink[]
 
   @@map("emr_connections")
 }
 
 // Per-user OAuth tokens (stored encrypted)
 model EmrAccessToken {
-  id                    String          @id @default(uuid())
+  id                    String        @id @default(uuid())
   connectionId          String
-  connection            EmrConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connection            EmrConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   userId                String
-  accessTokenEncrypted  String          // AES-256 encrypted access token
-  refreshTokenEncrypted String?         // AES-256 encrypted refresh token
+  accessTokenEncrypted  String // AES-256 encrypted access token
+  refreshTokenEncrypted String? // AES-256 encrypted refresh token
   expiresAt             DateTime
-  tokenType             String          @default("Bearer")
-  scope                 String?         // Granted scopes
-  isRevoked             Boolean         @default(false)
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  tokenType             String        @default("Bearer")
+  scope                 String? // Granted scopes
+  isRevoked             Boolean       @default(false)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   @@unique([connectionId, userId])
   @@index([userId])
@@ -1646,22 +1648,22 @@ model EmrAccessToken {
 
 // HIPAA-compliant audit log for EMR access
 model EmrAuditLog {
-  id                    String          @id @default(uuid())
-  connectionId          String
-  connection            EmrConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  userId                String
-  action                String          // SEARCH, READ, IMPORT, AUTHORIZE, REFRESH_TOKEN
-  resourceType          String          // Patient, Observation, Condition, etc.
-  resourceId            String?         // FHIR resource ID
-  requestUrl            String          // Full request URL (without PHI in query params)
-  responseStatus        Int             // HTTP status code
-  patientFhirId         String?         // FHIR patient ID accessed
-  patientLocalId        String?         // Local patient ID if imported
-  timestamp             DateTime        @default(now())
-  durationMs            Int?            // Request duration
-  errorMessage          String?
-  requestBody           Json?           // Sanitized request body
-  responseBody          Json?           // Sanitized response (no full PHI)
+  id             String        @id @default(uuid())
+  connectionId   String
+  connection     EmrConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  userId         String
+  action         String // SEARCH, READ, IMPORT, AUTHORIZE, REFRESH_TOKEN
+  resourceType   String // Patient, Observation, Condition, etc.
+  resourceId     String? // FHIR resource ID
+  requestUrl     String // Full request URL (without PHI in query params)
+  responseStatus Int // HTTP status code
+  patientFhirId  String? // FHIR patient ID accessed
+  patientLocalId String? // Local patient ID if imported
+  timestamp      DateTime      @default(now())
+  durationMs     Int? // Request duration
+  errorMessage   String?
+  requestBody    Json? // Sanitized request body
+  responseBody   Json? // Sanitized response (no full PHI)
 
   @@index([connectionId, timestamp])
   @@index([userId, timestamp])
@@ -1671,18 +1673,300 @@ model EmrAuditLog {
 
 // Track imported patients to prevent duplicates
 model EmrPatientLink {
-  id                    String          @id @default(uuid())
-  patientId             String          @unique
-  patient               Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  connectionId          String
-  connection            EmrConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  fhirPatientId         String          // FHIR Patient resource ID
-  mrn                   String?         // MRN from EMR system
-  lastSyncedAt          DateTime        @default(now())
-  createdAt             DateTime        @default(now())
-  fhirResourceJson      Json?           // Cached FHIR Patient resource
+  id               String        @id @default(uuid())
+  patientId        String        @unique
+  patient          Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  connectionId     String
+  connection       EmrConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  fhirPatientId    String // FHIR Patient resource ID
+  mrn              String? // MRN from EMR system
+  lastSyncedAt     DateTime      @default(now())
+  createdAt        DateTime      @default(now())
+  fhirResourceJson Json? // Cached FHIR Patient resource
 
   @@unique([connectionId, fhirPatientId])
   @@index([mrn])
   @@map("emr_patient_links")
+}
+
+// ===========================================
+// EMR SYNC JOBS (Write-back tracking)
+// ===========================================
+
+enum EmrSyncStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// Track EMR sync operations for visits and assessments
+model EmrSyncJob {
+  id     String        @id @default(uuid())
+  type   String // "VISIT" or "ASSESSMENT"
+  status EmrSyncStatus @default(PENDING)
+
+  // Reference to synced entity (one or the other)
+  visitId      String?
+  visit        Visit?           @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  assessmentId String?
+  assessment   OasisAssessment? @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+
+  // Sync details
+  resourcesCreated Int     @default(0)
+  resourcesUpdated Int     @default(0)
+  error            String? // Error message if failed
+
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // Who initiated the sync
+  createdById String
+
+  @@index([visitId])
+  @@index([assessmentId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("emr_sync_jobs")
+}
+
+// EMR field mapping for agency-specific customizations
+model EmrFieldMapping {
+  id       String @id @default(uuid())
+  agencyId String // Reference to agency
+
+  // Field mapping
+  internalField String // Internal field name (e.g., "patient.dateOfBirth")
+  emrField      String // EMR field name (e.g., "Patient.birthDate")
+  template      String? // Optional Handlebars/Mustache template for transformation
+
+  // Status
+  active Boolean @default(true)
+
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agencyId, internalField])
+  @@index([agencyId])
+  @@index([active])
+  @@map("emr_field_mappings")
+}
+
+// ===========================================
+// AI PROVENANCE LAYER
+//
+// Nothing an agent produces is written directly to the record. Agents emit
+// Proposals; a clinician accepts, edits or rejects; only then does a
+// FieldValue exist. Rejected and withheld proposals are retained — the
+// abstentions are the strongest signal of where a model is weak, and the
+// accept/edit rate is the evaluation set for every future model change.
+// ===========================================
+
+enum ProposalStatus {
+  DRAFTED // agent produced it
+  SURFACED // confidence cleared the threshold; shown to the clinician
+  WITHHELD // below threshold — the agent abstained rather than guess
+  ACCEPTED // taken as-is
+  EDITED // taken with modification
+  REJECTED // dismissed
+  COMMITTED // written through to a FieldValue
+}
+
+enum ValueSource {
+  HUMAN // typed directly by a clinician
+  AGENT // originated from an accepted proposal
+  IMPORTED // carried in from a referral or prior episode
+}
+
+enum AgentKind {
+  SCRIBE
+  INTAKE
+  SUGGESTION
+  COMPLIANCE
+}
+
+enum FindingSeverity {
+  INFO
+  WARNING
+  ERROR // blocks signature
+}
+
+/// One model invocation. Required to attribute a quality regression to a
+/// specific prompt or model change rather than guessing.
+model AgentRun {
+  id       String    @id @default(uuid())
+  agencyId String
+  kind     AgentKind
+
+  // Provenance of the run itself
+  modelId       String // e.g. "claude-sonnet-4-20250514"
+  promptVersion String // bumped whenever the prompt changes
+  inputHash     String // dedupe + reproducibility
+
+  // Cost and latency, so "is the AI worth it" stays answerable
+  latencyMs    Int?
+  inputTokens  Int?
+  outputTokens Int?
+
+  succeeded    Boolean @default(true)
+  errorMessage String?
+
+  proposals Proposal[]
+
+  createdAt DateTime @default(now())
+
+  @@index([agencyId, kind])
+  @@index([createdAt])
+  @@map("agent_runs")
+}
+
+/// A span in a source that justifies a proposal. Makes every AI-populated
+/// field traceable back to the words it came from.
+model Evidence {
+  id         String   @id @default(uuid())
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  // Exactly one of these is set
+  transcriptId String? // a transcript segment
+  documentId   String? // a referral or attached document
+
+  // Where in it
+  startOffset Int?
+  endOffset   Int?
+  pageNumber  Int?
+
+  quote String // the literal text, so the UI needs no second fetch
+
+  createdAt DateTime @default(now())
+
+  @@index([proposalId])
+  @@index([transcriptId])
+  @@index([documentId])
+  @@map("evidence")
+}
+
+/// An AI suggestion for one canonical field, before any human decision.
+model Proposal {
+  id         String   @id @default(uuid())
+  agencyId   String
+  agentRunId String
+  agentRun   AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  formInstanceId String
+  formInstance   FormInstance @relation(fields: [formInstanceId], references: [id], onDelete: Cascade)
+
+  // What it is proposing
+  questionCode  String // canonical question id, e.g. "PT.ROM.KNEE_FLEX_R"
+  proposedValue Json
+  confidence    Decimal @db.Decimal(3, 2) // 0.00 - 1.00
+
+  status ProposalStatus @default(DRAFTED)
+
+  // The human decision
+  decidedById  String?
+  decidedAt    DateTime?
+  finalValue   Json? // differs from proposedValue when EDITED
+  editDistance Int? // how far the clinician moved it; the quality signal
+
+  evidence       Evidence[]
+  committedValue FieldValue?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([formInstanceId, status])
+  @@index([agencyId, questionCode])
+  @@index([agentRunId])
+  @@map("proposals")
+}
+
+/// A form being filled — the container a clinician actually works in.
+model FormInstance {
+  id       String @id @default(uuid())
+  agencyId String
+
+  visitId     String?
+  patientId   String
+  clinicianId String
+
+  formCode    String // canonical form definition id, e.g. "PT_EVAL_V1"
+  formVersion String
+  discipline  String // PT, RN, OT, ...
+
+  status String @default("in_progress") // in_progress | pending_signature | signed | locked
+
+  signedById  String?
+  signedAt    DateTime?
+  contentHash String? // hash at signature; makes tampering detectable
+
+  values    FieldValue[]
+  proposals Proposal[]
+  findings  ValidationFinding[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agencyId, status])
+  @@index([patientId])
+  @@index([visitId])
+  @@map("form_instances")
+}
+
+/// The atomic clinical fact. Keyed by canonical question, not by form
+/// position — so a new discipline or a new OASIS version is configuration
+/// rather than a migration.
+model FieldValue {
+  id       String @id @default(uuid())
+  agencyId String
+
+  formInstanceId String
+  formInstance   FormInstance @relation(fields: [formInstanceId], references: [id], onDelete: Cascade)
+
+  questionCode String
+  value        Json
+
+  // Provenance — every value knows where it came from
+  source     ValueSource
+  proposalId String?     @unique
+  proposal   Proposal?   @relation(fields: [proposalId], references: [id])
+
+  enteredById String
+  enteredAt   DateTime @default(now())
+
+  // Supersession rather than mutation, so history survives
+  supersedesId String?     @unique
+  supersedes   FieldValue? @relation("ValueHistory", fields: [supersedesId], references: [id])
+  supersededBy FieldValue? @relation("ValueHistory")
+
+  createdAt DateTime @default(now())
+
+  @@unique([formInstanceId, questionCode, supersedesId])
+  @@index([formInstanceId])
+  @@index([agencyId, questionCode])
+  @@map("field_values")
+}
+
+/// A compliance objection raised before signature.
+model ValidationFinding {
+  id             String       @id @default(uuid())
+  formInstanceId String
+  formInstance   FormInstance @relation(fields: [formInstanceId], references: [id], onDelete: Cascade)
+
+  ruleId       String
+  severity     FindingSeverity
+  questionCode String?
+  message      String
+
+  resolvedAt   DateTime?
+  resolvedById String?
+
+  createdAt DateTime @default(now())
+
+  @@index([formInstanceId, severity])
+  @@map("validation_findings")
 }

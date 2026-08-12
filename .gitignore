@@ -98,6 +98,9 @@ dump.rdb
 
 # Database dumps and backups
 *.sql
+# ...but Prisma migrations are source code, not a dump. Without this the
+# schema cannot be rebuilt from a fresh clone.
+!**/prisma/migrations/**/*.sql
 *.dump
 *.bak
 backups/

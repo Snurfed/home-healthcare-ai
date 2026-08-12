@@ -1,13 +1,22 @@
 // Load environment variables FIRST (before any other imports)
 import 'dotenv/config';
 
+// Validate environment variables immediately after loading dotenv
+// This must happen before any other imports that might use env vars
+import { validateEnvOrExit } from './utils/validateEnv';
+validateEnvOrExit();
+
 import express, { Application, Request, Response, NextFunction } from 'express';
+import { createServer } from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 
 import path from 'path';
+
+// WebSocket imports
+import { initializeSocketServer } from './websocket/socketServer';
 
 // Route imports
 import authRoutes from './routes/auth';
@@ -22,12 +31,15 @@ import soapNotesRoutes from './routes/soapNotes';
 import agencySettingsRoutes from './routes/agencySettings';
 import communicationRoutes from './routes/communications';
 import clinicalEventsRoutes from './routes/clinicalEvents';
+import proposalsRoutes from './routes/proposals.routes';
 import integrationsRoutes from './routes/integrations';
 import emrRoutes from './routes/emr';
+import emrSyncRoutes from './routes/emr-sync.routes';
 import visitNotesRoutes from './routes/visitNotes';
 import formEngineRoutes from './routes/formEngine.routes';
 import emrExportRoutes from './routes/emrExport.routes';
 import captureRoutes from './routes/capture';
+import complianceRoutes from './routes/compliance.routes';
 
 // Initialize Express app
 const app: Application = express();
@@ -176,11 +188,17 @@ app.use('/api', communicationRoutes);
 // Clinical event detection and notification routes
 app.use('/api/clinical-events', clinicalEventsRoutes);
 
+// AI proposal loop: capture, review, commit
+app.use('/api', proposalsRoutes);
+
 // Email/Fax integration management routes
 app.use('/api/integrations', integrationsRoutes);
 
 // EMR integration routes (FHIR R4)
 app.use('/api/emr', emrRoutes);
+
+// EMR sync routes (write-back capabilities)
+app.use('/api/emr-sync', emrSyncRoutes);
 
 // Visit notes and documentation routes
 app.use('/api', visitNotesRoutes);
@@ -193,6 +211,9 @@ app.use('/api', emrExportRoutes);
 
 // Capture routes (voice capture workflow)
 app.use('/api/capture', captureRoutes);
+
+// Compliance validation routes (Medicare compliance, OASIS validation, billing suggestions)
+app.use('/api/compliance', complianceRoutes);
 
 // ===========================================
 // 404 HANDLER
@@ -258,7 +279,15 @@ app.use((err: ApiError, req: Request, res: Response, _next: NextFunction) => {
 // ===========================================
 // SERVER STARTUP
 // ===========================================
-const server = app.listen(PORT, () => {
+
+// Create HTTP server from Express app
+const httpServer = createServer(app);
+
+// Initialize Socket.io WebSocket server
+const io = initializeSocketServer(httpServer);
+
+// Start the HTTP server (with WebSocket support)
+const server = httpServer.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║  Home Health Care AI Assistant - Backend API               ║
@@ -267,6 +296,8 @@ const server = app.listen(PORT, () => {
 ║  Environment: ${NODE_ENV.padEnd(43)}║
 ║  Port:        ${String(PORT).padEnd(43)}║
 ║  Health:      http://localhost:${PORT}/health${' '.repeat(24 - String(PORT).length)}║
+║  WebSocket:   ws://localhost:${PORT}/socket.io${' '.repeat(21 - String(PORT).length)}║
+║  Namespaces:  /capture, /notifications                     ║
 ╚════════════════════════════════════════════════════════════╝
   `);
 });
@@ -276,6 +307,11 @@ const server = app.listen(PORT, () => {
 // ===========================================
 const gracefulShutdown = (signal: string) => {
   console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+  // Close WebSocket connections first
+  io.close(() => {
+    console.log('WebSocket server closed.');
+  });
 
   server.close(() => {
     console.log('HTTP server closed.');
@@ -294,4 +330,5 @@ const gracefulShutdown = (signal: string) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
+export { io };
 export default app;
