@@ -12,6 +12,7 @@ import {
   Prisma,
 } from '../generated/prisma';
 import prisma from '../config/prisma';
+import { withTenant, TxClient } from '../config/tenancy';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { getPatientAssessmentTimeline as getTimelineFromService } from '../services/oasis.service';
 
@@ -293,20 +294,41 @@ async function createPHIAuditLog(
 }
 
 /**
+ * The agency every query in this module runs under.
+ *
+ * Taken from the session, never the request: a client that can name its own
+ * agency can read any agency. A user with no agency has no tenant to scope to,
+ * and defaulting to one would be the leak the policies exist to prevent.
+ */
+function tenantOf(req: AuthenticatedRequest, res: Response): string | null {
+  const agencyId = req.user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so patient data is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
+}
+
+/**
  * Check if user has access to patient based on assignment or role
  */
 async function checkPatientAccess(
+  tx: TxClient,
   userId: string,
   userRole: UserRole,
   patientId: string
 ): Promise<boolean> {
-  // Admins, supervisors, and billing have access to all patients
+  // Admins, supervisors, and billing have access to all patients within their
+  // own agency. RLS already bounds "all" to that agency.
   if ([UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.BILLING].includes(userRole)) {
     return true;
   }
 
   // Clinical staff need to be assigned to the patient
-  const assignment = await prisma.patientAssignment.findFirst({
+  const assignment = await tx.patientAssignment.findFirst({
     where: {
       patientId,
       userId,
@@ -537,9 +559,13 @@ export async function listPatients(
     else if (sortBy === 'admissionDate') orderBy.admissionDate = sortOrder;
     else if (sortBy === 'createdAt') orderBy.createdAt = sortOrder;
 
-    // Execute query with count
-    const [patients, total] = await Promise.all([
-      prisma.patient.findMany({
+    // Execute query with count. RLS bounds every row to the caller's agency,
+    // so the filters above narrow within a tenant rather than across tenants.
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    const [patients, total] = await withTenant(prisma, agencyId, (tx) => Promise.all([
+      tx.patient.findMany({
         where,
         orderBy,
         skip,
@@ -569,8 +595,8 @@ export async function listPatients(
           },
         },
       }),
-      prisma.patient.count({ where }),
-    ]);
+      tx.patient.count({ where }),
+    ]));
 
     // Audit log for PHI access (list view)
     await createPHIAuditLog(
@@ -616,6 +642,8 @@ export async function getPatient(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -635,7 +663,7 @@ export async function getPatient(
     }
 
     // Fetch patient with related data
-    const patient = await prisma.patient.findUnique({
+    const patient = await withTenant(prisma, agencyId, (tx) => tx.patient.findUnique({
       where: { id },
       include: {
         emergencyContacts: {
@@ -668,7 +696,7 @@ export async function getPatient(
           select: { id: true, firstName: true, lastName: true },
         },
       },
-    });
+    }));
 
     if (!patient || patient.deletedAt) {
       await createPHIAuditLog(
@@ -690,7 +718,7 @@ export async function getPatient(
     }
 
     // Check access permissions
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, id);
+    const hasAccess = await withTenant(prisma, agencyId, (tx) => checkPatientAccess(tx, req.user!.id, req.user!.role, id));
     if (!hasAccess) {
       await createPHIAuditLog(
         AuditAction.READ,
@@ -744,6 +772,8 @@ export async function createPatient(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -774,10 +804,14 @@ export async function createPatient(
 
     // Generate unique MRN
     let mrn = generateMRN();
-    let mrnExists = await prisma.patient.findUnique({ where: { mrn } });
+    let mrnExists = await withTenant(prisma, agencyId, (tx) =>
+      tx.patient.findUnique({ where: { mrn } })
+    );
     while (mrnExists) {
       mrn = generateMRN();
-      mrnExists = await prisma.patient.findUnique({ where: { mrn } });
+      mrnExists = await withTenant(prisma, agencyId, (tx) =>
+        tx.patient.findUnique({ where: { mrn } })
+      );
     }
 
     // Create patient with transaction
@@ -936,6 +970,8 @@ export async function updatePatient(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -956,7 +992,7 @@ export async function updatePatient(
     }
 
     // Fetch existing patient
-    const existingPatient = await prisma.patient.findUnique({
+    const existingPatient = await withTenant(prisma, agencyId, (tx) => tx.patient.findUnique({
       where: { id },
       include: {
         emergencyContacts: { where: { deletedAt: null } },
@@ -966,7 +1002,7 @@ export async function updatePatient(
           include: { user: true },
         },
       },
-    });
+    }));
 
     if (!existingPatient || existingPatient.deletedAt) {
       return res.status(404).json({
@@ -976,7 +1012,7 @@ export async function updatePatient(
     }
 
     // Check access permissions
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, id);
+    const hasAccess = await withTenant(prisma, agencyId, (tx) => checkPatientAccess(tx, req.user!.id, req.user!.role, id));
     if (!hasAccess) {
       await createPHIAuditLog(
         AuditAction.UPDATE,
@@ -1049,7 +1085,7 @@ export async function updatePatient(
     if (body.advanceDirectives !== undefined) updateData.advanceDirectives = body.advanceDirectives || null;
 
     // Update patient
-    const updatedPatient = await prisma.patient.update({
+    const updatedPatient = await withTenant(prisma, agencyId, (tx) => tx.patient.update({
       where: { id },
       data: updateData,
       include: {
@@ -1060,7 +1096,7 @@ export async function updatePatient(
           include: { user: true },
         },
       },
-    });
+    }));
 
     // Track what fields changed for audit
     const changedFields = Object.keys(body).filter(key => body[key as keyof UpdatePatientRequestBody] !== undefined);
@@ -1112,6 +1148,8 @@ export async function deletePatient(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1140,9 +1178,9 @@ export async function deletePatient(
     }
 
     // Fetch existing patient
-    const existingPatient = await prisma.patient.findUnique({
+    const existingPatient = await withTenant(prisma, agencyId, (tx) => tx.patient.findUnique({
       where: { id },
-    });
+    }));
 
     if (!existingPatient) {
       return res.status(404).json({
@@ -1159,16 +1197,16 @@ export async function deletePatient(
     }
 
     // Soft delete patient (HIPAA requires retention, never hard delete)
-    const deletedPatient = await prisma.patient.update({
+    const deletedPatient = await withTenant(prisma, agencyId, (tx) => tx.patient.update({
       where: { id },
       data: {
         deletedAt: new Date(),
-        updatedById: req.user.id,
+        updatedById: req.user!.id,
         status: PatientStatus.DISCHARGED,
         dischargeDate: existingPatient.dischargeDate || new Date(),
         dischargeReason: reason || 'Record deleted',
       },
-    });
+    }));
 
     // Audit log for PHI deletion
     await createPHIAuditLog(
@@ -1236,7 +1274,10 @@ export async function getPatientAssessmentTimeline(
     }
 
     // Check access permissions
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, id);
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    const hasAccess = await withTenant(prisma, agencyId, (tx) => checkPatientAccess(tx, req.user!.id, req.user!.role, id));
     if (!hasAccess) {
       return res.status(403).json({
         error: 'Forbidden',
