@@ -3,6 +3,7 @@ import { UserRole, CarePlanStatus, Prisma } from '../generated/prisma';
 import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
+import { withTenant } from '../config/tenancy';
 // ===========================================
 // TYPE DEFINITIONS
 // ===========================================
@@ -29,12 +30,32 @@ export interface ListEpisodesQuery {
  * List episodes for a patient
  * GET /api/patients/:patientId/episodes
  */
+/**
+ * The agency every query here runs under — from the session, never the request.
+ * Episodes hang off patients, so an unscoped read would expose another
+ * agency's care history through a patient id alone.
+ */
+function tenantOf(req: AuthenticatedRequest, res: Response): string | null {
+  const agencyId = req.user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so patient data is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
+}
+
 export async function listPatientEpisodes(
   req: AuthenticatedRequest & { params: { patientId: string }; query: ListEpisodesQuery },
   res: Response,
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -46,10 +67,10 @@ export async function listPatientEpisodes(
     const { status, includeEnded } = req.query;
 
     // Validate patient exists
-    const patient = await prisma.patient.findUnique({
+    const patient = await withTenant(prisma, agencyId, (tx) => tx.patient.findUnique({
       where: { id: patientId },
       select: { id: true, firstName: true, lastName: true },
-    });
+    }));
 
     if (!patient) {
       return res.status(404).json({
@@ -72,7 +93,7 @@ export async function listPatientEpisodes(
       where.endDate = null;
     }
 
-    const episodes = await prisma.episode.findMany({
+    const episodes = await withTenant(prisma, agencyId, (tx) => tx.episode.findMany({
       where,
       orderBy: { episodeNumber: 'desc' },
       include: {
@@ -83,7 +104,7 @@ export async function listPatientEpisodes(
           },
         },
       },
-    });
+    }));
 
     return res.status(200).json({
       data: episodes,
@@ -108,6 +129,9 @@ export async function createEpisode(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -127,10 +151,10 @@ export async function createEpisode(
     }
 
     // Validate patient exists
-    const patient = await prisma.patient.findUnique({
+    const patient = await withTenant(prisma, agencyId, (tx) => tx.patient.findUnique({
       where: { id: patientId },
       select: { id: true, firstName: true, lastName: true },
-    });
+    }));
 
     if (!patient) {
       return res.status(404).json({
@@ -140,16 +164,16 @@ export async function createEpisode(
     }
 
     // Get next episode number for this patient
-    const lastEpisode = await prisma.episode.findFirst({
+    const lastEpisode = await withTenant(prisma, agencyId, (tx) => tx.episode.findFirst({
       where: { patientId },
       orderBy: { episodeNumber: 'desc' },
       select: { episodeNumber: true },
-    });
+    }));
 
     const episodeNumber = (lastEpisode?.episodeNumber ?? 0) + 1;
 
     // Create the episode
-    const episode = await prisma.episode.create({
+    const episode = await withTenant(prisma, agencyId, (tx) => tx.episode.create({
       data: {
         patientId,
         episodeNumber,
@@ -169,7 +193,7 @@ export async function createEpisode(
           },
         },
       },
-    });
+    }));
 
     return res.status(201).json({
       message: 'Episode created successfully',
@@ -190,6 +214,9 @@ export async function getEpisode(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -199,7 +226,7 @@ export async function getEpisode(
 
     const { id } = req.params;
 
-    const episode = await prisma.episode.findUnique({
+    const episode = await withTenant(prisma, agencyId, (tx) => tx.episode.findUnique({
       where: { id },
       include: {
         patient: {
@@ -227,7 +254,7 @@ export async function getEpisode(
           },
         },
       },
-    });
+    }));
 
     if (!episode || episode.deletedAt) {
       return res.status(404).json({

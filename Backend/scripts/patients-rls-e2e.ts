@@ -90,6 +90,16 @@ async function main() {
   check("other agency's patient is 404, not 200", other.status === 404,
         other.status === 200 ? 'LEAK: cross-tenant read succeeded' : `got ${other.status}`);
 
+  // --- episodes hang off patients, so the same boundary must hold ---------
+  const ownEpisodes = await api(`/api/patients/${mine.id}/episodes`);
+  check('own patient episodes readable', ownEpisodes.status === 200, `got ${ownEpisodes.status}`);
+
+  const theirEpisodes = await api(`/api/patients/${theirs.id}/episodes`);
+  check("other agency's episodes are 404, not 200", theirEpisodes.status === 404,
+        theirEpisodes.status === 200
+          ? 'LEAK: episodes reachable through a cross-tenant patient id'
+          : `got ${theirEpisodes.status}`);
+
   console.log('\n' + (failures ? `${failures} FAILED` : 'ALL PASSED'));
   if (failures) process.exitCode = 1;
 }
