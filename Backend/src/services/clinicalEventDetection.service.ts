@@ -8,6 +8,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../config/prisma';
+import { MODELS } from '../config/models';
 import {
   ClinicalEventType,
   TriggerPriority,
@@ -275,7 +276,7 @@ Return ONLY a valid JSON array of detected events (or empty array if none).`;
   try {
     const client = getAnthropicClient();
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: MODELS.GENERATION,
       max_tokens: 4096,
       system: AI_DETECTION_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],

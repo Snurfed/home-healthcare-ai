@@ -9,6 +9,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../config/prisma';
 import type { OasisResponse, ReferralDocument } from '../generated/prisma';
 
+import { MODELS } from '../config/models';
 // ===========================================
 // LAZY-LOAD ANTHROPIC CLIENT
 // ===========================================
@@ -446,7 +447,7 @@ export async function generateSoapNote(
   input: GenerationInput
 ): Promise<GenerationResult> {
   const startTime = Date.now();
-  const modelUsed = 'claude-sonnet-4-20250514';
+  const modelUsed = MODELS.GENERATION;
 
   try {
     // Fetch assessment data
@@ -540,7 +541,7 @@ export async function regenerateSection(
   instructions?: string
 ): Promise<RegenerateSectionResult> {
   const startTime = Date.now();
-  const modelUsed = 'claude-sonnet-4-20250514';
+  const modelUsed = MODELS.GENERATION;
 
   try {
     // Fetch existing SOAP note with assessment data
@@ -648,7 +649,7 @@ ${chiefComplaints ? `Chief complaints: ${chiefComplaints.join('; ')}` : ''}
 Write in clinical paragraphs, not bullet points.`;
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODELS.GENERATION,
     max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   });
@@ -676,7 +677,7 @@ ${vitals ? `Vital signs: ${JSON.stringify(vitals)}` : ''}
 Include all measurable findings. Write in clinical paragraphs.`;
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODELS.GENERATION,
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   });
@@ -704,7 +705,7 @@ Clinical findings: ${clinicalFindings.join('; ')}
 Synthesize findings into a clinical impression. Include problem list.`;
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODELS.GENERATION,
     max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   });
@@ -732,7 +733,7 @@ Interventions: ${interventions.join('; ')}
 Include treatment plan, education, and follow-up. Write in clinical paragraphs.`;
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODELS.GENERATION,
     max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   });

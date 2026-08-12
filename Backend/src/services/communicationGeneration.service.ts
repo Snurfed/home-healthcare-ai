@@ -9,6 +9,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../config/prisma';
 import type { CommunicationTriggerResult } from '../constants/communication-rules.constants';
 
+import { MODELS } from '../config/models';
 // =============================================================================
 // LAZY-LOAD ANTHROPIC CLIENT
 // =============================================================================
@@ -212,7 +213,7 @@ export async function generateCommunication(
   input: GenerationInput
 ): Promise<GenerationResult> {
   const startTime = Date.now();
-  const modelUsed = 'claude-sonnet-4-20250514';
+  const modelUsed = MODELS.GENERATION;
 
   try {
     // Fetch assessment data
@@ -321,7 +322,7 @@ export async function regenerateCommunication(
   instructions: string
 ): Promise<GenerationResult> {
   const startTime = Date.now();
-  const modelUsed = 'claude-sonnet-4-20250514';
+  const modelUsed = MODELS.GENERATION;
 
   try {
     // Fetch existing communication
@@ -405,7 +406,7 @@ export async function generatePostVisitSummary(
   physicianName: string
 ): Promise<GenerationResult> {
   const startTime = Date.now();
-  const modelUsed = 'claude-sonnet-4-20250514';
+  const modelUsed = MODELS.GENERATION;
 
   try {
     // Fetch complete assessment data

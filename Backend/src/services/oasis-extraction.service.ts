@@ -13,6 +13,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AssessmentType } from '../generated/prisma';
 import prisma from '../config/prisma';
+import { MODELS } from '../config/models';
 import {
   ADL_CATEGORIES,
   applyInferencePatterns,
@@ -294,7 +295,7 @@ class OasisExtractionService {
     try {
       // Call Claude API
       const response = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: MODELS.EXTRACTION,
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
         messages: [

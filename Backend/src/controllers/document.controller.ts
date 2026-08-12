@@ -18,6 +18,7 @@ import {
 import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
+import { MODELS } from '../config/models';
 // ===========================================
 // CONFIGURATION
 // ===========================================
@@ -1366,7 +1367,7 @@ export async function extractDocument(req: AuthenticatedRequest, res: Response):
                            docType === 'jpg' ? 'image/jpeg' : 'image/png';
 
           const response = await anthropic.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: MODELS.EXTRACTION,
             max_tokens: 8192,
             messages: [{
               role: 'user',

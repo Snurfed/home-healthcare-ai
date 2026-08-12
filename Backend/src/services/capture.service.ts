@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+import { MODELS } from '../config/models';
 // ===========================================
 // LAZY-LOAD ANTHROPIC CLIENT
 // ===========================================
@@ -389,7 +390,7 @@ async function extractEntities(
   }
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODELS.REALTIME,
     max_tokens: 4096,
     messages: [{ role: 'user', content: userPrompt }],
   });
@@ -452,7 +453,7 @@ async function generateSoapNote(
   }
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODELS.REALTIME,
     max_tokens: 8192,
     messages: [{ role: 'user', content: userPrompt }],
   });
@@ -499,7 +500,7 @@ async function mapToEmrFields(
     '\n\n--- SOAP NOTE ---\n' + JSON.stringify(soapNote, null, 2);
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODELS.REALTIME,
     max_tokens: 8192,
     messages: [{ role: 'user', content: userPrompt }],
   });

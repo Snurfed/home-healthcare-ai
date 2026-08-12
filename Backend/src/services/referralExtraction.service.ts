@@ -12,6 +12,7 @@ import * as path from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 import { ReferralDocumentType } from '../generated/prisma';
 
+import { MODELS } from '../config/models';
 // ===========================================
 // LAZY-LOAD HEAVY MODULES
 // ===========================================
@@ -598,7 +599,7 @@ async function extractFromPdfWithClaudeVision(
     console.log(`[Claude Vision] Sending ${buffer.length} bytes (${(buffer.length / 1024).toFixed(1)} KB) as base64 PDF...`);
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: MODELS.EXTRACTION,
       max_tokens: 8192,
       system: EXTRACTION_SYSTEM_PROMPT,
       messages: [
@@ -699,7 +700,7 @@ Remember to:
     console.log('[AI Extraction] Calling Claude...');
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: MODELS.EXTRACTION,
       max_tokens: 8192,
       system: EXTRACTION_SYSTEM_PROMPT,
       messages: [

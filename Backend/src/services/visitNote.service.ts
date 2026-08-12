@@ -9,6 +9,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../config/prisma';
+import { MODELS } from '../config/models';
 import {
   getVisitFormConfig,
   type Discipline,
@@ -380,7 +381,7 @@ Respond with a JSON object where keys are the question codes and values are the 
     // Call AI
     const client = getAnthropicClient();
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: MODELS.GENERATION,
       max_tokens: 2000,
       messages: [
         {
