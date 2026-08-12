@@ -101,6 +101,9 @@ dump.rdb
 # ...but Prisma migrations are source code, not a dump. Without this the
 # schema cannot be rebuilt from a fresh clone.
 !**/prisma/migrations/**/*.sql
+# ...and checked-in setup scripts are source too. The blanket *.sql above is
+# meant for dumps and backups, not for SQL the project ships.
+!**/scripts/*.sql
 *.dump
 *.bak
 backups/
