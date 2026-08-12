@@ -8,8 +8,8 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import prisma from '../config/prisma';
 import { MODELS } from '../config/models';
+import { TxClient } from '../config/tenancy';
 import {
   getVisitFormConfig,
   type Discipline,
@@ -164,8 +164,8 @@ function generateId(): string {
 /**
  * Get visit note by visit ID
  */
-export async function getVisitNote(visitId: string): Promise<VisitNoteData | null> {
-  const visit = await prisma.visit.findUnique({
+export async function getVisitNote(tx: TxClient, visitId: string): Promise<VisitNoteData | null> {
+  const visit = await tx.visit.findUnique({
     where: { id: visitId },
     include: {
       patient: true,
@@ -190,7 +190,7 @@ export async function getVisitNote(visitId: string): Promise<VisitNoteData | nul
 /**
  * Create a new visit note
  */
-export async function createVisitNote(input: CreateVisitNoteInput): Promise<VisitNoteData> {
+export async function createVisitNote(tx: TxClient, input: CreateVisitNoteInput): Promise<VisitNoteData> {
   const { visitId, patientId, episodeId, clinicianId, discipline, visitPurpose, visitDate } = input;
 
   // Validate form config exists
@@ -219,7 +219,7 @@ export async function createVisitNote(input: CreateVisitNoteInput): Promise<Visi
   };
 
   // Update visit with the new note data
-  await prisma.visit.update({
+  await tx.visit.update({
     where: { id: visitId },
     data: {
       visitNotes: visitNoteData as unknown as Record<string, unknown>,
@@ -234,11 +234,12 @@ export async function createVisitNote(input: CreateVisitNoteInput): Promise<Visi
  * Update an existing visit note
  */
 export async function updateVisitNote(
+  tx: TxClient,
   visitId: string,
   input: UpdateVisitNoteInput,
   userId: string
 ): Promise<VisitNoteData> {
-  const existingNote = await getVisitNote(visitId);
+  const existingNote = await getVisitNote(tx, visitId);
   if (!existingNote) {
     throw new Error(`Visit note not found for visit ${visitId}`);
   }
@@ -276,7 +277,7 @@ export async function updateVisitNote(
   };
 
   // Update visit
-  await prisma.visit.update({
+  await tx.visit.update({
     where: { id: visitId },
     data: {
       visitNotes: updatedNote as unknown as Record<string, unknown>,
@@ -292,13 +293,14 @@ export async function updateVisitNote(
  * Generate AI draft for a section
  */
 export async function generateAIDraft(
+  tx: TxClient,
   visitId: string,
   input: GenerateAIDraftInput
 ): Promise<AIDraftResult> {
   const startTime = Date.now();
 
   try {
-    const existingNote = await getVisitNote(visitId);
+    const existingNote = await getVisitNote(tx, visitId);
     if (!existingNote) {
       throw new Error(`Visit note not found for visit ${visitId}`);
     }
@@ -329,7 +331,7 @@ export async function generateAIDraft(
     }
 
     // Get patient and visit context
-    const visit = await prisma.visit.findUnique({
+    const visit = await tx.visit.findUnique({
       where: { id: visitId },
       include: {
         patient: true,
@@ -440,6 +442,7 @@ Respond with a JSON object where keys are the question codes and values are the 
  * Finalize a visit note with signatures
  */
 export async function finalizeVisitNote(
+  tx: TxClient,
   visitId: string,
   clinicianSignature: {
     signatureData: string;
@@ -453,7 +456,7 @@ export async function finalizeVisitNote(
     relationship?: string;
   }
 ): Promise<VisitNoteData> {
-  const existingNote = await getVisitNote(visitId);
+  const existingNote = await getVisitNote(tx, visitId);
   if (!existingNote) {
     throw new Error(`Visit note not found for visit ${visitId}`);
   }
@@ -494,7 +497,7 @@ export async function finalizeVisitNote(
   };
 
   // Update visit
-  await prisma.visit.update({
+  await tx.visit.update({
     where: { id: visitId },
     data: {
       visitNotes: finalizedNote as unknown as Record<string, unknown>,
@@ -509,8 +512,8 @@ export async function finalizeVisitNote(
 /**
  * Get episode dashboard data
  */
-export async function getEpisodeDashboard(episodeId: string) {
-  const episode = await prisma.episode.findUnique({
+export async function getEpisodeDashboard(tx: TxClient, episodeId: string) {
+  const episode = await tx.episode.findUnique({
     where: { id: episodeId },
     include: {
       patient: true,

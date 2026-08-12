@@ -4,7 +4,11 @@
  * HTTP handlers for visit note operations.
  */
 
-import { Request, Response } from 'express';
+import { Response } from 'express';
+
+import prisma from '../config/prisma';
+import { withTenant } from '../config/tenancy';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import visitNoteService from '../services/visitNote.service';
 import type { Discipline, VisitPurpose } from '../constants/visitForm.constants';
 
@@ -60,8 +64,27 @@ interface FinalizeVisitNoteBody {
  * Get visit note by visit ID
  * GET /api/visits/:visitId/note
  */
-export async function getVisitNote(req: Request, res: Response): Promise<void> {
+/**
+ * The agency this request runs under. Taken from the session; a visit id alone
+ * must not be enough to read another agency's note.
+ */
+function tenantOf(req: AuthenticatedRequest, res: Response): string | null {
+  const agencyId = req.user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so patient data is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
+}
+
+export async function getVisitNote(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const visitId = req.params['visitId'];
 
     if (!visitId) {
@@ -69,7 +92,7 @@ export async function getVisitNote(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const note = await visitNoteService.getVisitNote(visitId);
+    const note = await withTenant(prisma, agencyId, (tx) => visitNoteService.getVisitNote(tx, visitId));
 
     if (!note) {
       res.status(404).json({ error: 'Visit note not found' });
@@ -90,8 +113,11 @@ export async function getVisitNote(req: Request, res: Response): Promise<void> {
  * Create a new visit note
  * POST /api/visits/:visitId/note
  */
-export async function createVisitNote(req: Request, res: Response): Promise<void> {
+export async function createVisitNote(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const visitId = req.params['visitId'];
     const body = req.body as CreateVisitNoteBody;
 
@@ -100,10 +126,11 @@ export async function createVisitNote(req: Request, res: Response): Promise<void
       return;
     }
 
-    // Get user ID from auth context (placeholder)
-    const clinicianId = (req as Request & { user?: { id: string } }).user?.id || 'system';
+    // Authenticated: attribute the write to the actual clinician. This used to
+    // fall back to 'system', which put unattributable entries in the record.
+    const clinicianId = req.user!.id;
 
-    const note = await visitNoteService.createVisitNote({
+    const note = await withTenant(prisma, agencyId, (tx) => visitNoteService.createVisitNote(tx, {
       visitId,
       patientId: body.patientId,
       episodeId: body.episodeId,
@@ -111,7 +138,7 @@ export async function createVisitNote(req: Request, res: Response): Promise<void
       discipline: body.discipline,
       visitPurpose: body.visitPurpose,
       visitDate: body.visitDate,
-    });
+    }));
 
     res.status(201).json(note);
   } catch (error) {
@@ -127,8 +154,11 @@ export async function createVisitNote(req: Request, res: Response): Promise<void
  * Update an existing visit note
  * PUT /api/visits/:visitId/note
  */
-export async function updateVisitNote(req: Request, res: Response): Promise<void> {
+export async function updateVisitNote(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const visitId = req.params['visitId'];
     const body = req.body as UpdateVisitNoteBody;
 
@@ -137,10 +167,10 @@ export async function updateVisitNote(req: Request, res: Response): Promise<void
       return;
     }
 
-    // Get user ID from auth context (placeholder)
-    const userId = (req as Request & { user?: { id: string } }).user?.id || 'system';
+    // See the note above: attribution is real now that the route authenticates.
+    const userId = req.user!.id;
 
-    const note = await visitNoteService.updateVisitNote(
+    const note = await withTenant(prisma, agencyId, (tx) => visitNoteService.updateVisitNote(tx, 
       visitId,
       {
         responses: body.responses as Record<string, { value: unknown; source?: 'manual' | 'voice' | 'ai_draft' | 'oasis' | 'system'; aiConfidence?: number }>,
@@ -150,7 +180,7 @@ export async function updateVisitNote(req: Request, res: Response): Promise<void
         timeOut: body.timeOut,
       },
       userId
-    );
+    ));
 
     res.json(note);
   } catch (error) {
@@ -177,8 +207,11 @@ export async function updateVisitNote(req: Request, res: Response): Promise<void
  * Generate AI draft for a section
  * POST /api/visits/:visitId/note/draft
  */
-export async function generateAIDraft(req: Request, res: Response): Promise<void> {
+export async function generateAIDraft(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const visitId = req.params['visitId'];
     const body = req.body as GenerateAIDraftBody;
 
@@ -192,11 +225,11 @@ export async function generateAIDraft(req: Request, res: Response): Promise<void
       return;
     }
 
-    const result = await visitNoteService.generateAIDraft(visitId, {
+    const result = await withTenant(prisma, agencyId, (tx) => visitNoteService.generateAIDraft(tx, visitId, {
       sectionId: body.sectionId,
       questionCodes: body.questionCodes,
       context: body.context,
-    });
+    }));
 
     res.json(result);
   } catch (error) {
@@ -212,8 +245,11 @@ export async function generateAIDraft(req: Request, res: Response): Promise<void
  * Finalize visit note with signatures
  * POST /api/visits/:visitId/note/finalize
  */
-export async function finalizeVisitNote(req: Request, res: Response): Promise<void> {
+export async function finalizeVisitNote(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const visitId = req.params['visitId'];
     const body = req.body as FinalizeVisitNoteBody;
 
@@ -227,10 +263,11 @@ export async function finalizeVisitNote(req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Get user ID from auth context (placeholder)
-    const clinicianId = (req as Request & { user?: { id: string } }).user?.id || 'system';
+    // Authenticated: attribute the write to the actual clinician. This used to
+    // fall back to 'system', which put unattributable entries in the record.
+    const clinicianId = req.user!.id;
 
-    const note = await visitNoteService.finalizeVisitNote(
+    const note = await withTenant(prisma, agencyId, (tx) => visitNoteService.finalizeVisitNote(tx, 
       visitId,
       {
         signatureData: body.clinicianSignature.signatureData,
@@ -238,7 +275,7 @@ export async function finalizeVisitNote(req: Request, res: Response): Promise<vo
         signedBy: clinicianId,
       },
       body.patientSignature
-    );
+    ));
 
     res.json(note);
   } catch (error) {
@@ -265,8 +302,11 @@ export async function finalizeVisitNote(req: Request, res: Response): Promise<vo
  * Get episode dashboard data
  * GET /api/episodes/:episodeId/dashboard
  */
-export async function getEpisodeDashboard(req: Request, res: Response): Promise<void> {
+export async function getEpisodeDashboard(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const episodeId = req.params['episodeId'];
 
     if (!episodeId) {
@@ -274,7 +314,7 @@ export async function getEpisodeDashboard(req: Request, res: Response): Promise<
       return;
     }
 
-    const dashboard = await visitNoteService.getEpisodeDashboard(episodeId);
+    const dashboard = await withTenant(prisma, agencyId, (tx) => visitNoteService.getEpisodeDashboard(tx, episodeId));
     res.json(dashboard);
   } catch (error) {
     console.error('Error getting episode dashboard:', error);
@@ -295,8 +335,11 @@ export async function getEpisodeDashboard(req: Request, res: Response): Promise<
  * Get visit notes for an episode
  * GET /api/episodes/:episodeId/visit-notes
  */
-export async function getEpisodeVisitNotes(req: Request, res: Response): Promise<void> {
+export async function getEpisodeVisitNotes(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const episodeId = req.params['episodeId'];
 
     if (!episodeId) {
@@ -305,16 +348,14 @@ export async function getEpisodeVisitNotes(req: Request, res: Response): Promise
     }
 
     // Get all visits for the episode with their notes
-    const prismaModule = await import('../config/prisma');
-    const prisma = prismaModule.prisma;
-    const visits = await prisma.visit.findMany({
+    const visits = await withTenant(prisma, agencyId, (tx) => tx.visit.findMany({
       where: { episodeId },
       orderBy: { scheduledDate: 'desc' },
       include: {
         patient: true,
         clinician: true,
       },
-    });
+    }));
 
     const visitNotes = visits
       .filter((v: { visitNotes?: unknown }) => v.visitNotes)

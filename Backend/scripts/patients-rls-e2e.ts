@@ -100,6 +100,39 @@ async function main() {
           ? 'LEAK: episodes reachable through a cross-tenant patient id'
           : `got ${theirEpisodes.status}`);
 
+  // --- visit notes: reachable by visit id, so the same boundary must hold ---
+  const ownEpisode = await admin.episode.create({
+    data: { agencyId: A, patientId: mine.id, episodeNumber: 1, startDate: new Date() },
+  });
+  const theirEpisode = await admin.episode.create({
+    data: { agencyId: B, patientId: theirs.id, episodeNumber: 1, startDate: new Date() },
+  });
+
+  const ownVisit = await admin.visit.create({
+    data: {
+      agencyId: A, patient: { connect: { id: mine.id } },
+      episode: { connect: { id: ownEpisode.id } },
+      clinician: { connect: { id: clinician.id } }, scheduledDate: new Date(),
+      visitType: 'PHYSICAL_THERAPY', status: 'SCHEDULED',
+    },
+  });
+  const theirVisit = await admin.visit.create({
+    data: {
+      agencyId: B, patient: { connect: { id: theirs.id } },
+      episode: { connect: { id: theirEpisode.id } },
+      clinician: { connect: { id: clinician.id } }, scheduledDate: new Date(),
+      visitType: 'PHYSICAL_THERAPY', status: 'SCHEDULED',
+    },
+  });
+
+  const ownNote = await api(`/api/visits/${ownVisit.id}/note`);
+  check('own visit note endpoint reachable', ownNote.status === 200 || ownNote.status === 404,
+        `got ${ownNote.status} (200 or 404 both fine; 403/500 would not be)`);
+
+  const theirNote = await api(`/api/visits/${theirVisit.id}/note`);
+  check("other agency's visit note is not returned", theirNote.status !== 200,
+        theirNote.status === 200 ? 'LEAK: cross-tenant visit note returned' : `got ${theirNote.status}`);
+
   console.log('\n' + (failures ? `${failures} FAILED` : 'ALL PASSED'));
   if (failures) process.exitCode = 1;
 }
@@ -107,6 +140,8 @@ async function main() {
 main()
   .catch((e) => { console.error('\nFAILED:', e instanceof Error ? e.message : e); process.exitCode = 1; })
   .finally(async () => {
+    await admin.visit.deleteMany({ where: { agencyId: { in: [A, B] } } });
+    await admin.episode.deleteMany({ where: { agencyId: { in: [A, B] } } });
     await admin.patient.deleteMany({ where: { agencyId: { in: [A, B] } } });
     await admin.user.deleteMany({ where: { email: 'e2e-pt-a@example.test' } });
     await admin.$disconnect();
