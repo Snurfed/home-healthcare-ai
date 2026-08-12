@@ -320,8 +320,24 @@ async function checkPatientAccess(
 /**
  * Format patient for response (mask sensitive data based on role)
  */
+/**
+ * Typed by what the function reads rather than by a full model payload. The
+ * callers `select` a handful of user columns, so demanding the whole User row
+ * made every call site a structural mismatch — which only surfaced once the
+ * model widened.
+ */
+type PatientForResponse = Prisma.PatientGetPayload<{
+  include: { emergencyContacts: true; insurances: true };
+}> & {
+  assignments?: Array<
+    Prisma.PatientAssignmentGetPayload<Record<string, never>> & {
+      user: { id: string; firstName: string; lastName: string; role: UserRole };
+    }
+  >;
+};
+
 function formatPatientResponse(
-  patient: Prisma.PatientGetPayload<{ include: { emergencyContacts: true; insurances: true; assignments: { include: { user: true } } } }>,
+  patient: PatientForResponse,
   includeSensitive: boolean = true
 ): object {
   const base: PatientResponse = {

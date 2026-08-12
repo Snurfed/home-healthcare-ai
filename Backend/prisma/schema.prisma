@@ -330,8 +330,11 @@ model RefreshToken {
 // ===========================================
 
 model Patient {
-  id  String @id @default(uuid())
-  mrn String @unique // Medical Record Number
+  id       String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
+  mrn      String  @unique // Medical Record Number
 
   // Demographics
   firstName         String
@@ -405,11 +408,15 @@ model Patient {
   @@index([status])
   @@index([deletedAt])
   @@index([admissionDate])
+  @@index([agencyId])
   @@map("patients")
 }
 
 model EmergencyContact {
   id        String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId  String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId String
   patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
@@ -435,11 +442,15 @@ model EmergencyContact {
 
   @@index([patientId])
   @@index([isPrimaryContact])
+  @@index([agencyId])
   @@map("emergency_contacts")
 }
 
 model Insurance {
   id        String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId  String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId String
   patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
@@ -485,11 +496,15 @@ model Insurance {
   @@index([insuranceType])
   @@index([isPrimary])
   @@index([policyNumber])
+  @@index([agencyId])
   @@map("insurances")
 }
 
 model PatientAssignment {
   id        String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId  String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId String
   patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   userId    String
@@ -507,6 +522,7 @@ model PatientAssignment {
   @@unique([patientId, userId, discipline])
   @@index([patientId])
   @@index([userId])
+  @@index([agencyId])
   @@map("patient_assignments")
 }
 
@@ -516,6 +532,9 @@ model PatientAssignment {
 
 model Episode {
   id        String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId  String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId String
   patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
@@ -548,11 +567,15 @@ model Episode {
   @@index([patientId])
   @@index([startDate])
   @@index([status])
+  @@index([agencyId])
   @@map("episodes")
 }
 
 model CarePlan {
   id        String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId  String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId String
   patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   episodeId String
@@ -607,6 +630,7 @@ model CarePlan {
   @@index([patientId])
   @@index([episodeId])
   @@index([status])
+  @@index([agencyId])
   @@map("care_plans")
 }
 
@@ -616,6 +640,9 @@ model CarePlan {
 
 model Visit {
   id           String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId     String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId    String
   patient      Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   episodeId    String
@@ -679,6 +706,7 @@ model Visit {
   @@index([scheduledDate])
   @@index([status])
   @@index([visitType])
+  @@index([agencyId])
   @@map("visits")
 }
 
@@ -688,6 +716,9 @@ model Visit {
 
 model OasisAssessment {
   id          String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId    String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId   String
   patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   episodeId   String
@@ -752,11 +783,15 @@ model OasisAssessment {
   @@index([assessmentType])
   @@index([status])
   @@index([m0090_completionDate])
+  @@index([agencyId])
   @@map("oasis_assessments")
 }
 
 model OasisResponse {
   id           String          @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId     String?         @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   assessmentId String
   assessment   OasisAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
@@ -792,6 +827,7 @@ model OasisResponse {
   @@index([assessmentId])
   @@index([itemCode])
   @@index([section])
+  @@index([agencyId])
   @@map("oasis_responses")
 }
 
@@ -801,6 +837,9 @@ model OasisResponse {
 
 model SuggestionDismissal {
   id           String   @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId     String?  @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   assessmentId String
   suggestionId String // Format: ruleId-questionCode
   questionCode String
@@ -810,6 +849,7 @@ model SuggestionDismissal {
 
   @@unique([assessmentId, suggestionId])
   @@index([assessmentId])
+  @@index([agencyId])
   @@map("suggestion_dismissals")
 }
 
@@ -819,6 +859,9 @@ model SuggestionDismissal {
 
 model Document {
   id           String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId     String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId    String
   patient      Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   visitId      String?
@@ -895,6 +938,7 @@ model Document {
   @@index([reviewStatus])
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([agencyId])
   @@map("documents")
 }
 
@@ -904,6 +948,9 @@ model Document {
 
 model ReferralDocument {
   id           String           @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId     String?          @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId    String
   patient      Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
   assessmentId String?
@@ -948,6 +995,7 @@ model ReferralDocument {
   @@index([extractionStatus])
   @@index([uploadedAt])
   @@index([deletedAt])
+  @@index([agencyId])
   @@map("referral_documents")
 }
 
@@ -957,6 +1005,9 @@ model ReferralDocument {
 
 model SoapNote {
   id           String          @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId     String?         @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   assessmentId String
   assessment   OasisAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   patientId    String
@@ -1007,6 +1058,7 @@ model SoapNote {
   @@index([status])
   @@index([generatedAt])
   @@index([deletedAt])
+  @@index([agencyId])
   @@map("soap_notes")
 }
 
@@ -1016,6 +1068,9 @@ model SoapNote {
 
 model VoiceTranscription {
   id          String   @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId    String?  @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId   String?
   patient     Patient? @relation(fields: [patientId], references: [id])
   visitId     String?
@@ -1075,6 +1130,7 @@ model VoiceTranscription {
   @@index([clinicianId])
   @@index([status])
   @@index([createdAt])
+  @@index([agencyId])
   @@map("voice_transcriptions")
 }
 
@@ -1152,7 +1208,10 @@ model SystemConfig {
 // ===========================================
 
 model AgencySettings {
-  id String @id @default(uuid())
+  id       String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
 
   // Agency identification
   agencyName   String // Display name
@@ -1179,6 +1238,7 @@ model AgencySettings {
   createdBy String?
   updatedBy String?
 
+  @@index([agencyId])
   @@map("agency_settings")
 }
 
@@ -1241,6 +1301,9 @@ enum CommunicationStatus {
 
 model PhysicianCommunication {
   id                   String               @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId             String?              @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId            String
   episodeId            String
   assessmentId         String?
@@ -1274,11 +1337,15 @@ model PhysicianCommunication {
   @@index([episodeId])
   @@index([assessmentId])
   @@index([createdAt])
+  @@index([agencyId])
   @@map("physician_communications")
 }
 
 model CommunicationTrigger {
   id              String               @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId        String?              @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   assessmentId    String
   ruleId          String
   triggerType     CommunicationType
@@ -1294,11 +1361,15 @@ model CommunicationTrigger {
   @@unique([assessmentId, ruleId])
   @@index([assessmentId])
   @@index([dismissed])
+  @@index([agencyId])
   @@map("communication_triggers")
 }
 
 model CommunicationAttachment {
   id              String   @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId        String?  @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   communicationId String
   fileName        String
   fileType        String
@@ -1309,11 +1380,15 @@ model CommunicationAttachment {
   communication PhysicianCommunication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
 
   @@index([communicationId])
+  @@index([agencyId])
   @@map("communication_attachments")
 }
 
 model CommunicationAuditLog {
   id              String   @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId        String?  @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   communicationId String
   action          String // CREATED, UPDATED, SENT, DELIVERED, etc.
   performedById   String
@@ -1324,6 +1399,7 @@ model CommunicationAuditLog {
 
   @@index([communicationId])
   @@index([createdAt])
+  @@index([agencyId])
   @@map("communication_audit_logs")
 }
 
@@ -1372,6 +1448,9 @@ enum IntegrationProvider {
 // Pre-defined triggers with keyword matching and AI detection rules
 model ClinicalEventTriggerConfig {
   id          String            @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId    String?           @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   eventType   ClinicalEventType @unique
   name        String // Human-readable name
   description String? // Description of what this trigger detects
@@ -1413,12 +1492,16 @@ model ClinicalEventTriggerConfig {
 
   @@index([eventType])
   @@index([isEnabled])
+  @@index([agencyId])
   @@map("clinical_event_trigger_configs")
 }
 
 // Notification Templates for each event type
 model NotificationTemplate {
   id        String                     @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId  String?                    @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   triggerId String
   trigger   ClinicalEventTriggerConfig @relation(fields: [triggerId], references: [id], onDelete: Cascade)
 
@@ -1449,12 +1532,16 @@ model NotificationTemplate {
 
   @@index([triggerId])
   @@index([channel])
+  @@index([agencyId])
   @@map("notification_templates")
 }
 
 // Detected Clinical Events (instances of triggered events)
 model DetectedClinicalEvent {
   id           String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId     String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId    String
   episodeId    String
   assessmentId String?
@@ -1501,12 +1588,16 @@ model DetectedClinicalEvent {
   @@index([eventType])
   @@index([detectedAt])
   @@index([isAcknowledged, isDismissed])
+  @@index([agencyId])
   @@map("detected_clinical_events")
 }
 
 // Integration Settings for Email/Fax providers
 model IntegrationSettings {
   id        String              @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId  String?             @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   provider  IntegrationProvider
   name      String // Display name
   isEnabled Boolean             @default(false)
@@ -1548,12 +1639,16 @@ model IntegrationSettings {
 
   @@unique([provider, channel])
   @@index([channel, isEnabled])
+  @@index([agencyId])
   @@map("integration_settings")
 }
 
 // Communication Send Log (detailed delivery tracking)
 model CommunicationSendLog {
-  id              String @id @default(uuid())
+  id              String  @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId        String? @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   communicationId String
 
   // Send attempt details
@@ -1587,6 +1682,7 @@ model CommunicationSendLog {
   @@index([communicationId])
   @@index([status])
   @@index([queuedAt])
+  @@index([agencyId])
   @@map("communication_send_logs")
 }
 
@@ -1607,6 +1703,9 @@ enum EmrVendor {
 // EMR Connection configuration
 model EmrConnection {
   id                    String    @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId              String?   @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   name                  String // "City Hospital Epic"
   vendor                EmrVendor
   fhirBaseUrl           String
@@ -1627,6 +1726,7 @@ model EmrConnection {
   auditLogs    EmrAuditLog[]
   patientLinks EmrPatientLink[]
 
+  @@index([agencyId])
   @@map("emr_connections")
 }
 
@@ -1679,6 +1779,9 @@ model EmrAuditLog {
 // Track imported patients to prevent duplicates
 model EmrPatientLink {
   id               String        @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId         String?       @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
   patientId        String        @unique
   patient          Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   connectionId     String
@@ -1691,6 +1794,7 @@ model EmrPatientLink {
 
   @@unique([connectionId, fhirPatientId])
   @@index([mrn])
+  @@index([agencyId])
   @@map("emr_patient_links")
 }
 
@@ -1708,9 +1812,12 @@ enum EmrSyncStatus {
 
 // Track EMR sync operations for visits and assessments
 model EmrSyncJob {
-  id     String        @id @default(uuid())
-  type   String // "VISIT" or "ASSESSMENT"
-  status EmrSyncStatus @default(PENDING)
+  id       String        @id @default(uuid())
+  /// Tenant owner. Defaults to the agency in force, so a row written inside
+  /// withTenant() is labelled without the caller setting it.
+  agencyId String?       @default(dbgenerated("current_setting('app.current_agency_id'::text, true)"))
+  type     String // "VISIT" or "ASSESSMENT"
+  status   EmrSyncStatus @default(PENDING)
 
   // Reference to synced entity (one or the other)
   visitId      String?
@@ -1735,13 +1842,14 @@ model EmrSyncJob {
   @@index([assessmentId])
   @@index([status])
   @@index([createdAt])
+  @@index([agencyId])
   @@map("emr_sync_jobs")
 }
 
 // EMR field mapping for agency-specific customizations
 model EmrFieldMapping {
   id       String @id @default(uuid())
-  agencyId String // Reference to agency
+  agencyId String    @default(dbgenerated("current_setting(\'app.current_agency_id\'::text, true)")) // Reference to agency
 
   // Field mapping
   internalField String // Internal field name (e.g., "patient.dateOfBirth")
