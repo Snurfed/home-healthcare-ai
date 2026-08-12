@@ -133,6 +133,40 @@ async function main() {
   check("other agency's visit note is not returned", theirNote.status !== 200,
         theirNote.status === 200 ? 'LEAK: cross-tenant visit note returned' : `got ${theirNote.status}`);
 
+  // --- OASIS: drives PDGM payment, so the boundary matters most here -------
+  const ownAssessment = await admin.oasisAssessment.create({
+    data: {
+      agencyId: A, patientId: mine.id, episodeId: ownEpisode.id, clinicianId: clinician.id,
+      assessmentType: 'START_OF_CARE', status: 'DRAFT',
+    },
+  });
+  const theirAssessment = await admin.oasisAssessment.create({
+    data: {
+      agencyId: B, patientId: theirs.id, episodeId: theirEpisode.id, clinicianId: clinician.id,
+      assessmentType: 'START_OF_CARE', status: 'DRAFT',
+    },
+  });
+
+  const listed = await api('/api/oasis/assessments?limit=100');
+  const assessmentIds: string[] = (listed.json?.data ?? listed.json?.assessments ?? [])
+    .map((a: any) => a.id);
+  check('assessment list returns 200', listed.status === 200, `got ${listed.status}`);
+  check('own assessment listed', assessmentIds.includes(ownAssessment.id));
+  check("other agency's assessment not listed", !assessmentIds.includes(theirAssessment.id),
+        assessmentIds.includes(theirAssessment.id) ? 'LEAK: cross-tenant assessment listed' : '');
+
+  const ownA = await api(`/api/oasis/assessments/${ownAssessment.id}`);
+  check('own assessment readable', ownA.status === 200, `got ${ownA.status}`);
+
+  const theirA = await api(`/api/oasis/assessments/${theirAssessment.id}`);
+  check("other agency's assessment is not readable", theirA.status !== 200,
+        theirA.status === 200 ? 'LEAK: cross-tenant assessment returned' : `got ${theirA.status}`);
+
+  // Reference data must stay reachable — it is exempt from RLS on purpose.
+  const questions = await api('/api/oasis/questions?limit=5');
+  check('OASIS question library still reachable (exempt reference data)',
+        questions.status === 200, `got ${questions.status}`);
+
   console.log('\n' + (failures ? `${failures} FAILED` : 'ALL PASSED'));
   if (failures) process.exitCode = 1;
 }
@@ -140,6 +174,7 @@ async function main() {
 main()
   .catch((e) => { console.error('\nFAILED:', e instanceof Error ? e.message : e); process.exitCode = 1; })
   .finally(async () => {
+    await admin.oasisAssessment.deleteMany({ where: { agencyId: { in: [A, B] } } });
     await admin.visit.deleteMany({ where: { agencyId: { in: [A, B] } } });
     await admin.episode.deleteMany({ where: { agencyId: { in: [A, B] } } });
     await admin.patient.deleteMany({ where: { agencyId: { in: [A, B] } } });

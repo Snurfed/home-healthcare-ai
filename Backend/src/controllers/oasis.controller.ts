@@ -11,6 +11,7 @@ import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import oasisService from '../services/oasis.service';
 
+import { withTenant, TxClient } from '../config/tenancy';
 // ===========================================
 // CONFIGURATION
 // ===========================================
@@ -131,6 +132,24 @@ export interface ValidationError {
 /**
  * Create audit log for OASIS assessment access
  */
+/**
+ * The agency this request runs under.
+ *
+ * OASIS drives PDGM reimbursement, so a cross-tenant read here is both a
+ * privacy breach and a route to another agency's payment data.
+ */
+function tenantOf(req: AuthenticatedRequest, res: Response): string | null {
+  const agencyId = req.user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so assessment data is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
+}
+
 async function createOasisAuditLog(
   action: AuditAction,
   userId: string,
@@ -178,6 +197,7 @@ async function createOasisAuditLog(
  * Check if user has access to assessment
  */
 async function checkAssessmentAccess(
+  tx: TxClient,
   userId: string,
   userRole: UserRole,
   assessment: { clinicianId: string; patientId: string; reviewerId?: string | null }
@@ -198,7 +218,7 @@ async function checkAssessmentAccess(
   }
 
   // Check patient assignment
-  const assignment = await prisma.patientAssignment.findFirst({
+  const assignment = await tx.patientAssignment.findFirst({
     where: {
       patientId: assessment.patientId,
       userId,
@@ -217,16 +237,17 @@ async function checkAssessmentAccess(
  * These fields are marked with sourceType: 'system' and are read-only
  */
 async function autoPopulateSystemFields(
+  tx: TxClient,
   assessmentId: string,
   patientId: string
 ): Promise<void> {
   // Fetch agency settings
-  const agencySettings = await prisma.agencySettings.findFirst({
+  const agencySettings = await tx.agencySettings.findFirst({
     where: { isPrimary: true, isActive: true },
   });
 
   // Fetch patient info for MRN and physician NPI
-  const patient = await prisma.patient.findUnique({
+  const patient = await tx.patient.findUnique({
     where: { id: patientId },
     select: {
       mrn: true,
@@ -349,15 +370,15 @@ async function autoPopulateSystemFields(
 
   // Create all system responses
   if (systemResponses.length > 0) {
-    await prisma.oasisResponse.createMany({
+    await tx.oasisResponse.createMany({
       data: systemResponses,
       skipDuplicates: true,
     });
   }
 }
 
-async function calculateCompletionPercentage(assessmentId: string): Promise<number> {
-  const responses = await prisma.oasisResponse.findMany({
+async function calculateCompletionPercentage(tx: TxClient, assessmentId: string): Promise<number> {
+  const responses = await tx.oasisResponse.findMany({
     where: { assessmentId },
     select: { itemCode: true, responseValue: true, responseCode: true },
   });
@@ -371,10 +392,10 @@ async function calculateCompletionPercentage(assessmentId: string): Promise<numb
 /**
  * Validate assessment responses
  */
-async function validateAssessmentResponses(assessmentId: string): Promise<ValidationError[]> {
+async function validateAssessmentResponses(tx: TxClient, assessmentId: string): Promise<ValidationError[]> {
   const errors: ValidationError[] = [];
 
-  const assessment = await prisma.oasisAssessment.findUnique({
+  const assessment = await tx.oasisAssessment.findUnique({
     where: { id: assessmentId },
     include: { responses: true },
   });
@@ -451,6 +472,10 @@ export async function listAssessments(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -518,7 +543,7 @@ export async function listAssessments(
     else if (sortBy === 'status') orderBy.status = sortOrder;
 
     const [assessments, total] = await Promise.all([
-      prisma.oasisAssessment.findMany({
+      tx.oasisAssessment.findMany({
         where,
         orderBy,
         skip,
@@ -550,7 +575,7 @@ export async function listAssessments(
           },
         },
       }),
-      prisma.oasisAssessment.count({ where }),
+      tx.oasisAssessment.count({ where }),
     ]);
 
     // Audit log
@@ -579,6 +604,7 @@ export async function listAssessments(
         hasPrev: pageNum > 1,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -594,6 +620,10 @@ export async function getAssessment(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -603,7 +633,7 @@ export async function getAssessment(
 
     const { id } = req.params;
 
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
       include: {
         patient: {
@@ -644,7 +674,7 @@ export async function getAssessment(
     }
 
     // Check access
-    const hasAccess = await checkAssessmentAccess(
+    const hasAccess = await checkAssessmentAccess(tx, 
       req.user.id,
       req.user.role,
       { clinicianId: assessment.clinicianId, patientId: assessment.patientId, reviewerId: assessment.reviewerId }
@@ -670,7 +700,7 @@ export async function getAssessment(
     }
 
     // Get validation errors
-    const validationErrors = await validateAssessmentResponses(id);
+    const validationErrors = await validateAssessmentResponses(tx, id);
 
     // Index responses by itemCode for easy lookup in frontend
     const responsesByItemCode: Record<string, typeof assessment.responses[0]> = {};
@@ -732,6 +762,7 @@ export async function getAssessment(
       createdAt: assessment.createdAt,
       updatedAt: assessment.updatedAt,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -747,6 +778,10 @@ export async function createAssessment(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -789,7 +824,7 @@ export async function createAssessment(
     }
 
     // Validate patient exists
-    const patient = await prisma.patient.findUnique({
+    const patient = await tx.patient.findUnique({
       where: { id: patientId },
       select: { id: true, firstName: true, lastName: true, deletedAt: true },
     });
@@ -802,7 +837,7 @@ export async function createAssessment(
     }
 
     // Validate episode exists and belongs to patient
-    const episode = await prisma.episode.findUnique({
+    const episode = await tx.episode.findUnique({
       where: { id: episodeId },
       select: { id: true, patientId: true, deletedAt: true },
     });
@@ -823,7 +858,7 @@ export async function createAssessment(
 
     // Create assessment
     const assessmentId = uuidv4();
-    const assessment = await prisma.oasisAssessment.create({
+    const assessment = await tx.oasisAssessment.create({
       data: {
         id: assessmentId,
         patientId,
@@ -850,12 +885,12 @@ export async function createAssessment(
 
     // Copy responses from previous assessment if specified
     if (copyFromAssessmentId) {
-      const previousResponses = await prisma.oasisResponse.findMany({
+      const previousResponses = await tx.oasisResponse.findMany({
         where: { assessmentId: copyFromAssessmentId },
       });
 
       if (previousResponses.length > 0) {
-        await prisma.oasisResponse.createMany({
+        await tx.oasisResponse.createMany({
           data: previousResponses.map(r => ({
             id: uuidv4(),
             assessmentId: assessmentId,
@@ -874,11 +909,11 @@ export async function createAssessment(
     }
 
     // Auto-populate agency-level and patient-level fields
-    await autoPopulateSystemFields(assessmentId, patientId);
+    await autoPopulateSystemFields(tx, assessmentId, patientId);
 
     // Recalculate completion (after auto-population)
-    const completion = await calculateCompletionPercentage(assessmentId);
-    await prisma.oasisAssessment.update({
+    const completion = await calculateCompletionPercentage(tx, assessmentId);
+    await tx.oasisAssessment.update({
       where: { id: assessmentId },
       data: { completionPercentage: completion },
     });
@@ -913,6 +948,7 @@ export async function createAssessment(
         createdAt: assessment.createdAt,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -928,6 +964,10 @@ export async function updateAssessment(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -938,7 +978,7 @@ export async function updateAssessment(
     const { id } = req.params;
     const { section, items, status, assessmentCompletionDate } = req.body;
 
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
       select: {
         id: true,
@@ -966,7 +1006,7 @@ export async function updateAssessment(
     }
 
     // Check access
-    const hasAccess = await checkAssessmentAccess(
+    const hasAccess = await checkAssessmentAccess(tx, 
       req.user.id,
       req.user.role,
       { clinicianId: assessment.clinicianId, patientId: assessment.patientId, reviewerId: assessment.reviewerId }
@@ -995,7 +1035,7 @@ export async function updateAssessment(
         // Get section from: 1) request body, 2) question library, 3) fallback to 'unknown'
         const itemSection = section || sectionMap.get(itemCode) || 'unknown';
 
-        await prisma.oasisResponse.upsert({
+        await tx.oasisResponse.upsert({
           where: {
             assessmentId_itemCode: {
               assessmentId: id,
@@ -1035,7 +1075,7 @@ export async function updateAssessment(
     }
 
     // Calculate new completion percentage
-    const completionPercentage = await calculateCompletionPercentage(id);
+    const completionPercentage = await calculateCompletionPercentage(tx, id);
 
     // Update assessment
     const updateData: Prisma.OasisAssessmentUpdateInput = {
@@ -1072,7 +1112,7 @@ export async function updateAssessment(
       updateData.status = AssessmentStatus.IN_PROGRESS;
     }
 
-    const updatedAssessment = await prisma.oasisAssessment.update({
+    const updatedAssessment = await tx.oasisAssessment.update({
       where: { id },
       data: updateData,
       select: {
@@ -1108,6 +1148,7 @@ export async function updateAssessment(
         updatedAt: updatedAssessment.updatedAt,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1123,6 +1164,10 @@ export async function submitForReview(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1140,7 +1185,7 @@ export async function submitForReview(
       });
     }
 
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
       include: { patient: { select: { firstName: true, lastName: true } } },
     });
@@ -1169,7 +1214,7 @@ export async function submitForReview(
     }
 
     // Validate before submission
-    const validationErrors = await validateAssessmentResponses(id);
+    const validationErrors = await validateAssessmentResponses(tx, id);
     const criticalErrors = validationErrors.filter(e => e.severity === 'error');
 
     if (criticalErrors.length > 0) {
@@ -1181,14 +1226,14 @@ export async function submitForReview(
     }
 
     // Calculate scoring
-    const responses = await prisma.oasisResponse.findMany({
+    const responses = await tx.oasisResponse.findMany({
       where: { assessmentId: id },
       select: { itemCode: true, responseCode: true },
     });
     const scoring = calculateHippsCode({ responses });
 
     // Update assessment
-    const updatedAssessment = await prisma.oasisAssessment.update({
+    const updatedAssessment = await tx.oasisAssessment.update({
       where: { id },
       data: {
         status: AssessmentStatus.PENDING_REVIEW,
@@ -1235,6 +1280,7 @@ export async function submitForReview(
         validationWarnings: validationErrors.filter(e => e.severity === 'warning'),
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1250,6 +1296,10 @@ export async function reviewAssessment(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1268,7 +1318,7 @@ export async function reviewAssessment(
     const { id } = req.params;
     const { approved, notes, correctionReason } = req.body;
 
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
       include: { patient: { select: { firstName: true, lastName: true } } },
     });
@@ -1302,7 +1352,7 @@ export async function reviewAssessment(
       updateData.correctionReason = correctionReason || 'Corrections needed';
     }
 
-    const updatedAssessment = await prisma.oasisAssessment.update({
+    const updatedAssessment = await tx.oasisAssessment.update({
       where: { id },
       data: updateData,
     });
@@ -1333,6 +1383,7 @@ export async function reviewAssessment(
         correctionReason: updatedAssessment.correctionReason,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1348,6 +1399,10 @@ export async function lockAssessment(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1365,7 +1420,7 @@ export async function lockAssessment(
 
     const { id } = req.params;
 
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
     });
 
@@ -1383,7 +1438,7 @@ export async function lockAssessment(
       });
     }
 
-    const updatedAssessment = await prisma.oasisAssessment.update({
+    const updatedAssessment = await tx.oasisAssessment.update({
       where: { id },
       data: {
         status: AssessmentStatus.LOCKED,
@@ -1412,6 +1467,7 @@ export async function lockAssessment(
         lockedAt: updatedAssessment.lockedAt,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1421,6 +1477,8 @@ export async function lockAssessment(
  * Get OASIS question library
  * GET /api/oasis/questions
  */
+// Deliberately unscoped: the OASIS question library is CMS reference data,
+// identical for every agency, and the table is exempt from row-level security.
 export async function getQuestionLibrary(
   req: AuthenticatedRequest & { query: QuestionLibraryQuery },
   res: Response,
@@ -1490,6 +1548,10 @@ export async function calculateScore(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1499,7 +1561,7 @@ export async function calculateScore(
 
     const { id } = req.params;
 
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
       include: {
         responses: {
@@ -1519,7 +1581,7 @@ export async function calculateScore(
     const scoring = calculateHippsCode({ responses: assessment.responses });
 
     // Update assessment with scoring
-    await prisma.oasisAssessment.update({
+    await tx.oasisAssessment.update({
       where: { id },
       data: {
         hippsCode: scoring.hippsCode,
@@ -1533,6 +1595,7 @@ export async function calculateScore(
     return res.status(200).json({
       message: 'HIPPS score calculated successfully',
       scoring,
+    });
     });
   } catch (error) {
     next(error);
@@ -1549,6 +1612,10 @@ export async function deleteAssessment(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1558,7 +1625,7 @@ export async function deleteAssessment(
 
     const { id } = req.params;
 
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
     });
 
@@ -1589,7 +1656,7 @@ export async function deleteAssessment(
     }
 
     // Soft delete
-    await prisma.oasisAssessment.update({
+    await tx.oasisAssessment.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
@@ -1611,6 +1678,7 @@ export async function deleteAssessment(
       message: 'OASIS assessment deleted successfully',
       assessmentId: id,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1626,6 +1694,10 @@ export async function getHippsDetails(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1637,7 +1709,7 @@ export async function getHippsDetails(
     const { includeOptimizations, wageIndex, recalculate } = req.query;
 
     // Check if assessment exists
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
       select: {
         id: true,
@@ -1659,7 +1731,7 @@ export async function getHippsDetails(
     }
 
     // Check access
-    const hasAccess = await checkAssessmentAccess(
+    const hasAccess = await checkAssessmentAccess(tx, 
       req.user.id,
       req.user.role,
       { clinicianId: assessment.clinicianId, patientId: assessment.patientId, reviewerId: assessment.reviewerId }
@@ -1733,6 +1805,7 @@ export async function getHippsDetails(
       optimizationSuggestions: hippsDetails.optimizationSuggestions,
       validationWarnings: hippsDetails.validationWarnings,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1748,6 +1821,10 @@ export async function calculateEnhancedScore(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1759,7 +1836,7 @@ export async function calculateEnhancedScore(
     const { includeOptimizations, wageIndex } = req.body;
 
     // Check if assessment exists and is not locked
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
       select: {
         id: true,
@@ -1782,7 +1859,7 @@ export async function calculateEnhancedScore(
     }
 
     // Check access
-    const hasAccess = await checkAssessmentAccess(
+    const hasAccess = await checkAssessmentAccess(tx, 
       req.user.id,
       req.user.role,
       { clinicianId: assessment.clinicianId, patientId: assessment.patientId, reviewerId: assessment.reviewerId }
@@ -1840,6 +1917,7 @@ export async function calculateEnhancedScore(
       optimizationSuggestions: result.optimizationSuggestions,
       validationWarnings: result.validationWarnings,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1855,6 +1933,10 @@ export async function validateAssessment(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1873,7 +1955,7 @@ export async function validateAssessment(
       });
     }
 
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id },
       select: {
         id: true,
@@ -1894,7 +1976,7 @@ export async function validateAssessment(
     }
 
     // Check access
-    const hasAccess = await checkAssessmentAccess(
+    const hasAccess = await checkAssessmentAccess(tx, 
       req.user.id,
       req.user.role,
       { clinicianId: assessment.clinicianId, patientId: assessment.patientId, reviewerId: assessment.reviewerId }
@@ -1908,12 +1990,12 @@ export async function validateAssessment(
     }
 
     // Get validation errors
-    const validationErrors = await validateAssessmentResponses(id);
+    const validationErrors = await validateAssessmentResponses(tx, id);
     const errors = validationErrors.filter(e => e.severity === 'error');
     const warnings = validationErrors.filter(e => e.severity === 'warning');
 
     // Get responses count for completion check
-    const responses = await prisma.oasisResponse.findMany({
+    const responses = await tx.oasisResponse.findMany({
       where: { assessmentId: id },
       select: { itemCode: true, responseValue: true, responseCode: true },
     });
@@ -1932,6 +2014,7 @@ export async function validateAssessment(
       warnings,
       canSubmit: isValid && [AssessmentStatus.IN_PROGRESS, AssessmentStatus.NEEDS_CORRECTION].includes(assessment.status),
       status: assessment.status,
+    });
     });
   } catch (error) {
     next(error);
