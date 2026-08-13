@@ -24,7 +24,19 @@ import type { EmrAccessToken } from '../../generated/prisma';
 // ===========================================
 
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
-const ENCRYPTION_KEY = process.env['EMR_ENCRYPTION_KEY'] || 'default-dev-key-change-in-production';
+
+// EMR encryption key must be set via environment variable
+const EMR_ENCRYPTION_KEY = process.env['EMR_ENCRYPTION_KEY'];
+
+if (!EMR_ENCRYPTION_KEY) {
+  throw new Error(
+    'CRITICAL: EMR_ENCRYPTION_KEY environment variable is not set. ' +
+    'This is required for secure EMR token encryption. ' +
+    'Set EMR_ENCRYPTION_KEY to a secure random string.'
+  );
+}
+
+const ENCRYPTION_KEY = EMR_ENCRYPTION_KEY;
 
 // Ensure key is proper length for AES-256
 function getEncryptionKey(): Buffer {

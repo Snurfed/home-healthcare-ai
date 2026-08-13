@@ -10,19 +10,57 @@ import crypto from 'crypto';
 // Encryption key from environment (must be 32 bytes for AES-256)
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '';
 
+// Salt for key derivation - configurable via environment variable
+// In production, this MUST be set via environment variable
+// In development only, falls back to a random salt (regenerated on each startup)
+const getEncryptionSalt = (): string => {
+  const envSalt = process.env.ENCRYPTION_SALT;
+
+  if (envSalt) {
+    return envSalt;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'CRITICAL: ENCRYPTION_SALT environment variable is not set in production. ' +
+      'This is required for consistent encryption/decryption across restarts.'
+    );
+  }
+
+  // Development only: generate random salt (warning: data encrypted in one session cannot be decrypted in another)
+  console.warn('[Encryption] WARNING: ENCRYPTION_SALT not set. Using random salt for development. Data will not persist across restarts.');
+  return crypto.randomBytes(16).toString('hex');
+};
+
+// Cache the salt to ensure consistency within a single process run
+let cachedSalt: string | null = null;
+const getSalt = (): string => {
+  if (!cachedSalt) {
+    cachedSalt = getEncryptionSalt();
+  }
+  return cachedSalt;
+};
+
 // Validate encryption key on module load
 if (!ENCRYPTION_KEY && process.env.NODE_ENV === 'production') {
-  console.error('[Encryption] WARNING: ENCRYPTION_KEY not set. Credentials will not be encrypted securely.');
+  throw new Error(
+    'CRITICAL: ENCRYPTION_KEY environment variable is not set in production. ' +
+    'This is required for secure credential encryption.'
+  );
 }
 
 // Derive a proper 32-byte key from the provided key
 function getKey(): Buffer {
   if (!ENCRYPTION_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('ENCRYPTION_KEY is required in production');
+    }
     // In development, use a default key (NOT SECURE - only for dev)
-    return crypto.scryptSync('dev-default-key', 'salt', 32);
+    console.warn('[Encryption] WARNING: Using insecure default key for development only.');
+    return crypto.scryptSync('dev-default-key-not-for-production', getSalt(), 32);
   }
-  // Use scrypt to derive a proper key length
-  return crypto.scryptSync(ENCRYPTION_KEY, 'homehealthai-salt', 32);
+  // Use scrypt to derive a proper key length with configurable salt
+  return crypto.scryptSync(ENCRYPTION_KEY, getSalt(), 32);
 }
 
 const ALGORITHM = 'aes-256-gcm';
