@@ -86,6 +86,7 @@ const todaysSchedule = [
     visitType: 'FOLLOWUP',
     time: '9:00 AM',
     address: '123 Main St',
+    status: 'complete' as VisitStatus,
   },
   {
     id: 'p2',
@@ -95,6 +96,7 @@ const todaysSchedule = [
     visitType: 'FOLLOWUP',
     time: '11:00 AM',
     address: '456 Oak Ave',
+    status: 'in_progress' as VisitStatus,
   },
   {
     id: 'p3',
@@ -104,8 +106,30 @@ const todaysSchedule = [
     visitType: 'SOC',
     time: '2:00 PM',
     address: '789 Pine Rd',
+    status: 'scheduled' as VisitStatus,
   },
 ];
+
+type VisitStatus = 'scheduled' | 'in_progress' | 'complete';
+
+/**
+ * A Start of Care is not a longer follow-up. It carries the full OASIS, sets
+ * the episode's payment and case-mix, and cannot be amended as freely later.
+ * Rendering it identically to a routine visit hides the one appointment on the
+ * list that most deserves the clinician's remaining time and attention.
+ */
+const VISIT_TYPE_LABELS: Record<string, { label: string; className: string }> = {
+  SOC: { label: 'Start of Care', className: 'bg-purple-100 text-purple-800 ring-1 ring-purple-200' },
+  RECERT: { label: 'Recertification', className: 'bg-amber-100 text-amber-800 ring-1 ring-amber-200' },
+  DISCHARGE: { label: 'Discharge', className: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200' },
+  FOLLOWUP: { label: 'Follow-up', className: 'bg-gray-100 text-gray-600' },
+};
+
+const STATUS_META: Record<VisitStatus, { label: string; dot: string; action: string }> = {
+  scheduled: { label: 'Not started', dot: 'bg-gray-300', action: 'Start' },
+  in_progress: { label: 'In progress', dot: 'bg-blue-500', action: 'Resume' },
+  complete: { label: 'Documented', dot: 'bg-green-500', action: 'View' },
+};
 
 // =============================================================================
 // MAIN COMPONENT
@@ -193,7 +217,12 @@ export default function Dashboard() {
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold text-gray-900">Today's Schedule</h2>
-              <span className="text-sm text-gray-500">{todaysSchedule.length} visits</span>
+              {/* A bare count answers a question nobody has. What is left to do
+                  is the reason this screen gets opened between visits. */}
+              <span className="text-sm text-gray-500">
+                {todaysSchedule.filter((v) => v.status === 'complete').length} of{' '}
+                {todaysSchedule.length} documented
+              </span>
             </div>
 
             {/* Search */}
@@ -210,27 +239,45 @@ export default function Dashboard() {
           </div>
 
           <div className="divide-y divide-gray-100">
-            {filteredSchedule.map((visit) => (
-              <button
-                key={visit.id}
-                onClick={() => handleStartCapture(visit)}
-                className="w-full p-4 text-left hover:bg-gray-50 transition-colors flex items-center gap-4"
-              >
-                <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
-                  {visit.patientName.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900">{visit.patientName}</p>
-                  <p className="text-sm text-gray-500">
-                    {visit.visitType} • {visit.address}
-                  </p>
-                </div>
-                <div className="flex-shrink-0 text-right">
-                  <p className="text-sm font-medium text-gray-900">{visit.time}</p>
-                  <p className="text-xs text-blue-600">Start →</p>
-                </div>
-              </button>
-            ))}
+            {filteredSchedule.map((visit) => {
+              const type = VISIT_TYPE_LABELS[visit.visitType] ?? {
+                label: visit.visitType,
+                className: 'bg-gray-100 text-gray-600',
+              };
+              const status = STATUS_META[visit.status];
+              const done = visit.status === 'complete';
+              return (
+                <button
+                  key={visit.id}
+                  onClick={() => handleStartCapture(visit)}
+                  className="w-full p-4 text-left hover:bg-gray-50 transition-colors flex items-center gap-4"
+                >
+                  <div
+                    className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center font-semibold ${
+                      done ? 'bg-green-50 text-green-700' : 'bg-blue-100 text-blue-600'
+                    }`}
+                  >
+                    {visit.patientName.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-gray-900">{visit.patientName}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${type.className}`}>
+                        {type.label}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5">
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full ${status.dot}`} aria-hidden />
+                      {status.label} • {visit.address}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0 text-right">
+                    <p className="text-sm font-medium text-gray-900">{visit.time}</p>
+                    <p className="text-xs text-blue-600 font-medium">{status.action} →</p>
+                  </div>
+                </button>
+              );
+            })}
 
             {filteredSchedule.length === 0 && (
               <div className="p-8 text-center text-gray-500">

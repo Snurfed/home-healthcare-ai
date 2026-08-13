@@ -71,6 +71,15 @@ const StatusBadge = ({ status }: { status: CaptureStatus }) => {
   );
 };
 
+/**
+ * Current wall-clock time in the format an <input type="time"> expects.
+ * 24-hour and zero-padded regardless of locale, which "2:05 PM" is not.
+ */
+function nowAsTimeValue(): string {
+  const d = new Date();
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
+
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
@@ -119,6 +128,7 @@ export default function VisitCaptureWorkspace() {
   const [showPatientPicker, setShowPatientPicker] = useState(!patientId);
   const [audioRecorder, setAudioRecorder] = useState<AudioRecorder | null>(null);
   const [processingError, setProcessingError] = useState<string | null>(null);
+  const [inputLevel, setInputLevel] = useState(0);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize capture session
@@ -155,6 +165,17 @@ export default function VisitCaptureWorkspace() {
     };
   }, [recordingStatus, recordingDuration, setRecordingDuration]);
 
+  // Input level polling. Separate from the one-second timer because a meter
+  // that updates once a second reads as broken rather than live.
+  useEffect(() => {
+    if (recordingStatus !== 'recording' || !audioRecorder) {
+      setInputLevel(0);
+      return;
+    }
+    const id = setInterval(() => setInputLevel(audioRecorder.getLevel()), 100);
+    return () => clearInterval(id);
+  }, [recordingStatus, audioRecorder]);
+
   // Handle start recording - initialize real audio recorder
   const handleStartRecording = useCallback(async () => {
     try {
@@ -163,11 +184,18 @@ export default function VisitCaptureWorkspace() {
       setAudioRecorder(recorder);
       await recorder.start();
       startRecording();
+      // Time In is the moment the visit actually began, and that moment is
+      // now. Leaving it to be typed afterwards means it gets reconstructed
+      // from memory at the end of the day — the times most likely to be wrong
+      // are exactly the ones an audit asks about.
+      if (!currentCapture?.timeIn) {
+        setVisitInfo({ timeIn: nowAsTimeValue() });
+      }
     } catch (error) {
       console.error('Failed to start recording:', error);
       setProcessingError('Microphone access denied. Please allow microphone permissions.');
     }
-  }, [startRecording]);
+  }, [startRecording, setVisitInfo, currentCapture?.timeIn]);
 
   // Handle pause recording
   const handlePauseRecording = useCallback(() => {
@@ -193,6 +221,9 @@ export default function VisitCaptureWorkspace() {
       // Stop recording and get audio blob
       const blob = await audioRecorder.stop();
       stopRecording();
+      // Time Out, for the same reason as Time In. Both remain editable — the
+      // clinician may have started recording a few minutes into the visit.
+      setVisitInfo({ timeOut: nowAsTimeValue() });
 
       // Start AI processing
       startProcessing();
@@ -476,6 +507,7 @@ export default function VisitCaptureWorkspace() {
               <RecordingControls
                 status={recordingStatus}
                 duration={recordingDuration}
+                level={inputLevel}
                 onStart={handleStartRecording}
                 onPause={handlePauseRecording}
                 onResume={handleResumeRecording}

@@ -15,6 +15,8 @@ interface RecordingControlsProps {
   onResume: () => void;
   onStop: () => void;
   disabled?: boolean;
+  /** Live input level, 0..1. See AudioRecorder.getLevel. */
+  level?: number;
 }
 
 const MicrophoneIcon = ({ className = 'w-8 h-8' }: { className?: string }) => (
@@ -47,6 +49,44 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Input level meter.
+ *
+ * Deliberately shown only while recording, and deliberately silent-looking
+ * when nothing is arriving — the whole point is that a dead microphone should
+ * look different from a quiet room, and both should look different from speech.
+ */
+function LevelMeter({ level, paused }: { level: number; paused: boolean }) {
+  const bars = 12;
+  const active = Math.round(level * bars);
+  return (
+    <div
+      className="flex items-end justify-center gap-1 h-8"
+      role="meter"
+      aria-valuenow={Math.round(level * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label="Microphone input level"
+    >
+      {Array.from({ length: bars }).map((_, i) => (
+        <div
+          key={i}
+          className={`w-1.5 rounded-full transition-all duration-75 ${
+            paused
+              ? 'bg-gray-300'
+              : i < active
+                ? i > bars - 3
+                  ? 'bg-amber-500'
+                  : 'bg-green-500'
+                : 'bg-gray-200'
+          }`}
+          style={{ height: `${8 + (i / bars) * 24}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function RecordingControls({
   status,
   duration,
@@ -55,6 +95,7 @@ export function RecordingControls({
   onResume,
   onStop,
   disabled,
+  level = 0,
 }: RecordingControlsProps) {
   const isIdle = status === 'idle';
   const isRecording = status === 'recording';
@@ -77,12 +118,10 @@ export function RecordingControls({
           <button
             onClick={onStart}
             disabled={disabled}
-            className="relative w-24 h-24 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+            aria-label="Start recording"
+            className="w-24 h-24 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-4 focus:ring-red-300"
           >
             <MicrophoneIcon className="w-10 h-10" />
-            <span className="absolute -bottom-8 text-sm font-medium text-gray-600 group-hover:text-gray-900">
-              Start Recording
-            </span>
           </button>
         )}
 
@@ -144,19 +183,32 @@ export function RecordingControls({
       {/* Status Text */}
       <div className="mt-6 text-center">
         {isIdle && (
-          <p className="text-sm text-gray-500">
-            Tap to start recording your visit
-          </p>
+          <>
+            <p className="text-base font-medium text-gray-900">Start Recording</p>
+            <p className="text-sm text-gray-500 mt-1">Tap to start recording your visit</p>
+          </>
         )}
         {isRecording && (
-          <p className="text-sm text-red-600 font-medium">
-            Recording in progress...
-          </p>
+          <>
+            <LevelMeter level={level} paused={false} />
+            <p className="text-sm text-red-600 font-medium mt-2">
+              Recording in progress...
+            </p>
+            {level < 0.02 && duration > 3 && (
+              <p className="text-sm text-amber-700 font-medium mt-1 max-w-xs">
+                No sound is reaching the microphone. Check that it is unmuted
+                before continuing the visit.
+              </p>
+            )}
+          </>
         )}
         {isPaused && (
-          <p className="text-sm text-yellow-600 font-medium">
-            Recording paused
-          </p>
+          <>
+            <LevelMeter level={0} paused />
+            <p className="text-sm text-yellow-600 font-medium mt-2">
+              Recording paused
+            </p>
+          </>
         )}
       </div>
 

@@ -245,6 +245,15 @@ export interface AudioRecorder {
   isRecording: boolean;
   isPaused: boolean;
   duration: number;
+  /**
+   * Current input level, 0..1.
+   *
+   * A muted microphone, a headset that grabbed the input, or a browser that
+   * handed back a silent track all record perfectly happily and produce an
+   * hour of nothing. There is no way to tell from the timer, which counts up
+   * regardless. This is what lets the UI show that sound is arriving.
+   */
+  getLevel: () => number;
 }
 
 /**
@@ -262,9 +271,40 @@ export function createAudioRecorder(): Promise<AudioRecorder> {
         let isRecording = false;
         let isPaused = false;
 
+        // Tapped off the same stream MediaRecorder uses, so the level reflects
+        // what is actually being captured rather than a second device.
+        let audioContext: AudioContext | null = null;
+        let analyser: AnalyserNode | null = null;
+        // Explicitly backed by an ArrayBuffer: getByteTimeDomainData will not
+        // accept the SharedArrayBuffer-compatible default.
+        let levelBuffer: Uint8Array<ArrayBuffer> | null = null;
+        try {
+          audioContext = new AudioContext();
+          analyser = audioContext.createAnalyser();
+          analyser.fftSize = 512;
+          levelBuffer = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+          audioContext.createMediaStreamSource(stream).connect(analyser);
+        } catch {
+          // Level metering is a nicety; never let it stop a visit recording.
+          analyser = null;
+        }
+
         const recorder: AudioRecorder = {
           get isRecording() { return isRecording; },
           get isPaused() { return isPaused; },
+
+          getLevel: () => {
+            if (!analyser || !levelBuffer || !isRecording || isPaused) return 0;
+            analyser.getByteTimeDomainData(levelBuffer);
+            // Root mean square around the 128 midpoint, scaled so ordinary
+            // speech lands near the middle of the meter rather than pinned low.
+            let sum = 0;
+            for (let i = 0; i < levelBuffer.length; i++) {
+              const v = (levelBuffer[i]! - 128) / 128;
+              sum += v * v;
+            }
+            return Math.min(1, Math.sqrt(sum / levelBuffer.length) * 4);
+          },
           get duration() {
             if (!isRecording) return 0;
             const elapsed = Date.now() - startTime - pausedDuration;
