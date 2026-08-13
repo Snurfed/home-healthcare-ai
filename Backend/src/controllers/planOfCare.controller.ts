@@ -4,7 +4,11 @@
  * HTTP handlers for CMS-485 Plan of Care operations.
  */
 
-import { Request, Response } from 'express';
+import { Response } from 'express';
+
+import prisma from '../config/prisma';
+import { withTenant } from '../config/tenancy';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import planOfCareService from '../services/planOfCare.service';
 
 // ===========================================
@@ -70,8 +74,27 @@ interface SignPlanOfCareBody {
  * Get Plan of Care by episode ID
  * GET /api/episodes/:episodeId/plan-of-care
  */
-export async function getPlanOfCare(req: Request, res: Response): Promise<void> {
+/**
+ * The agency this request runs under. An episode id alone must not be enough
+ * to read or sign another agency's plan of care.
+ */
+function tenantOf(req: AuthenticatedRequest, res: Response): string | null {
+  const agencyId = req.user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so patient data is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
+}
+
+export async function getPlanOfCare(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const episodeId = req.params['episodeId'];
 
     if (!episodeId) {
@@ -79,7 +102,7 @@ export async function getPlanOfCare(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const poc = await planOfCareService.getPlanOfCare(episodeId);
+    const poc = await withTenant(prisma, agencyId, (tx) => planOfCareService.getPlanOfCare(tx, episodeId));
 
     if (!poc) {
       res.status(404).json({ error: 'Plan of Care not found' });
@@ -100,8 +123,11 @@ export async function getPlanOfCare(req: Request, res: Response): Promise<void> 
  * Create a new Plan of Care
  * POST /api/episodes/:episodeId/plan-of-care
  */
-export async function createPlanOfCare(req: Request, res: Response): Promise<void> {
+export async function createPlanOfCare(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const episodeId = req.params['episodeId'];
     const body = req.body as CreatePlanOfCareBody;
 
@@ -125,13 +151,13 @@ export async function createPlanOfCare(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const poc = await planOfCareService.createPlanOfCare({
+    const poc = await withTenant(prisma, agencyId, (tx) => planOfCareService.createPlanOfCare(tx, {
       episodeId,
       patientId: body.patientId,
       certificationPeriod: body.certificationPeriod,
       physicianName: body.physicianName,
       physicianNpi: body.physicianNpi,
-    });
+    }));
 
     res.status(201).json(poc);
   } catch (error) {
@@ -147,8 +173,11 @@ export async function createPlanOfCare(req: Request, res: Response): Promise<voi
  * Update an existing Plan of Care
  * PUT /api/episodes/:episodeId/plan-of-care/:pocId
  */
-export async function updatePlanOfCare(req: Request, res: Response): Promise<void> {
+export async function updatePlanOfCare(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const pocId = req.params['pocId'];
     const body = req.body as UpdatePlanOfCareBody;
 
@@ -157,7 +186,7 @@ export async function updatePlanOfCare(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const poc = await planOfCareService.updatePlanOfCare(pocId, {
+    const poc = await withTenant(prisma, agencyId, (tx) => planOfCareService.updatePlanOfCare(tx, pocId, {
       diagnoses: body.diagnoses,
       functionalLimitations: body.functionalLimitations,
       safetyMeasures: body.safetyMeasures,
@@ -169,7 +198,7 @@ export async function updatePlanOfCare(req: Request, res: Response): Promise<voi
       mentalStatus: body.mentalStatus,
       prognosis: body.prognosis,
       dischargeGoals: body.dischargeGoals,
-    });
+    }));
 
     res.json(poc);
   } catch (error) {
@@ -191,8 +220,11 @@ export async function updatePlanOfCare(req: Request, res: Response): Promise<voi
  * Auto-populate Plan of Care from OASIS
  * POST /api/episodes/:episodeId/plan-of-care/:pocId/auto-populate
  */
-export async function autoPopulateFromOasis(req: Request, res: Response): Promise<void> {
+export async function autoPopulateFromOasis(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const pocId = req.params['pocId'];
     const body = req.body as AutoPopulateBody;
 
@@ -206,11 +238,11 @@ export async function autoPopulateFromOasis(req: Request, res: Response): Promis
       return;
     }
 
-    const result = await planOfCareService.autoPopulateFromOasis(
+    const result = await withTenant(prisma, agencyId, (tx) => planOfCareService.autoPopulateFromOasis(tx, 
       pocId,
       body.oasisAssessmentId,
       body.fieldsToPopulate
-    );
+    ));
 
     res.json(result);
   } catch (error) {
@@ -226,8 +258,11 @@ export async function autoPopulateFromOasis(req: Request, res: Response): Promis
  * Sign Plan of Care
  * POST /api/episodes/:episodeId/plan-of-care/:pocId/sign
  */
-export async function signPlanOfCare(req: Request, res: Response): Promise<void> {
+export async function signPlanOfCare(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
     const pocId = req.params['pocId'];
     const body = req.body as SignPlanOfCareBody;
 
@@ -246,17 +281,16 @@ export async function signPlanOfCare(req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Get user ID from auth context (placeholder)
-    const signedBy = (req as Request & { user?: { id: string; name?: string } }).user?.name ||
-      (req as Request & { user?: { id: string } }).user?.id ||
-      'system';
+    // The authenticated clinician signs, by name where available. This used to
+    // fall back to 'system', leaving a CMS-485 signed by nobody.
+    const signedBy = `${req.user!.firstName} ${req.user!.lastName}`.trim() || req.user!.id;
 
-    const poc = await planOfCareService.signPlanOfCare(
+    const poc = await withTenant(prisma, agencyId, (tx) => planOfCareService.signPlanOfCare(tx, 
       pocId,
       body.signatureType,
       signedBy,
       body.signedAt || new Date().toISOString()
-    );
+    ));
 
     res.json(poc);
   } catch (error) {

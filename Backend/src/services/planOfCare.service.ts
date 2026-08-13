@@ -7,9 +7,9 @@
  * - Physician signature management
  */
 
-import prisma from '../config/prisma';
 import type { Discipline } from '../constants/visitForm.constants';
 
+import { TxClient } from '../config/tenancy';
 // ===========================================
 // TYPE DEFINITIONS
 // ===========================================
@@ -140,8 +140,8 @@ function generateId(): string {
 /**
  * Get Plan of Care by episode ID
  */
-export async function getPlanOfCare(episodeId: string): Promise<PlanOfCareData | null> {
-  const carePlan = await prisma.carePlan.findFirst({
+export async function getPlanOfCare(tx: TxClient, episodeId: string): Promise<PlanOfCareData | null> {
+  const carePlan = await tx.carePlan.findFirst({
     where: {
       episodeId,
       deletedAt: null,
@@ -269,11 +269,11 @@ function buildServiceFrequencies(carePlan: {
 /**
  * Create a new Plan of Care
  */
-export async function createPlanOfCare(input: CreatePlanOfCareInput): Promise<PlanOfCareData> {
+export async function createPlanOfCare(tx: TxClient, input: CreatePlanOfCareInput): Promise<PlanOfCareData> {
   const id = generateId();
   const now = new Date();
 
-  const carePlan = await prisma.carePlan.create({
+  const carePlan = await tx.carePlan.create({
     data: {
       id,
       patientId: input.patientId,
@@ -312,10 +312,11 @@ export async function createPlanOfCare(input: CreatePlanOfCareInput): Promise<Pl
  * Update an existing Plan of Care
  */
 export async function updatePlanOfCare(
+  tx: TxClient,
   pocId: string,
   input: UpdatePlanOfCareInput
 ): Promise<PlanOfCareData> {
-  const existing = await prisma.carePlan.findUnique({ where: { id: pocId } });
+  const existing = await tx.carePlan.findUnique({ where: { id: pocId } });
   if (!existing) {
     throw new Error(`Plan of Care ${pocId} not found`);
   }
@@ -366,18 +367,19 @@ export async function updatePlanOfCare(
     updateData['goals'] = input.goals;
   }
 
-  const updated = await prisma.carePlan.update({
+  const updated = await tx.carePlan.update({
     where: { id: pocId },
     data: updateData,
   });
 
-  return getPlanOfCare(updated.episodeId) as Promise<PlanOfCareData>;
+  return getPlanOfCare(tx, updated.episodeId) as Promise<PlanOfCareData>;
 }
 
 /**
  * Auto-populate Plan of Care from OASIS assessment
  */
 export async function autoPopulateFromOasis(
+  tx: TxClient,
   pocId: string,
   oasisAssessmentId: string,
   fieldsToPopulate?: string[]
@@ -386,7 +388,7 @@ export async function autoPopulateFromOasis(
   const warnings: string[] = [];
 
   // Get OASIS responses
-  const responses = await prisma.oasisResponse.findMany({
+  const responses = await tx.oasisResponse.findMany({
     where: { assessmentId: oasisAssessmentId },
   });
 
@@ -518,12 +520,13 @@ export async function autoPopulateFromOasis(
  * Sign Plan of Care
  */
 export async function signPlanOfCare(
+  tx: TxClient,
   pocId: string,
   signatureType: 'physician' | 'nurse',
   signedBy: string,
   signedAt: string
 ): Promise<PlanOfCareData> {
-  const existing = await prisma.carePlan.findUnique({ where: { id: pocId } });
+  const existing = await tx.carePlan.findUnique({ where: { id: pocId } });
   if (!existing) {
     throw new Error(`Plan of Care ${pocId} not found`);
   }
@@ -540,12 +543,12 @@ export async function signPlanOfCare(
   }
   // Nurse signature would be stored in a separate field if needed
 
-  const updated = await prisma.carePlan.update({
+  const updated = await tx.carePlan.update({
     where: { id: pocId },
     data: updateData,
   });
 
-  return getPlanOfCare(updated.episodeId) as Promise<PlanOfCareData>;
+  return getPlanOfCare(tx, updated.episodeId) as Promise<PlanOfCareData>;
 }
 
 export default {

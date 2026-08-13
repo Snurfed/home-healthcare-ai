@@ -19,6 +19,7 @@ import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
 import { MODELS } from '../config/models';
+import { withTenant, TxClient } from '../config/tenancy';
 // ===========================================
 // CONFIGURATION
 // ===========================================
@@ -147,6 +148,25 @@ export interface OcrRequest extends AuthenticatedRequest {
 /**
  * Create audit log for document access
  */
+/**
+ * The agency this request runs under. Documents hold scanned referrals and
+ * clinical attachments, so a document id alone must not reach across agencies.
+ *
+ * Typed by what it reads: UploadRequest narrows `body`, so it is not assignable
+ * to AuthenticatedRequest even though it extends it.
+ */
+function tenantOf(req: { user?: AuthenticatedRequest['user'] }, res: Response): string | null {
+  const agencyId = req.user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so patient data is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
+}
+
 async function createDocumentAuditLog(
   action: AuditAction,
   userId: string,
@@ -277,6 +297,7 @@ function getImageDimensions(mimeType: string): { width: number; height: number }
  * Check if user has access to document
  */
 async function checkDocumentAccess(
+  tx: TxClient,
   userId: string,
   userRole: UserRole,
   document: { uploadedById: string; patientId: string }
@@ -292,7 +313,7 @@ async function checkDocumentAccess(
   }
 
   // Check patient assignment
-  const assignment = await prisma.patientAssignment.findFirst({
+  const assignment = await tx.patientAssignment.findFirst({
     where: {
       patientId: document.patientId,
       userId,
@@ -344,6 +365,10 @@ export async function uploadDocument(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -384,7 +409,7 @@ export async function uploadDocument(
     }
 
     // Validate patient exists
-    const patient = await prisma.patient.findUnique({
+    const patient = await tx.patient.findUnique({
       where: { id: patientId },
       select: { id: true, firstName: true, lastName: true, deletedAt: true },
     });
@@ -398,7 +423,7 @@ export async function uploadDocument(
 
     // Validate visit if provided
     if (visitId) {
-      const visit = await prisma.visit.findUnique({
+      const visit = await tx.visit.findUnique({
         where: { id: visitId },
         select: { id: true, patientId: true, deletedAt: true },
       });
@@ -426,7 +451,7 @@ export async function uploadDocument(
     const dimensions = getImageDimensions(file.mimetype);
 
     // Create document record
-    const document = await prisma.document.create({
+    const document = await tx.document.create({
       data: {
         id: documentId,
         patientId,
@@ -471,7 +496,7 @@ export async function uploadDocument(
     if (performOcr && (file.mimetype === 'application/pdf' || file.mimetype.startsWith('image/'))) {
       try {
         ocrResult = await processOcrService(storagePath, { extractStructuredData: true });
-        await prisma.document.update({
+        await tx.document.update({
           where: { id: documentId },
           data: {
             ocrProcessed: true,
@@ -533,6 +558,7 @@ export async function uploadDocument(
         createdAt: document.createdAt,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -548,6 +574,10 @@ export async function listDocuments(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -631,7 +661,7 @@ export async function listDocuments(
     else if (sortBy === 'category') orderBy.category = sortOrder;
 
     const [documents, total] = await Promise.all([
-      prisma.document.findMany({
+      tx.document.findMany({
         where,
         orderBy,
         skip,
@@ -663,7 +693,7 @@ export async function listDocuments(
           },
         },
       }),
-      prisma.document.count({ where }),
+      tx.document.count({ where }),
     ]);
 
     // Audit log
@@ -694,6 +724,7 @@ export async function listDocuments(
         hasPrev: pageNum > 1,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -709,6 +740,10 @@ export async function getDocument(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -727,7 +762,7 @@ export async function getDocument(
       });
     }
 
-    const document = await prisma.document.findUnique({
+    const document = await tx.document.findUnique({
       where: { id },
       include: {
         patient: {
@@ -750,7 +785,7 @@ export async function getDocument(
     }
 
     // Check access
-    const hasAccess = await checkDocumentAccess(
+    const hasAccess = await checkDocumentAccess(tx, 
       req.user.id,
       req.user.role,
       { uploadedById: document.uploadedById, patientId: document.patientId }
@@ -835,6 +870,7 @@ export async function getDocument(
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -850,6 +886,10 @@ export async function updateDocument(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -860,7 +900,7 @@ export async function updateDocument(
     const { id } = req.params;
     const body = req.body;
 
-    const document = await prisma.document.findUnique({
+    const document = await tx.document.findUnique({
       where: { id },
     });
 
@@ -872,7 +912,7 @@ export async function updateDocument(
     }
 
     // Check access
-    const hasAccess = await checkDocumentAccess(
+    const hasAccess = await checkDocumentAccess(tx, 
       req.user.id,
       req.user.role,
       { uploadedById: document.uploadedById, patientId: document.patientId }
@@ -914,7 +954,7 @@ export async function updateDocument(
     }
     if (body.reviewNotes !== undefined) updateData.reviewNotes = body.reviewNotes;
 
-    const updatedDocument = await prisma.document.update({
+    const updatedDocument = await tx.document.update({
       where: { id },
       data: updateData,
       include: {
@@ -970,6 +1010,7 @@ export async function updateDocument(
         updatedAt: updatedDocument.updatedAt,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -985,6 +1026,10 @@ export async function deleteDocument(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -995,7 +1040,7 @@ export async function deleteDocument(
     const { id } = req.params;
     const { reason } = req.body;
 
-    const document = await prisma.document.findUnique({
+    const document = await tx.document.findUnique({
       where: { id },
     });
 
@@ -1026,7 +1071,7 @@ export async function deleteDocument(
     }
 
     // Soft delete
-    await prisma.document.update({
+    await tx.document.update({
       where: { id },
       data: {
         deletedAt: new Date(),
@@ -1055,6 +1100,7 @@ export async function deleteDocument(
       message: 'Document deleted successfully',
       documentId: id,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1070,6 +1116,10 @@ export async function processOcr(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1086,7 +1136,7 @@ export async function processOcr(
       languages = ['en'],
     } = req.body;
 
-    const document = await prisma.document.findUnique({
+    const document = await tx.document.findUnique({
       where: { id },
     });
 
@@ -1098,7 +1148,7 @@ export async function processOcr(
     }
 
     // Check access
-    const hasAccess = await checkDocumentAccess(
+    const hasAccess = await checkDocumentAccess(tx, 
       req.user.id,
       req.user.role,
       { uploadedById: document.uploadedById, patientId: document.patientId }
@@ -1130,7 +1180,7 @@ export async function processOcr(
     });
 
     // Update document with OCR results
-    const updatedDocument = await prisma.document.update({
+    const updatedDocument = await tx.document.update({
       where: { id },
       data: {
         ocrProcessed: true,
@@ -1169,6 +1219,7 @@ export async function processOcr(
         extractedData: ocrResult.extractedData,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1184,6 +1235,10 @@ export async function downloadDocument(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1193,7 +1248,7 @@ export async function downloadDocument(
 
     const { id } = req.params;
 
-    const document = await prisma.document.findUnique({
+    const document = await tx.document.findUnique({
       where: { id },
     });
 
@@ -1205,7 +1260,7 @@ export async function downloadDocument(
     }
 
     // Check access
-    const hasAccess = await checkDocumentAccess(
+    const hasAccess = await checkDocumentAccess(tx, 
       req.user.id,
       req.user.role,
       { uploadedById: document.uploadedById, patientId: document.patientId }
@@ -1260,6 +1315,10 @@ export async function downloadDocument(
 
     const fileStream = fs.createReadStream(document.storagePath);
     fileStream.pipe(res);
+    // Explicit: this path streams rather than returning a Response, and the
+    // scoped callback's other branches do return one.
+    return;
+    });
   } catch (error) {
     next(error);
   }
