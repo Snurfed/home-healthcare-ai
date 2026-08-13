@@ -21,6 +21,7 @@ import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { extractFromDocument } from '../services/referralExtraction.service';
 
+import { withTenant, TxClient } from '../config/tenancy';
 // ===========================================
 // CONFIGURATION
 // ===========================================
@@ -88,6 +89,25 @@ export interface ListReferralsQuery {
 /**
  * Create audit log for referral document operations
  */
+/**
+ * The agency this request runs under.
+ *
+ * Referrals carry inbound PHI — a faxed or scanned document often arrives
+ * before any patient record exists — so the tenant has to come from the session
+ * rather than from anything in the document.
+ */
+function tenantOf(req: { user?: AuthenticatedRequest['user'] }, res: Response): string | null {
+  const agencyId = req.user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so referral data is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
+}
+
 async function createReferralAuditLog(
   action: AuditAction,
   userId: string,
@@ -207,6 +227,7 @@ async function saveFile(
  * Check if user has access to patient's referral documents
  */
 async function checkPatientAccess(
+  tx: TxClient,
   userId: string,
   userRole: UserRole,
   patientId: string
@@ -215,7 +236,7 @@ async function checkPatientAccess(
     return true;
   }
 
-  const assignment = await prisma.patientAssignment.findFirst({
+  const assignment = await tx.patientAssignment.findFirst({
     where: {
       patientId,
       userId,
@@ -240,6 +261,10 @@ export async function uploadReferral(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -269,7 +294,7 @@ export async function uploadReferral(
     } = req.body;
 
     // Validate patient exists
-    const patient = await prisma.patient.findUnique({
+    const patient = await tx.patient.findUnique({
       where: { id: patientId },
       select: { id: true, firstName: true, lastName: true, deletedAt: true },
     });
@@ -282,7 +307,7 @@ export async function uploadReferral(
     }
 
     // Check access
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, patient.id);
+    const hasAccess = await checkPatientAccess(tx, req.user.id, req.user.role, patient.id);
     if (!hasAccess) {
       return res.status(403).json({
         error: 'Forbidden',
@@ -292,7 +317,7 @@ export async function uploadReferral(
 
     // Validate assessment if provided
     if (assessmentId) {
-      const assessment = await prisma.oasisAssessment.findUnique({
+      const assessment = await tx.oasisAssessment.findUnique({
         where: { id: assessmentId },
         select: { id: true, patientId: true, deletedAt: true },
       });
@@ -317,7 +342,7 @@ export async function uploadReferral(
     const { filePath, checksum } = await saveFile(file, patient.id, documentId);
 
     // Create referral document record
-    const referralDoc = await prisma.referralDocument.create({
+    const referralDoc = await tx.referralDocument.create({
       data: {
         id: documentId,
         patient: { connect: { id: patient.id } },
@@ -347,7 +372,7 @@ export async function uploadReferral(
 
     // Always trigger extraction asynchronously (don't block the upload response)
     // Update status to processing
-    await prisma.referralDocument.update({
+    await tx.referralDocument.update({
       where: { id: documentId },
       data: { extractionStatus: ExtractionStatus.PROCESSING },
     });
@@ -355,7 +380,7 @@ export async function uploadReferral(
     // Run extraction (fire and forget - frontend can poll for status)
     extractFromDocument(filePath, { documentType, mapToOasisCodes: true })
       .then(async (result) => {
-        await prisma.referralDocument.update({
+        await tx.referralDocument.update({
           where: { id: documentId },
           data: {
             extractionStatus: result.success ? ExtractionStatus.COMPLETED : ExtractionStatus.FAILED,
@@ -369,7 +394,7 @@ export async function uploadReferral(
       })
       .catch(async (error) => {
         console.error(`[Referral Upload] Extraction failed for ${documentId}:`, error);
-        await prisma.referralDocument.update({
+        await tx.referralDocument.update({
           where: { id: documentId },
           data: {
             extractionStatus: ExtractionStatus.FAILED,
@@ -417,6 +442,7 @@ export async function uploadReferral(
         createdAt: referralDoc.createdAt,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -432,6 +458,10 @@ export async function listReferrals(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -450,7 +480,7 @@ export async function listReferrals(
     } = req.query;
 
     // Validate patient exists
-    const patient = await prisma.patient.findUnique({
+    const patient = await tx.patient.findUnique({
       where: { id: patientId },
       select: { id: true, deletedAt: true },
     });
@@ -463,7 +493,7 @@ export async function listReferrals(
     }
 
     // Check access
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, patient.id);
+    const hasAccess = await checkPatientAccess(tx, req.user.id, req.user.role, patient.id);
     if (!hasAccess) {
       return res.status(403).json({
         error: 'Forbidden',
@@ -491,7 +521,7 @@ export async function listReferrals(
     }
 
     const [referrals, total] = await Promise.all([
-      prisma.referralDocument.findMany({
+      tx.referralDocument.findMany({
         where,
         orderBy: { uploadedAt: 'desc' },
         skip,
@@ -514,7 +544,7 @@ export async function listReferrals(
           },
         },
       }),
-      prisma.referralDocument.count({ where }),
+      tx.referralDocument.count({ where }),
     ]);
 
     // Audit log
@@ -545,6 +575,7 @@ export async function listReferrals(
         hasPrev: pageNum > 1,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -560,6 +591,10 @@ export async function getReferral(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -569,7 +604,7 @@ export async function getReferral(
 
     const { id } = req.params;
 
-    const referral = await prisma.referralDocument.findUnique({
+    const referral = await tx.referralDocument.findUnique({
       where: { id },
       include: {
         patient: {
@@ -592,7 +627,7 @@ export async function getReferral(
     }
 
     // Check access
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, referral.patientId);
+    const hasAccess = await checkPatientAccess(tx, req.user.id, req.user.role, referral.patientId);
     if (!hasAccess) {
       await createReferralAuditLog(
         AuditAction.READ,
@@ -675,6 +710,7 @@ export async function getReferral(
       updatedAt: referral.updatedAt,
       isDeleted: !!referral.deletedAt,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -699,6 +735,10 @@ export async function updateReferral(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -709,7 +749,7 @@ export async function updateReferral(
     const { id } = req.params;
     const body = req.body;
 
-    const referral = await prisma.referralDocument.findUnique({
+    const referral = await tx.referralDocument.findUnique({
       where: { id },
     });
 
@@ -721,7 +761,7 @@ export async function updateReferral(
     }
 
     // Check access
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, referral.patientId);
+    const hasAccess = await checkPatientAccess(tx, req.user.id, req.user.role, referral.patientId);
     if (!hasAccess) {
       return res.status(403).json({
         error: 'Forbidden',
@@ -741,7 +781,7 @@ export async function updateReferral(
     }
     if (body.assessmentId !== undefined) {
       if (body.assessmentId) {
-        const assessment = await prisma.oasisAssessment.findUnique({
+        const assessment = await tx.oasisAssessment.findUnique({
           where: { id: body.assessmentId },
           select: { patientId: true },
         });
@@ -757,7 +797,7 @@ export async function updateReferral(
       }
     }
 
-    const updatedReferral = await prisma.referralDocument.update({
+    const updatedReferral = await tx.referralDocument.update({
       where: { id },
       data: updateData,
     });
@@ -796,6 +836,7 @@ export async function updateReferral(
         updatedAt: updatedReferral.updatedAt,
       },
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -811,6 +852,10 @@ export async function deleteReferral(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -821,7 +866,7 @@ export async function deleteReferral(
     const { id } = req.params;
     const { reason } = req.body;
 
-    const referral = await prisma.referralDocument.findUnique({
+    const referral = await tx.referralDocument.findUnique({
       where: { id },
     });
 
@@ -853,7 +898,7 @@ export async function deleteReferral(
     }
 
     // Soft delete
-    await prisma.referralDocument.update({
+    await tx.referralDocument.update({
       where: { id },
       data: {
         deletedAt: new Date(),
@@ -879,6 +924,7 @@ export async function deleteReferral(
       message: 'Referral document deleted successfully',
       referralDocumentId: id,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -894,6 +940,10 @@ export async function triggerExtraction(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -903,7 +953,7 @@ export async function triggerExtraction(
 
     const { id } = req.params;
 
-    const referral = await prisma.referralDocument.findUnique({
+    const referral = await tx.referralDocument.findUnique({
       where: { id },
     });
 
@@ -915,7 +965,7 @@ export async function triggerExtraction(
     }
 
     // Check access
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, referral.patientId);
+    const hasAccess = await checkPatientAccess(tx, req.user.id, req.user.role, referral.patientId);
     if (!hasAccess) {
       return res.status(403).json({
         error: 'Forbidden',
@@ -924,7 +974,7 @@ export async function triggerExtraction(
     }
 
     // Update status to processing
-    await prisma.referralDocument.update({
+    await tx.referralDocument.update({
       where: { id },
       data: {
         extractionStatus: ExtractionStatus.PROCESSING,
@@ -938,7 +988,7 @@ export async function triggerExtraction(
       mapToOasisCodes: true,
     })
       .then(async (result) => {
-        await prisma.referralDocument.update({
+        await tx.referralDocument.update({
           where: { id },
           data: {
             extractionStatus: result.success ? ExtractionStatus.COMPLETED : ExtractionStatus.FAILED,
@@ -952,7 +1002,7 @@ export async function triggerExtraction(
       })
       .catch(async (error) => {
         console.error(`[Referral Extraction] Failed for document ${id}:`, error);
-        await prisma.referralDocument.update({
+        await tx.referralDocument.update({
           where: { id },
           data: {
             extractionStatus: ExtractionStatus.FAILED,
@@ -981,6 +1031,7 @@ export async function triggerExtraction(
       referralDocumentId: id,
       status: ExtractionStatus.PROCESSING,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -996,6 +1047,10 @@ export async function getExtractionStatus(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1005,7 +1060,7 @@ export async function getExtractionStatus(
 
     const { id } = req.params;
 
-    const referral = await prisma.referralDocument.findUnique({
+    const referral = await tx.referralDocument.findUnique({
       where: { id },
       select: {
         id: true,
@@ -1026,7 +1081,7 @@ export async function getExtractionStatus(
     }
 
     // Check access
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, referral.patientId);
+    const hasAccess = await checkPatientAccess(tx, req.user.id, req.user.role, referral.patientId);
     if (!hasAccess) {
       return res.status(403).json({
         error: 'Forbidden',
@@ -1054,6 +1109,7 @@ export async function getExtractionStatus(
       isFailed: referral.extractionStatus === ExtractionStatus.FAILED,
       isProcessing: referral.extractionStatus === ExtractionStatus.PROCESSING,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1075,6 +1131,10 @@ export async function applyToAssessment(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1110,7 +1170,7 @@ export async function applyToAssessment(
     }
 
     // Get referral document
-    const referral = await prisma.referralDocument.findUnique({
+    const referral = await tx.referralDocument.findUnique({
       where: { id },
     });
 
@@ -1129,7 +1189,7 @@ export async function applyToAssessment(
     }
 
     // Get assessment
-    const assessment = await prisma.oasisAssessment.findUnique({
+    const assessment = await tx.oasisAssessment.findUnique({
       where: { id: assessmentId },
       select: { id: true, patientId: true, deletedAt: true },
     });
@@ -1150,7 +1210,7 @@ export async function applyToAssessment(
     }
 
     // Check access
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, referral.patientId);
+    const hasAccess = await checkPatientAccess(tx, req.user.id, req.user.role, referral.patientId);
     if (!hasAccess) {
       return res.status(403).json({
         error: 'Forbidden',
@@ -1180,7 +1240,7 @@ export async function applyToAssessment(
 
       const sourceMapping = oasisMappings?.[itemCode];
 
-      return prisma.oasisResponse.upsert({
+      return tx.oasisResponse.upsert({
         where: {
           assessmentId_itemCode: {
             assessmentId,
@@ -1226,21 +1286,21 @@ export async function applyToAssessment(
 
     // Link referral to assessment if not already linked
     if (!referral.assessmentId) {
-      await prisma.referralDocument.update({
+      await tx.referralDocument.update({
         where: { id },
         data: { assessment: { connect: { id: assessmentId } } },
       });
     }
 
     // Update assessment completion percentage (simplified calculation)
-    const totalResponses = await prisma.oasisResponse.count({
+    const totalResponses = await tx.oasisResponse.count({
       where: { assessmentId },
     });
 
     // Estimate completion based on responses (rough approximation)
     const estimatedCompletion = Math.min(100, Math.round((totalResponses / 150) * 100));
 
-    await prisma.oasisAssessment.update({
+    await tx.oasisAssessment.update({
       where: { id: assessmentId },
       data: {
         completionPercentage: estimatedCompletion,
@@ -1253,7 +1313,7 @@ export async function applyToAssessment(
     console.log(`[Apply] Estimated completion: ${estimatedCompletion}%`);
 
     // Query actual responses to verify
-    const verifyResponses = await prisma.oasisResponse.findMany({
+    const verifyResponses = await tx.oasisResponse.findMany({
       where: { assessmentId },
       select: { itemCode: true, responseValue: true, sourceType: true },
       take: 10,
@@ -1292,6 +1352,7 @@ export async function applyToAssessment(
       updatedFields: Object.keys(acceptedFields),
       assessmentCompletion: estimatedCompletion,
     });
+    });
   } catch (error) {
     next(error);
   }
@@ -1307,6 +1368,10 @@ export async function downloadReferral(
   next: NextFunction
 ): Promise<Response | void> {
   try {
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -1316,7 +1381,7 @@ export async function downloadReferral(
 
     const { id } = req.params;
 
-    const referral = await prisma.referralDocument.findUnique({
+    const referral = await tx.referralDocument.findUnique({
       where: { id },
       select: {
         id: true,
@@ -1336,7 +1401,7 @@ export async function downloadReferral(
     }
 
     // Check access
-    const hasAccess = await checkPatientAccess(req.user.id, req.user.role, referral.patientId);
+    const hasAccess = await checkPatientAccess(tx, req.user.id, req.user.role, referral.patientId);
     if (!hasAccess) {
       await createReferralAuditLog(
         AuditAction.READ,
@@ -1402,6 +1467,10 @@ export async function downloadReferral(
     // Stream the file
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);
+    // Explicit: this path streams rather than returning a Response, and the
+    // scoped callback's other branches do return one.
+    return;
+    });
   } catch (error) {
     next(error);
   }
