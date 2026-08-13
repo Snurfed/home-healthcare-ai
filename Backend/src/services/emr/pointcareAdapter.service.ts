@@ -19,6 +19,7 @@
  */
 
 import prisma from '../../config/prisma';
+import type { TxClient } from '../../config/tenancy';
 import { FhirWriterService, type FhirWriteResource, type WriteResult } from '../fhir/fhirWriter.service';
 import { FhirClientService } from '../fhir/fhirClient.service';
 
@@ -178,6 +179,7 @@ export class PointCareAdapterService {
    * If PointCare has a proprietary API, this implements the custom search.
    */
   static async searchPatients(
+    tx: TxClient,
     connectionId: string,
     userId: string,
     params: PointCarePatientSearchParams
@@ -207,6 +209,7 @@ export class PointCareAdapterService {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const results = await FhirClientService.searchPatients(
+        tx,
         connectionId,
         userId,
         fhirParams as any
@@ -423,7 +426,7 @@ export class PointCareAdapterService {
   /**
    * Check PointCare connection health
    */
-  static async checkConnection(connectionId: string): Promise<{
+  static async checkConnection(tx: TxClient, connectionId: string): Promise<{
     healthy: boolean;
     message: string;
     apiVersion?: string;
@@ -443,7 +446,7 @@ export class PointCareAdapterService {
     try {
       if (config.usesStandardFhir) {
         // Use standard FHIR metadata endpoint
-        const result = await FhirClientService.testConnection(connectionId);
+        const result = await FhirClientService.testConnection(tx, connectionId);
         return {
           healthy: result.success,
           message: result.message,

@@ -9,6 +9,9 @@
  */
 
 import { Request, Response } from 'express';
+import prisma from '../config/prisma';
+import { withTenant } from '../config/tenancy';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import emrExportService from '../services/emrExport.service';
 import type { Discipline, VisitType } from '../domain/canonical/types';
 import type { EMRVendor } from '../domain/emr/types';
@@ -140,6 +143,25 @@ export async function getTemplateById(req: Request, res: Response): Promise<void
  * Generate export preview for a visit
  * GET /api/visits/:visitId/emr/preview?templateId=xxx
  */
+/**
+ * The agency this request runs under.
+ *
+ * These handlers took a bare express Request and read the user through an
+ * ad-hoc cast, so the tenant has to be established here before anything
+ * reaches a policy-bound table.
+ */
+function tenantOf(req: Request, res: Response): string | null {
+  const agencyId = (req as AuthenticatedRequest).user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so EMR export is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
+}
+
 export async function getExportPreview(req: Request, res: Response): Promise<void> {
   try {
     const visitId = req.params['visitId'];
@@ -155,10 +177,15 @@ export async function getExportPreview(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const preview = await emrExportService.generateExportPreview({
-      visitId,
-      templateId,
-    });
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    const preview = await withTenant(prisma, agencyId, async (tx) =>
+      emrExportService.generateExportPreview(tx, {
+        visitId,
+        templateId,
+      })
+    );
 
     res.json(preview);
   } catch (error) {
@@ -195,15 +222,24 @@ export async function generateExport(req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Get user ID from auth context (placeholder for now)
-    const userId = (req as Request & { user?: { id: string } }).user?.id || 'system';
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
 
-    const exportPacket = await emrExportService.generateExport(
-      {
-        visitId,
-        templateId: body.templateId,
-      },
-      userId
+    // An export is a disclosure of PHI, so the packet records who requested
+    // it. This read the user through a cast that fell back to 'system', which
+    // attributed the disclosure to nobody; the route authenticates, so take
+    // the clinician from the session.
+    const userId = (req as AuthenticatedRequest).user!.id;
+
+    const exportPacket = await withTenant(prisma, agencyId, async (tx) =>
+      emrExportService.generateExport(
+        tx,
+        {
+          visitId,
+          templateId: body.templateId,
+        },
+        userId
+      )
     );
 
     res.json(exportPacket);

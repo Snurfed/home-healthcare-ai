@@ -18,6 +18,7 @@ import type {
   EmrPatientSearchResult,
 } from './fhirTypes';
 import type { EmrAccessToken } from '../../generated/prisma';
+import type { TxClient } from '../../config/tenancy';
 
 // ===========================================
 // CONFIGURATION
@@ -178,13 +179,19 @@ export class FhirClientService {
 
   /**
    * Get authorization URL for OAuth flow
+   *
+   * Takes the transaction because emr_connections is policy-bound. Methods
+   * here that only touch emr_access_tokens or emr_audit_logs do not — both
+   * are stated exemptions in the RLS coverage guard, and holding the audit
+   * write inside the caller's transaction would let a rollback erase it.
    */
   static async getAuthorizationUrl(
+    tx: TxClient,
     connectionId: string,
     userId: string,
     redirectUri: string
   ): Promise<string> {
-    const connection = await prisma.emrConnection.findUnique({
+    const connection = await tx.emrConnection.findUnique({
       where: { id: connectionId },
     });
 
@@ -223,6 +230,7 @@ export class FhirClientService {
    * Exchange authorization code for tokens
    */
   static async handleOAuthCallback(
+    tx: TxClient,
     code: string,
     state: string
   ): Promise<EmrAccessToken> {
@@ -233,7 +241,7 @@ export class FhirClientService {
 
     const { connectionId, userId, redirectUri } = stateData;
 
-    const connection = await prisma.emrConnection.findUnique({
+    const connection = await tx.emrConnection.findUnique({
       where: { id: connectionId },
     });
 
@@ -315,7 +323,7 @@ export class FhirClientService {
     });
 
     // Update connection last connected
-    await prisma.emrConnection.update({
+    await tx.emrConnection.update({
       where: { id: connectionId },
       data: {
         lastConnectedAt: new Date(),
@@ -464,11 +472,12 @@ export class FhirClientService {
    * Search patients in EMR
    */
   static async searchPatients(
+    tx: TxClient,
     connectionId: string,
     userId: string,
     params: PatientSearchParams
   ): Promise<EmrPatientSearchResult[]> {
-    const connection = await prisma.emrConnection.findUnique({
+    const connection = await tx.emrConnection.findUnique({
       where: { id: connectionId },
     });
 
@@ -522,7 +531,7 @@ export class FhirClientService {
       ?.map(e => e.resource?.id)
       .filter((id): id is string => !!id) || [];
 
-    const existingLinks = await prisma.emrPatientLink.findMany({
+    const existingLinks = await tx.emrPatientLink.findMany({
       where: {
         connectionId,
         fhirPatientId: { in: fhirIds },
@@ -556,11 +565,12 @@ export class FhirClientService {
    * Get a single patient from EMR
    */
   static async getPatient(
+    tx: TxClient,
     connectionId: string,
     userId: string,
     fhirId: string
   ): Promise<FhirPatient> {
-    const connection = await prisma.emrConnection.findUnique({
+    const connection = await tx.emrConnection.findUnique({
       where: { id: connectionId },
     });
 
@@ -642,12 +652,12 @@ export class FhirClientService {
   /**
    * Test connection to EMR
    */
-  static async testConnection(connectionId: string): Promise<{
+  static async testConnection(tx: TxClient, connectionId: string): Promise<{
     success: boolean;
     message: string;
     capabilities?: string[];
   }> {
-    const connection = await prisma.emrConnection.findUnique({
+    const connection = await tx.emrConnection.findUnique({
       where: { id: connectionId },
     });
 
@@ -682,7 +692,7 @@ export class FhirClientService {
       const version = metadata.fhirVersion || 'unknown';
 
       // Update connection
-      await prisma.emrConnection.update({
+      await tx.emrConnection.update({
         where: { id: connectionId },
         data: {
           lastConnectedAt: new Date(),
@@ -699,7 +709,7 @@ export class FhirClientService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       // Update connection with error
-      await prisma.emrConnection.update({
+      await tx.emrConnection.update({
         where: { id: connectionId },
         data: {
           lastConnectionError: errorMessage,

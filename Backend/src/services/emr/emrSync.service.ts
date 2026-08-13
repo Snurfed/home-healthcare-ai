@@ -13,6 +13,7 @@
 
 import crypto from 'crypto';
 import prisma from '../../config/prisma';
+import type { TxClient } from '../../config/tenancy';
 import { FhirWriterService, type FhirObservation, type FhirCondition, type FhirProcedure, type WriteResult, type BundleTransactionResult } from '../fhir/fhirWriter.service';
 
 // EMR Sync Status enum (matches Prisma schema)
@@ -105,6 +106,7 @@ export class EmrSyncService {
    * Sync a visit to the EMR system
    */
   static async syncVisit(
+    tx: TxClient,
     data: VisitSyncData,
     config: Partial<SyncConfig> = {}
   ): Promise<SyncJobResult> {
@@ -112,11 +114,11 @@ export class EmrSyncService {
     const syncId = crypto.randomUUID();
 
     // Create sync job record
-    const syncJob = await this.createSyncJob(syncId, 'VISIT', data.visitId, data.userId);
+    const syncJob = await this.createSyncJob(tx, syncId, 'VISIT', data.visitId, data.userId);
 
     try {
       // Fetch visit data with related records
-      const visit = await prisma.visit.findUnique({
+      const visit = await tx.visit.findUnique({
         where: { id: data.visitId },
         include: {
           patient: {
@@ -130,7 +132,7 @@ export class EmrSyncService {
       });
 
       if (!visit) {
-        return this.failSyncJob(syncJob.id, [{
+        return this.failSyncJob(tx, syncJob.id, [{
           resourceType: 'Visit',
           message: 'Visit not found',
           code: 'NOT_FOUND',
@@ -141,7 +143,7 @@ export class EmrSyncService {
       // Verify patient is linked to EMR
       const patientFhirId = data.patientFhirId || visit.patient.emrLink?.fhirPatientId;
       if (!patientFhirId) {
-        return this.failSyncJob(syncJob.id, [{
+        return this.failSyncJob(tx, syncJob.id, [{
           resourceType: 'Patient',
           message: 'Patient is not linked to EMR. Import patient first.',
           code: 'NOT_LINKED',
@@ -186,7 +188,7 @@ export class EmrSyncService {
 
       if (resources.length === 0) {
         warnings.push('No data to sync for this visit');
-        return this.completeSyncJob(syncJob.id, 0, 0, warnings);
+        return this.completeSyncJob(tx, syncJob.id, 0, 0, warnings);
       }
 
       // Execute sync with retry logic
@@ -198,10 +200,11 @@ export class EmrSyncService {
       );
 
       if (!result.success) {
-        return this.failSyncJob(syncJob.id, result.errors, warnings);
+        return this.failSyncJob(tx, syncJob.id, result.errors, warnings);
       }
 
       return this.completeSyncJob(
+        tx,
         syncJob.id,
         result.resourcesCreated,
         result.resourcesUpdated,
@@ -209,7 +212,7 @@ export class EmrSyncService {
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return this.failSyncJob(syncJob.id, [{
+      return this.failSyncJob(tx, syncJob.id, [{
         resourceType: 'Visit',
         message: errorMessage,
         code: 'INTERNAL_ERROR',
@@ -222,6 +225,7 @@ export class EmrSyncService {
    * Sync an OASIS assessment to the EMR system
    */
   static async syncAssessment(
+    tx: TxClient,
     data: AssessmentSyncData,
     config: Partial<SyncConfig> = {}
   ): Promise<SyncJobResult> {
@@ -229,11 +233,11 @@ export class EmrSyncService {
     const syncId = crypto.randomUUID();
 
     // Create sync job record
-    const syncJob = await this.createSyncJob(syncId, 'ASSESSMENT', data.assessmentId, data.userId);
+    const syncJob = await this.createSyncJob(tx, syncId, 'ASSESSMENT', data.assessmentId, data.userId);
 
     try {
       // Fetch assessment data with related records
-      const assessment = await prisma.oasisAssessment.findUnique({
+      const assessment = await tx.oasisAssessment.findUnique({
         where: { id: data.assessmentId },
         include: {
           patient: {
@@ -247,7 +251,7 @@ export class EmrSyncService {
       });
 
       if (!assessment) {
-        return this.failSyncJob(syncJob.id, [{
+        return this.failSyncJob(tx, syncJob.id, [{
           resourceType: 'Assessment',
           message: 'Assessment not found',
           code: 'NOT_FOUND',
@@ -258,7 +262,7 @@ export class EmrSyncService {
       // Verify patient is linked to EMR
       const patientFhirId = data.patientFhirId || assessment.patient.emrLink?.fhirPatientId;
       if (!patientFhirId) {
-        return this.failSyncJob(syncJob.id, [{
+        return this.failSyncJob(tx, syncJob.id, [{
           resourceType: 'Patient',
           message: 'Patient is not linked to EMR. Import patient first.',
           code: 'NOT_LINKED',
@@ -290,7 +294,7 @@ export class EmrSyncService {
 
       if (resources.length === 0) {
         warnings.push('No data to sync for this assessment');
-        return this.completeSyncJob(syncJob.id, 0, 0, warnings);
+        return this.completeSyncJob(tx, syncJob.id, 0, 0, warnings);
       }
 
       // Execute sync with retry logic
@@ -302,10 +306,11 @@ export class EmrSyncService {
       );
 
       if (!result.success) {
-        return this.failSyncJob(syncJob.id, result.errors, warnings);
+        return this.failSyncJob(tx, syncJob.id, result.errors, warnings);
       }
 
       return this.completeSyncJob(
+        tx,
         syncJob.id,
         result.resourcesCreated,
         result.resourcesUpdated,
@@ -313,7 +318,7 @@ export class EmrSyncService {
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return this.failSyncJob(syncJob.id, [{
+      return this.failSyncJob(tx, syncJob.id, [{
         resourceType: 'Assessment',
         message: errorMessage,
         code: 'INTERNAL_ERROR',
@@ -325,7 +330,7 @@ export class EmrSyncService {
   /**
    * Get sync job status
    */
-  static async getSyncStatus(syncId: string): Promise<{
+  static async getSyncStatus(tx: TxClient, syncId: string): Promise<{
     id: string;
     type: string;
     status: EmrSyncStatus;
@@ -336,7 +341,7 @@ export class EmrSyncService {
     completedAt?: Date | null;
   } | null> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const prismaAny = prisma as any;
+    const prismaAny = tx as any;
 
     // Check if emrSyncJob model is available (requires prisma generate)
     if (!prismaAny.emrSyncJob) {
@@ -354,11 +359,12 @@ export class EmrSyncService {
    * Retry a failed sync job
    */
   static async retrySyncJob(
+    tx: TxClient,
     syncId: string,
     userId: string
   ): Promise<SyncJobResult> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const prismaAny = prisma as any;
+    const prismaAny = tx as any;
 
     // Check if emrSyncJob model is available
     if (!prismaAny.emrSyncJob) {
@@ -419,7 +425,7 @@ export class EmrSyncService {
     // Get the connection for this job
     // For now, we need to look up the patient's EMR link
     // In a production system, the connection ID would be stored on the sync job
-    const connectionId = await this.getConnectionForJob(job);
+    const connectionId = await this.getConnectionForJob(tx, job);
     if (!connectionId) {
       return {
         success: false,
@@ -439,14 +445,14 @@ export class EmrSyncService {
 
     // Retry based on job type
     if (job.type === 'VISIT' && job.visitId) {
-      return this.syncVisit({
+      return this.syncVisit(tx, {
         visitId: job.visitId,
         patientFhirId: '', // Will be looked up
         connectionId,
         userId,
       });
     } else if (job.type === 'ASSESSMENT' && job.assessmentId) {
-      return this.syncAssessment({
+      return this.syncAssessment(tx, {
         assessmentId: job.assessmentId,
         patientFhirId: '', // Will be looked up
         connectionId,
@@ -961,6 +967,7 @@ export class EmrSyncService {
    * Note: Uses raw SQL until Prisma client is regenerated with new models
    */
   private static async createSyncJob(
+    tx: TxClient,
     id: string,
     type: string,
     referenceId: string,
@@ -971,7 +978,7 @@ export class EmrSyncService {
 
     try {
       // Try using Prisma model first (works after prisma generate)
-      const prismaAny = prisma as any;
+      const prismaAny = tx as any;
       if (prismaAny.emrSyncJob) {
         const job = await prismaAny.emrSyncJob.create({
           data: {
@@ -1002,13 +1009,14 @@ export class EmrSyncService {
    * Mark sync job as completed
    */
   private static async completeSyncJob(
+    tx: TxClient,
     id: string,
     resourcesCreated: number,
     resourcesUpdated: number,
     warnings: string[]
   ): Promise<SyncJobResult> {
     try {
-      const prismaAny = prisma as any;
+      const prismaAny = tx as any;
       if (prismaAny.emrSyncJob) {
         await prismaAny.emrSyncJob.update({
           where: { id },
@@ -1050,6 +1058,7 @@ export class EmrSyncService {
    * Mark sync job as failed
    */
   private static async failSyncJob(
+    tx: TxClient,
     id: string,
     errors: SyncError[],
     warnings: string[] = []
@@ -1057,7 +1066,7 @@ export class EmrSyncService {
     const errorMessage = errors.map(e => `${e.resourceType}: ${e.message}`).join('; ');
 
     try {
-      const prismaAny = prisma as any;
+      const prismaAny = tx as any;
       if (prismaAny.emrSyncJob) {
         await prismaAny.emrSyncJob.update({
           where: { id },
@@ -1096,20 +1105,20 @@ export class EmrSyncService {
   /**
    * Get EMR connection for a sync job
    */
-  private static async getConnectionForJob(job: {
+  private static async getConnectionForJob(tx: TxClient, job: {
     visitId?: string | null;
     assessmentId?: string | null;
   }): Promise<string | null> {
     let patientId: string | null = null;
 
     if (job.visitId) {
-      const visit = await prisma.visit.findUnique({
+      const visit = await tx.visit.findUnique({
         where: { id: job.visitId },
         select: { patientId: true },
       });
       patientId = visit?.patientId || null;
     } else if (job.assessmentId) {
-      const assessment = await prisma.oasisAssessment.findUnique({
+      const assessment = await tx.oasisAssessment.findUnique({
         where: { id: job.assessmentId },
         select: { patientId: true },
       });
@@ -1120,7 +1129,7 @@ export class EmrSyncService {
       return null;
     }
 
-    const link = await prisma.emrPatientLink.findUnique({
+    const link = await tx.emrPatientLink.findUnique({
       where: { patientId },
       select: { connectionId: true },
     });

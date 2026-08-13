@@ -15,6 +15,7 @@ import {
   fhirPatientToImportData,
   PatientSearchParams,
 } from '../services/fhir';
+import { withTenant } from '../config/tenancy';
 
 // ===========================================
 // TYPE DEFINITIONS
@@ -52,6 +53,26 @@ function generateMRN(): string {
   return `HHC-${timestamp}-${random}`;
 }
 
+/**
+ * The agency this request runs under.
+ *
+ * An EMR connection belongs to one agency: it holds that agency's client
+ * credentials and, through emr_patient_links, the mapping between their charts
+ * and ours. Connections were previously readable and writable by anyone
+ * authenticated, which is what this closes.
+ */
+function tenantOf(req: { user?: AuthenticatedRequest['user'] }, res: Response): string | null {
+  const agencyId = req.user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      error: 'Your account is not assigned to an agency, so EMR data is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
+}
+
 // ===========================================
 // CONNECTION MANAGEMENT (Admin only)
 // ===========================================
@@ -71,12 +92,16 @@ export async function listConnections(
       return;
     }
 
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     // Only admins can see all connections; others see enabled ones
-    const where = req.user.role === UserRole.ADMIN
+    const where = req.user!.role === UserRole.ADMIN
       ? {}
       : { isEnabled: true };
 
-    const connections = await prisma.emrConnection.findMany({
+    const connections = await tx.emrConnection.findMany({
       where,
       select: {
         id: true,
@@ -94,6 +119,7 @@ export async function listConnections(
     });
 
     res.json({ connections });
+    });
   } catch (error) {
     next(error);
   }
@@ -120,6 +146,10 @@ export async function createConnection(
       return;
     }
 
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     const {
       name,
       vendor,
@@ -139,7 +169,7 @@ export async function createConnection(
       return;
     }
 
-    const connection = await prisma.emrConnection.create({
+    const connection = await tx.emrConnection.create({
       data: {
         name,
         vendor,
@@ -149,7 +179,7 @@ export async function createConnection(
         scopes: scopes || ['patient/*.read', 'launch/patient'],
         authorizationUrl,
         tokenUrl,
-        createdById: req.user.id,
+        createdById: req.user!.id,
       },
     });
 
@@ -163,6 +193,7 @@ export async function createConnection(
         isEnabled: connection.isEnabled,
         scopes: connection.scopes,
       },
+    });
     });
   } catch (error) {
     next(error);
@@ -189,10 +220,14 @@ export async function updateConnection(
       return;
     }
 
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const existing = await prisma.emrConnection.findUnique({
+    const existing = await tx.emrConnection.findUnique({
       where: { id },
     });
 
@@ -201,7 +236,7 @@ export async function updateConnection(
       return;
     }
 
-    const connection = await prisma.emrConnection.update({
+    const connection = await tx.emrConnection.update({
       where: { id },
       data: {
         ...(updates.name && { name: updates.name }),
@@ -225,6 +260,7 @@ export async function updateConnection(
         isEnabled: connection.isEnabled,
         scopes: connection.scopes,
       },
+    });
     });
   } catch (error) {
     next(error);
@@ -251,9 +287,13 @@ export async function deleteConnection(
       return;
     }
 
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     const { id } = req.params;
 
-    const existing = await prisma.emrConnection.findUnique({
+    const existing = await tx.emrConnection.findUnique({
       where: { id },
     });
 
@@ -263,11 +303,12 @@ export async function deleteConnection(
     }
 
     // Delete cascades to tokens, audit logs, and patient links
-    await prisma.emrConnection.delete({
+    await tx.emrConnection.delete({
       where: { id },
     });
 
     res.json({ message: 'Connection deleted' });
+    });
   } catch (error) {
     next(error);
   }
@@ -293,10 +334,15 @@ export async function testConnection(
       return;
     }
 
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     const { id } = req.params;
-    const result = await FhirClientService.testConnection(id);
+    const result = await FhirClientService.testConnection(tx, id);
 
     res.json(result);
+    });
   } catch (error) {
     next(error);
   }
@@ -321,16 +367,22 @@ export async function getAuthorizationUrl(
       return;
     }
 
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     const { id } = req.params;
     const redirectUri = req.query.redirectUri || `${req.protocol}://${req.get('host')}/api/emr/oauth/callback`;
 
     const authUrl = await FhirClientService.getAuthorizationUrl(
+      tx,
       id,
-      req.user.id,
+      req.user!.id,
       redirectUri
     );
 
     res.json({ authorizationUrl: authUrl });
+    });
   } catch (error) {
     next(error);
   }
@@ -359,7 +411,20 @@ export async function handleOAuthCallback(
       return;
     }
 
-    await FhirClientService.handleOAuthCallback(code, state);
+    // This endpoint sits behind authenticate like the rest of the router, so
+    // the agency comes from the session as everywhere else. It answers with a
+    // redirect rather than JSON, so a missing agency is reported the same way
+    // every other failure here is — tenantOf's 403 body would be rendered as a
+    // page by the browser that followed the EMR's redirect.
+    const agencyId = req.user?.agencyId;
+    if (!agencyId) {
+      res.redirect('/settings/emr?error=' + encodeURIComponent('Your account is not assigned to an agency.'));
+      return;
+    }
+
+    await withTenant(prisma, agencyId, async (tx) => {
+      await FhirClientService.handleOAuthCallback(tx, code, state);
+    });
 
     // Redirect to frontend with success
     res.redirect('/settings/emr?connected=true');
@@ -420,9 +485,14 @@ export async function searchPatients(
       return;
     }
 
-    const results = await FhirClientService.searchPatients(id, req.user.id, params);
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
 
-    res.json({ patients: results });
+    return await withTenant(prisma, agencyId, async (tx) => {
+      const results = await FhirClientService.searchPatients(tx, id, req.user!.id, params);
+
+      res.json({ patients: results });
+    });
   } catch (error) {
     if (error instanceof Error && error.message.includes('re-authorize')) {
       res.status(401).json({
@@ -452,14 +522,19 @@ export async function getPatient(
 
     const { id, fhirId } = req.params;
 
-    const patient = await FhirClientService.getPatient(id, req.user.id, fhirId);
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
 
-    // Also get import data for preview
-    const importData = fhirPatientToImportData(patient);
+    return await withTenant(prisma, agencyId, async (tx) => {
+      const patient = await FhirClientService.getPatient(tx, id, req.user!.id, fhirId);
 
-    res.json({
-      fhirPatient: patient,
-      importPreview: importData,
+      // Also get import data for preview
+      const importData = fhirPatientToImportData(patient);
+
+      res.json({
+        fhirPatient: patient,
+        importPreview: importData,
+      });
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes('re-authorize')) {
@@ -490,12 +565,16 @@ export async function checkDuplicates(
 
     const { id, fhirId } = req.params;
 
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     // Get patient data from EMR
-    const fhirPatient = await FhirClientService.getPatient(id, req.user.id, fhirId);
+    const fhirPatient = await FhirClientService.getPatient(tx, id, req.user!.id, fhirId);
     const importData = fhirPatientToImportData(fhirPatient);
 
     // Check for existing link (already imported)
-    const existingLink = await prisma.emrPatientLink.findUnique({
+    const existingLink = await tx.emrPatientLink.findUnique({
       where: {
         connectionId_fhirPatientId: { connectionId: id, fhirPatientId: fhirId },
       },
@@ -517,7 +596,7 @@ export async function checkDuplicates(
     }
 
     // Check for potential duplicates by name + DOB
-    const potentialDuplicates = await prisma.patient.findMany({
+    const potentialDuplicates = await tx.patient.findMany({
       where: {
         deletedAt: null,
         firstName: { equals: importData.firstName, mode: 'insensitive' },
@@ -544,6 +623,7 @@ export async function checkDuplicates(
     }
 
     res.json({ isDuplicate: false });
+    });
   } catch (error) {
     next(error);
   }
@@ -577,38 +657,40 @@ export async function importPatient(
     const { id: connectionId, fhirId } = req.params;
     const { overrides, forceImport } = req.body;
 
-    // Check if already imported
-    const existingLink = await prisma.emrPatientLink.findUnique({
-      where: {
-        connectionId_fhirPatientId: { connectionId, fhirPatientId: fhirId },
-      },
-    });
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
 
-    if (existingLink && !forceImport) {
-      res.status(409).json({
-        error: 'Patient already imported',
-        patientId: existingLink.patientId,
+    // The import was already transactional; it is now the tenant transaction
+    // rather than a second one nested inside it, so the duplicate checks and
+    // the MRN uniqueness loop run under the same policies as the writes they
+    // guard. Previously they read across every agency.
+    const result = await withTenant(prisma, agencyId, async (tx) => {
+      // Check if already imported
+      const existingLink = await tx.emrPatientLink.findUnique({
+        where: {
+          connectionId_fhirPatientId: { connectionId, fhirPatientId: fhirId },
+        },
       });
-      return;
-    }
 
-    // Get patient data from EMR
-    const fhirPatient = await FhirClientService.getPatient(connectionId, req.user.id, fhirId);
-    const importData = fhirPatientToImportData(fhirPatient);
+      if (existingLink && !forceImport) {
+        return { duplicate: existingLink.patientId } as const;
+      }
 
-    // Apply overrides
-    const finalData = { ...importData, ...overrides };
+      // Get patient data from EMR
+      const fhirPatient = await FhirClientService.getPatient(tx, connectionId, req.user!.id, fhirId);
+      const importData = fhirPatientToImportData(fhirPatient);
 
-    // Generate MRN
-    let mrn = generateMRN();
-    let mrnExists = await prisma.patient.findUnique({ where: { mrn } });
-    while (mrnExists) {
-      mrn = generateMRN();
-      mrnExists = await prisma.patient.findUnique({ where: { mrn } });
-    }
+      // Apply overrides
+      const finalData = { ...importData, ...overrides };
 
-    // Create patient in transaction
-    const result = await prisma.$transaction(async (tx) => {
+      // Generate MRN
+      let mrn = generateMRN();
+      let mrnExists = await tx.patient.findUnique({ where: { mrn } });
+      while (mrnExists) {
+        mrn = generateMRN();
+        mrnExists = await tx.patient.findUnique({ where: { mrn } });
+      }
+
       // Create patient
       const patient = await tx.patient.create({
         data: {
@@ -705,6 +787,14 @@ export async function importPatient(
       return { patient, link };
     });
 
+    if ('duplicate' in result) {
+      res.status(409).json({
+        error: 'Patient already imported',
+        patientId: result.duplicate,
+      });
+      return;
+    }
+
     res.status(201).json({
       message: 'Patient imported successfully',
       patient: {
@@ -734,9 +824,13 @@ export async function getConnectionStatus(
       return;
     }
 
+    const agencyId = tenantOf(req, res);
+    if (!agencyId) return;
+
+    return await withTenant(prisma, agencyId, async (tx) => {
     const { id } = req.params;
 
-    const connection = await prisma.emrConnection.findUnique({
+    const connection = await tx.emrConnection.findUnique({
       where: { id },
     });
 
@@ -746,9 +840,9 @@ export async function getConnectionStatus(
     }
 
     // Check if user has valid token
-    const token = await prisma.emrAccessToken.findUnique({
+    const token = await tx.emrAccessToken.findUnique({
       where: {
-        connectionId_userId: { connectionId: id, userId: req.user.id },
+        connectionId_userId: { connectionId: id, userId: req.user!.id },
       },
     });
 
@@ -761,6 +855,7 @@ export async function getConnectionStatus(
       isAuthorized,
       lastConnectedAt: connection.lastConnectedAt,
       tokenExpiresAt: token?.expiresAt,
+    });
     });
   } catch (error) {
     next(error);

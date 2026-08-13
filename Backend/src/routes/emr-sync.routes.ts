@@ -10,8 +10,9 @@
  * - Role-based access control for sync operations
  */
 
-import { Router, Request, Response, NextFunction } from 'express';
-import { authenticate, authorize } from '../middleware/auth.middleware';
+import { Router, Response, NextFunction } from 'express';
+import { authenticate, authorize, AuthenticatedRequest } from '../middleware/auth.middleware';
+import { withTenant } from '../config/tenancy';
 import { UserRole } from '../generated/prisma';
 import { EmrSyncService } from '../services/emr/emrSync.service';
 import { PointCareAdapterService } from '../services/emr/pointcareAdapter.service';
@@ -30,12 +31,24 @@ const prismaAny = prisma as any;
 // HELPER TYPES
 // ===========================================
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: UserRole;
-  };
+/**
+ * The agency this request runs under.
+ *
+ * This module declared its own AuthenticatedRequest, a narrower copy of the
+ * middleware's that omitted agencyId — so the tenant was not merely unused
+ * here, it was not visible. The real type is imported instead.
+ */
+function tenantOf(req: AuthenticatedRequest, res: Response): string | null {
+  const agencyId = req.user?.agencyId;
+  if (!agencyId) {
+    res.status(403).json({
+      success: false,
+      error: 'Your account is not assigned to an agency, so EMR sync is unavailable.',
+      code: 'NO_AGENCY',
+    });
+    return null;
+  }
+  return agencyId;
 }
 
 // ===========================================
@@ -64,8 +77,12 @@ router.post(
         return;
       }
 
+      const agencyId = tenantOf(req, res);
+      if (!agencyId) return;
+
+      return await withTenant(prisma, agencyId, async (tx) => {
       // Get visit and verify access
-      const visit = await prisma.visit.findUnique({
+      const visit = await tx.visit.findUnique({
         where: { id: visitId },
         include: {
           patient: {
@@ -131,7 +148,7 @@ router.post(
       }
 
       // Use standard EMR sync service
-      const result = await EmrSyncService.syncVisit({
+      const result = await EmrSyncService.syncVisit(tx, {
         visitId,
         patientFhirId: visit.patient.emrLink.fhirPatientId,
         connectionId,
@@ -154,6 +171,7 @@ router.post(
         errors: result.errors,
         warnings: result.warnings,
         completedAt: result.completedAt,
+      });
       });
     } catch (error) {
       next(error);
@@ -187,8 +205,12 @@ router.post(
         return;
       }
 
+      const agencyId = tenantOf(req, res);
+      if (!agencyId) return;
+
+      return await withTenant(prisma, agencyId, async (tx) => {
       // Get assessment and verify access
-      const assessment = await prisma.oasisAssessment.findUnique({
+      const assessment = await tx.oasisAssessment.findUnique({
         where: { id: assessmentId },
         include: {
           patient: {
@@ -257,7 +279,7 @@ router.post(
       }
 
       // Use standard EMR sync service
-      const result = await EmrSyncService.syncAssessment({
+      const result = await EmrSyncService.syncAssessment(tx, {
         assessmentId,
         patientFhirId: assessment.patient.emrLink.fhirPatientId,
         connectionId,
@@ -279,6 +301,7 @@ router.post(
         errors: result.errors,
         warnings: result.warnings,
         completedAt: result.completedAt,
+      });
       });
     } catch (error) {
       next(error);
@@ -302,7 +325,11 @@ router.get(
     try {
       const syncId = req.params['syncId'] as string;
 
-      const status = await EmrSyncService.getSyncStatus(syncId);
+      const agencyId = tenantOf(req, res);
+      if (!agencyId) return;
+
+      return await withTenant(prisma, agencyId, async (tx) => {
+      const status = await EmrSyncService.getSyncStatus(tx, syncId);
 
       if (!status) {
         res.status(404).json({
@@ -315,6 +342,7 @@ router.get(
       res.json({
         success: true,
         data: status,
+      });
       });
     } catch (error) {
       next(error);
@@ -343,7 +371,11 @@ router.post(
         return;
       }
 
-      const result = await EmrSyncService.retrySyncJob(syncId, userId);
+      const agencyId = tenantOf(req, res);
+      if (!agencyId) return;
+
+      return await withTenant(prisma, agencyId, async (tx) => {
+      const result = await EmrSyncService.retrySyncJob(tx, syncId, userId);
 
       const statusCode = result.success ? 200 : (result.errors.some(e => e.retryable) ? 503 : 400);
 
@@ -356,6 +388,7 @@ router.post(
         errors: result.errors,
         warnings: result.warnings,
         completedAt: result.completedAt,
+      });
       });
     } catch (error) {
       next(error);
@@ -639,7 +672,12 @@ router.get(
         return;
       }
 
-      const health = await PointCareAdapterService.checkConnection(connectionId as string);
+      const agencyId = tenantOf(req, res);
+      if (!agencyId) return;
+
+      const health = await withTenant(prisma, agencyId, async (tx) =>
+        PointCareAdapterService.checkConnection(tx, connectionId as string)
+      );
 
       res.json({
         success: true,

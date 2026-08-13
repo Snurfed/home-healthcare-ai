@@ -8,7 +8,7 @@
  * - Audit logging
  */
 
-import prisma from '../config/prisma';
+import type { TxClient } from '../config/tenancy';
 import { exportToEMR } from '../domain/emr/emrAdapter.service';
 import { HCHB_RN_SOC_TEMPLATE } from '../domain/emr/templates/hchb-rn-soc.template';
 import type {
@@ -183,6 +183,7 @@ export function getAllTemplates(): TemplateListItem[] {
  * Generate export preview (without saving)
  */
 export async function generateExportPreview(
+  tx: TxClient,
   request: ExportPreviewRequest
 ): Promise<ExportPreviewResponse> {
   const { visitId, templateId } = request;
@@ -194,7 +195,7 @@ export async function generateExportPreview(
   }
 
   // Get the visit note
-  const visitNote = await getCanonicalVisitNote(visitId);
+  const visitNote = await getCanonicalVisitNote(tx, visitId);
   if (!visitNote) {
     throw new Error(`Visit ${visitId} not found`);
   }
@@ -222,6 +223,7 @@ export async function generateExportPreview(
  * Generate full export packet
  */
 export async function generateExport(
+  tx: TxClient,
   request: GenerateExportRequest,
   userId: string
 ): Promise<EMRExportPacket> {
@@ -234,7 +236,7 @@ export async function generateExport(
   }
 
   // Get the visit note
-  const visitNote = await getCanonicalVisitNote(visitId);
+  const visitNote = await getCanonicalVisitNote(tx, visitId);
   if (!visitNote) {
     throw new Error(`Visit ${visitId} not found`);
   }
@@ -295,8 +297,8 @@ export async function logClipboardCopy(
 /**
  * Build canonical visit note from database
  */
-async function getCanonicalVisitNote(visitId: string): Promise<CanonicalVisitNote | null> {
-  const visit = await prisma.visit.findUnique({
+async function getCanonicalVisitNote(tx: TxClient, visitId: string): Promise<CanonicalVisitNote | null> {
+  const visit = await tx.visit.findUnique({
     where: { id: visitId },
     include: {
       patient: true,
